@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-violet.svg)](LICENSE)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
-[![Docker](https://img.shields.io/badge/docker-build%20locally-blue)](#中国大陆构建说明)
+[![Docker](https://img.shields.io/badge/docker-build%20locally-blue)](#镜像加速构建说明)
 
 > A self-hosted, near-real-time radar for domestic + international AI news: 22 curated sources (P0 lab blogs & API notes, scoop X accounts, Chinese AI media, Techmeme, plus a few Chinese entertainment/funny feeds), polled by priority and pushed live to the browser.
 
@@ -138,13 +138,13 @@ npm run build && npm run start -- -p 3000
 
 ## License
 
-[MIT](LICENSE) © 2026 lang li
+[MIT](LICENSE) © 2026 Lang
 
-## 中国大陆构建说明
+## 镜像加速构建说明
 
 - 不发布预构建镜像：`docker compose` 只在本地构建（`image: ai-news-radar:local` + `pull_policy: build`），不会去 ghcr.io 拉取。
 - 字体（Inter（西文/数字）/ 霞鹜文楷 LXGW WenKai（中文）/ JetBrains Mono（时间），均为 OFL-1.1）通过 npm 包 `@fontsource-variable/*` 与 `lxgw-wenkai-webfont` 自托管，`next build` 不访问 Google Fonts；霞鹜文楷按 unicode-range 分片（Regular + Medium 两个字重），浏览器只下载页面用到的字。
-- 构建只需要 npm 源和 Debian apt 源，可用构建参数换国内镜像：
+- 构建只需要 npm 源和 Debian apt 源，网络受限时可用构建参数换成镜像源：
 
 ```bash
 git pull

@@ -153,7 +153,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - Thumbnails: fixed-height box + `loading=lazy decoding=async` → CLS 0.
 - `npm ci` needs `make`/`g++` if the better-sqlite3 prebuild download fails.
 
-## Offline-friendly build (China mainland)
+## Mirror-accelerated build (README: 镜像加速构建说明)
 - Fonts come from `@fontsource-variable/{inter,jetbrains-mono} + lxgw-wenkai-webfont (Regular + Medium as weight 700; semibold titles resolve to it)` imported in `app/layout.tsx`; CSS vars `--font-latin/--font-cjk/--font-mono-face` are set in `globals.css`. Never reintroduce `next/font/google` — the build must not touch Google.
 - Compose builds `ai-news-radar:local` with `pull_policy: build`; build args `NPM_REGISTRY`, `APT_MIRROR`.
 
