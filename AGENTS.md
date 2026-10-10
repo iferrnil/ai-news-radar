@@ -114,7 +114,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 
 ## Fonts
 
-- `src/app/layout.tsx`: Inter (Latin, OFL) + Noto Sans SC 400/500/600 (CJK, OFL, `preload: false`, unicode-range slices) + JetBrains Mono (times/numbers), all via `next/font/google` (self-hosted at build). `--font-sans` = Inter → Noto Sans SC → system CJK. Do not add HarmonyOS Sans / MiSans (non-OFL licenses).
+- `src/app/layout.tsx`: Inter (Latin/numbers) + 霞鹜文楷 LXGW WenKai Regular+Medium (CJK, `lxgw-wenkai-webfont`, unicode-range slices) + JetBrains Mono (times), all imported as npm CSS. `--font-sans` = Inter → LXGW WenKai → system CJK. WenKai Medium is declared as weight 700, so `font-semibold` titles use it. Kai reads small: card title 15px, dek 13px, tweet 14px. Do not add HarmonyOS Sans / MiSans (non-OFL licenses).
 
 ## Translation (DeepSeek, optional)
 
@@ -149,10 +149,10 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - ⌘K palette (`components/palette.tsx`, cmdk) is `next/dynamic` and mounted only after first open. Don't import `ui/command` from `app-shell.tsx` or it lands back in the main chunk.
 - framer-motion is used via `LazyMotion` + `m` (domAnimation features) in `Feed.tsx`; use `m.*`, not `motion.*`.
 - Source list refresh: structural changes arrive via the SSE `sources` event; the sidebar polls only every 60 s (sources page 15 s) for status dots, skipped while the tab is hidden.
-- Fonts: Noto Sans SC is a variable font sliced by unicode-range (~1.3 MB on a cold CJK-heavy feed, then cached immutably). It is the biggest cold-load cost; the remaining option would be falling back to system CJK fonts (visual change, not done).
+- Fonts: WenKai is the biggest cold-load cost (~2.1 MB / 41 slices on the feed, Regular+Medium; 0 B warm). Dropping Medium would roughly halve it but titles would lose weight (faux bold); the alternative is system CJK fonts.
 - Thumbnails: fixed-height box + `loading=lazy decoding=async` → CLS 0.
 - `npm ci` needs `make`/`g++` if the better-sqlite3 prebuild download fails.
 
 ## Offline-friendly build (China mainland)
-- Fonts come from `@fontsource-variable/{inter,noto-sans-sc,jetbrains-mono}` imported in `app/layout.tsx`; CSS vars `--font-latin/--font-cjk/--font-mono-face` are set in `globals.css`. Never reintroduce `next/font/google` — the build must not touch Google.
+- Fonts come from `@fontsource-variable/{inter,jetbrains-mono} + lxgw-wenkai-webfont (Regular + Medium as weight 700; semibold titles resolve to it)` imported in `app/layout.tsx`; CSS vars `--font-latin/--font-cjk/--font-mono-face` are set in `globals.css`. Never reintroduce `next/font/google` — the build must not touch Google.
 - Compose builds `ai-news-radar:local` with `pull_policy: build`; build args `NPM_REGISTRY`, `APT_MIRROR`.

@@ -66,17 +66,17 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
       </div>
       <div className="min-h-0 flex-1 overflow-hidden px-4">
         {x ? (
-          <p className={cn("line-clamp-5 break-words [overflow-wrap:anywhere] text-[13.5px] leading-[1.6]", linkOnly ? "text-faint" : read ? "text-muted-foreground" : "text-foreground/90")}>
+          <p className={cn("line-clamp-5 break-words [overflow-wrap:anywhere] text-[14px] leading-[1.6]", linkOnly ? "text-faint" : read ? "text-muted-foreground" : "text-foreground/90")}>
             {linkOnly ? `分享了一个链接 · ${t.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}` : t}
           </p>
         ) : (
           <>
-            <h3 className={cn(it.image ? "line-clamp-1" : "line-clamp-2", "break-words [overflow-wrap:anywhere] [text-wrap:pretty] text-[14.5px] font-semibold leading-[1.5] tracking-[-0.008em]", read ? "font-medium text-muted-foreground" : "text-foreground")}>{it.title}</h3>
+            <h3 className={cn(it.image ? "line-clamp-1" : "line-clamp-2", "break-words [overflow-wrap:anywhere] [text-wrap:pretty] text-[15px] font-semibold leading-[1.5]", read ? "font-medium text-muted-foreground" : "text-foreground")}>{it.title}</h3>
             {it.image ? (
               // thumbnail (memes / video covers): fixed height so cards stay equal; lazy + no-referrer for hotlink-protected CDNs
               <img src={it.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
                 className="mt-2 h-[92px] w-full rounded-md bg-muted object-cover ring-1 ring-border/60" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-            ) : dek && dek !== it.title && <p className="mt-1.5 line-clamp-3 break-words [overflow-wrap:anywhere] text-[12.5px] leading-[1.6] text-muted-foreground">{dek}</p>}
+            ) : dek && dek !== it.title && <p className="mt-1.5 line-clamp-3 break-words [overflow-wrap:anywhere] text-[13px] leading-[1.6] text-muted-foreground">{dek}</p>}
           </>
         )}
       </div>

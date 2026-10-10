@@ -77,7 +77,7 @@
 
 @theme inline {
   --font-latin: "Inter Variable";
-  --font-cjk: "Noto Sans SC Variable";
+  --font-cjk: "LXGW WenKai";
   --font-mono-face: "JetBrains Mono Variable";
   --font-sans: var(--font-latin), var(--font-cjk), "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
   --font-heading: var(--font-sans);

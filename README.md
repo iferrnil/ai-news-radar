@@ -134,7 +134,7 @@ npm run build && npm run start -- -p 3000
 
 ## 字体
 
-界面字体：Latin 用 **Inter**，中文用 **Noto Sans SC**（400/500/600），时间与数字用 **JetBrains Mono**。三者均为 SIL Open Font License 1.1，可随 MIT 项目再分发；由 `next/font` 在构建时自托管为 woff2，中文按 unicode-range 切片按需加载。
+界面字体：西文与数字用 **Inter**，中文用 **霞鹜文楷 LXGW WenKai**（Regular + Medium），时间用 **JetBrains Mono**。均为 SIL Open Font License 1.1，可随 MIT 项目再分发；通过 npm 包（`@fontsource-variable/*`、`lxgw-wenkai-webfont`）在构建时打包为 woff2，构建不访问 Google/GitHub。中文按 unicode-range 切片按需加载：首页冷启动约 2.1 MB 字体（41 个分片），之后浏览器缓存命中为 0。
 
 ## License
 
@@ -143,7 +143,7 @@ npm run build && npm run start -- -p 3000
 ## 中国大陆构建说明
 
 - 不发布预构建镜像：`docker compose` 只在本地构建（`image: ai-news-radar:local` + `pull_policy: build`），不会去 ghcr.io 拉取。
-- 字体（Inter / Noto Sans SC / JetBrains Mono，均为 OFL-1.1）通过 npm 包 `@fontsource-variable/*` 自托管，`next build` 不访问 Google Fonts；Noto Sans SC 仍按 unicode-range 分片，浏览器只下载页面用到的字。
+- 字体（Inter（西文/数字）/ 霞鹜文楷 LXGW WenKai（中文）/ JetBrains Mono（时间），均为 OFL-1.1）通过 npm 包 `@fontsource-variable/*` 与 `lxgw-wenkai-webfont` 自托管，`next build` 不访问 Google Fonts；霞鹜文楷按 unicode-range 分片（Regular + Medium 两个字重），浏览器只下载页面用到的字。
 - 构建只需要 npm 源和 Debian apt 源，可用构建参数换国内镜像：
 
 ```bash
