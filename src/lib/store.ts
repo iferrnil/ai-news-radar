@@ -1,0 +1,94 @@
+import { getDb, RETENTION_HOURS } from "./db";
+import { publish } from "./bus";
+import { decode, normUrl } from "./util";
+import type { FetchedItem, ItemOut, SourceRow } from "./types";
+
+const ITEM_SQL = `SELECT i.id,i.title,i.url,i.summary,i.published,i.fetched,i.is_x,i.author,i.also_on_x,
+  s.id AS source_id, s.name AS source, s.category, s.region, s.type AS source_type, s.priority, s.homepage, s.username, s.grp
+  FROM items i JOIN sources s ON s.id=i.source_id WHERE i.merged_into IS NULL AND s.enabled=1`;
+
+export function queryItems(where = "", args: unknown[] = [], limit = 50, full = false): ItemOut[] {
+  const rows = getDb().prepare(`${ITEM_SQL} ${where} ORDER BY i.published DESC LIMIT ${Math.min(Math.max(1, limit), 1000)}`).all(...args) as any[];
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return rows.map(({ fetched: _f, ...r }) => {
+    const summary = decode(r.summary ?? "");
+    // list payload: cards show ≤5 lines, so ship a preview; the drawer fetches the full text via ?id=
+    const cut = full ? summary : summary.length > 420 ? summary.slice(0, 420) : summary;
+    return { ...r, title: decode(r.title ?? ""), summary: cut, truncated: cut.length < summary.length, also_on_x: JSON.parse(r.also_on_x || "[]") };
+  });
+}
+
+const X_HOST = /^(x\.com|twitter\.com|t\.co)\//;
+
+/** Insert new items (dedupe by uid), merge tweets into articles they link to ("also on X"). Returns ids. */
+export function storeItems(src: SourceRow, items: FetchedItem[]) {
+  const db = getDb();
+  const now = Date.now() / 1000;
+  const cutoff = now - RETENTION_HOURS * 3600;
+  const newIds: number[] = [];
+  const updated = new Set<number>();
+  const removed: number[] = [];
+  const exists = db.prepare("SELECT 1 FROM seen WHERE uid=?");
+  const markSeen = db.prepare("INSERT OR IGNORE INTO seen VALUES(?,?)");
+  const firstFetch = src.last_fetched == null;
+  const findArt = db.prepare("SELECT id, also_on_x FROM items WHERE uid=? AND is_x=0");
+  const insItem = db.prepare(`INSERT OR IGNORE INTO items(uid,source_id,title,url,summary,published,fetched,is_x,author,merged_into)
+    VALUES(?,?,?,?,?,?,?,?,?,?)`);
+  const insLink = db.prepare("INSERT OR IGNORE INTO post_links VALUES(?,?)");
+  const setAlso = db.prepare("UPDATE items SET also_on_x=? WHERE id=?");
+  const xsFor = db.prepare(`SELECT i.id, i.url, i.author FROM post_links p JOIN items i ON i.id=p.item_id WHERE p.norm_url=? AND i.merged_into IS NULL`);
+  const setMerged = db.prepare("UPDATE items SET merged_into=? WHERE id=?");
+  db.transaction(() => {
+    for (const it of items) {
+      // `seen` remembers every uid for SEEN_DAYS, so items dropped by the 48h prune never come back as "new"
+      if (exists.get(it.uid)) continue;
+      markSeen.run(it.uid, now);
+      if (it.published == null && firstFetch) continue; // undated entries on a source's first fetch are a backlog, not news
+      const pub = Math.min(it.published ?? now, now); // future-dated / undated -> fetch time
+      if (pub < cutoff) continue; // outside retention window
+      if (it.isX) {
+        const links = [...new Set((it.links ?? []).map(normUrl))].filter((l) => !X_HOST.test(l));
+        let art: { id: number; also_on_x: string } | undefined;
+        for (const l of links) { art = findArt.get(l) as typeof art; if (art) break; }
+        const res = insItem.run(it.uid, src.id, it.title, it.url, it.summary, pub, now, 1, it.author ?? null, art?.id ?? null);
+        if (!res.changes) continue;
+        const xid = Number(res.lastInsertRowid);
+        for (const l of links) insLink.run(l, xid);
+        if (art) {
+          const also = JSON.parse(art.also_on_x || "[]");
+          also.push({ url: it.url, author: it.author ?? null });
+          setAlso.run(JSON.stringify(also), art.id);
+          updated.add(art.id);
+        } else newIds.push(xid);
+      } else {
+        const res = insItem.run(it.uid, src.id, it.title, it.url, it.summary, pub, now, 0, it.author ?? null, null);
+        if (!res.changes) continue;
+        const aid = Number(res.lastInsertRowid);
+        const xs = xsFor.all(it.uid) as { id: number; url: string; author: string | null }[];
+        if (xs.length) {
+          setAlso.run(JSON.stringify(xs.map((x) => ({ url: x.url, author: x.author }))), aid);
+          for (const x of xs) { setMerged.run(aid, x.id); removed.push(x.id); }
+        }
+        newIds.push(aid);
+      }
+    }
+  })();
+  for (const id of removed) publish({ event: "removed", id });
+  if (newIds.length) for (const r of queryItems(`AND i.id IN (${newIds.map(() => "?").join(",")})`, newIds, newIds.length)) publish({ event: "item", item: r });
+  for (const id of updated) for (const r of queryItems("AND i.id=?", [id], 1)) publish({ event: "update", item: r });
+  return { newIds, merged: updated.size };
+}
+
+/** Drop items past retention and old seen-IDs, then actually give the space back (incremental vacuum + WAL truncate). */
+export function prune() {
+  const db = getDb();
+  const cutoff = Date.now() / 1000 - RETENTION_HOURS * 3600;
+  const n = db.transaction(() => {
+    db.prepare("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE published < ?)").run(cutoff);
+    db.prepare("DELETE FROM seen WHERE ts < ?").run(Date.now() / 1000 - Number(process.env.SEEN_DAYS ?? 30) * 86400);
+    return db.prepare("DELETE FROM items WHERE published < ?").run(cutoff).changes;
+  })();
+  db.pragma("incremental_vacuum");
+  db.pragma("wal_checkpoint(TRUNCATE)");
+  return n;
+}

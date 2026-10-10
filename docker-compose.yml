@@ -1,0 +1,31 @@
+# One-command start:  docker compose up -d   ->  http://localhost:3000
+# Run exactly ONE instance per data directory (the poller lives inside the server).
+services:
+  radar:
+    image: ghcr.io/iferrnil/ai-news-radar:latest
+    build: .
+    container_name: ai-news-radar
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
+    environment:
+      TZ: Asia/Shanghai
+      NODE_OPTIONS: --max-old-space-size=256
+      RETENTION_HOURS: ${RETENTION_HOURS:-48}
+      SEEN_DAYS: ${SEEN_DAYS:-30}
+      DISABLE_POLLER: ${DISABLE_POLLER:-0}
+      SYNC_SEED: ${SYNC_SEED:-1}
+      P0_X: ${P0_X:-120}
+      P0_FEED: ${P0_FEED:-300}
+      P1_X: ${P1_X:-300}
+      P1_FEED: ${P1_FEED:-600}
+      P2_X: ${P2_X:-1800}
+      P2_FEED: ${P2_FEED:-1800}
+      X_CONCURRENCY: ${X_CONCURRENCY:-3}
+      FEED_CONCURRENCY: ${FEED_CONCURRENCY:-8}
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

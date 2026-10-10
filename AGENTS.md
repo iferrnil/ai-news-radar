@@ -1,0 +1,111 @@
+# AGENTS.md — AI News Radar（iferrnil/ai-news-radar）
+
+Guide for coding agents working in this repo. 中文 UI，代码与注释以英文为主。
+
+## Purpose / 项目目的
+Real-time aggregator of domestic + international AI news for an AI content creator: ~50 curated sources (lab blogs & API changelogs, scoop/benchmark X accounts, key people, Chinese media, dev tooling, media/newsletters), polled by priority, pushed live to the browser via SSE. Only the last 48 h of items are kept.
+
+## Stack
+- Next.js 16 (App Router) · TypeScript · React 19
+- shadcn/ui **Base UI** variant (`components.json` style `base-nova`; components use `render` props, not Radix `asChild`) · Tailwind CSS v4 (CSS-first tokens in `src/app/globals.css`) · lucide-react · framer-motion · sonner · cmdk · next-themes
+- SQLite via `better-sqlite3` (WAL), `fast-xml-parser` for RSS/Atom
+- **Node ≥ 22 required** (better-sqlite3 v13 has no build for Node 20). On the shared box Node 22 lives in `~/.local/node22`; run `export PATH=~/.local/node22/bin:$PATH` first.
+
+## Directory map
+```
+src/app/                 pages: / (feed), /sources, /docs (index), /docs/<slug> (doc pages) ; api/* route handlers
+src/app/api/             items, stats, sources (+ test, [id], [id]/fetch), stream (SSE)
+src/components/          app-shell.tsx (sidebar, topbar, ⌘K palette, item drawer, context), Feed.tsx, Sources.tsx, common.ts
+src/components/ui/       shadcn/ui (Base UI) primitives — generated, edit sparingly
+src/lib/db.ts            schema, seed/sync from sources/sources.json, tier intervals
+src/lib/fetchers.ts      FETCHERS by type (rss, api, x, x_list) + detect() for add-source
+src/lib/feed.ts          RSS/Atom/RDF parser + <link rel=alternate> autodiscovery
+src/lib/store.ts         insert/dedupe/merge ("also on X"), queryItems, prune
+src/lib/scheduler.ts     poll loop, limiters, pollOne
+src/instrumentation.ts   starts the scheduler once (nodejs runtime only)
+src/lib/docs-registry.ts DOCS array → sidebar "文档" group children, /docs index, ⌘K entries
+src/data/rate-limits.json + src/lib/rate-usage.ts   data for /docs/rate-limits and docs/rate-limits.md
+sources/sources.json     source catalog (core 50 enabled + disabled reference entries)
+docs/                    reports (sources.md, recommendations.md, x_vs_blog.md, rate-limits.md), screenshots/
+scripts/                 screenshots.mjs (playwright), gen-rate-limits-md.mts
+data/                    runtime SQLite (gitignored)
+```
+
+## Commands
+```bash
+export PATH=~/.local/node22/bin:$PATH
+npm ci
+npm run dev                      # dev server (poller runs too)
+npm run build && npm run start -- -p 3000   # production (what we deploy)
+npm run lint                     # eslint (must be clean)
+npm run typecheck                # tsc --noEmit
+npm run screenshots              # needs running server + `npx playwright install chromium`
+npm run docs:rate-limits         # regenerate docs/rate-limits.md
+```
+Restart prod after a build: stop the old `next start` process first (only one instance may run — see below).
+
+## Architecture
+- **Poller lives inside the Next server process**: `instrumentation.ts` → `startScheduler()`; guarded by a `globalThis` flag so it starts once. `DISABLE_POLLER=1` disables it. Run **exactly one instance** (no pm2 cluster, no second `next start` on the same DB).
+- Scheduler ticks every 10 s and polls sources where `last_fetched + poll_interval <= now`; X concurrency 3, feeds 8 (`X_CONCURRENCY`, `FEED_CONCURRENCY`).
+- Priority tiers (seconds): P0 X 120 / feed 300; P1 X 300 / feed 600; P2 1800 (env `P0_X`, `P0_FEED`, …).
+- **SSE**: `GET /api/stream`, events `item | update | removed`, 15 s ping; fed by an in-process EventEmitter (`src/lib/bus.ts`, on `globalThis`). The client opens one EventSource in `app-shell.tsx` and fans out via `onStream`.
+- **Retention**: items older than 48 h (`RETENTION_HOURS`) are pruned every 10 min and skipped on insert. **`seen` table** keeps every uid for 30 days (`SEEN_DAYS`) so pruned items never come back as "new".
+- **Seed sync**: on every start, `sources/sources.json` is imported; for `origin='seed'` rows, enabled/priority/interval/url are re-synced (`SYNC_SEED=0` to disable). User-added sources (`origin='user'`) are never touched (`SYNC_DISABLE_USER=1` disables them).
+- DB path `data/news.db` (`NEWS_DB`), seed path `SOURCES_JSON`.
+
+## Data rules (keep these)
+- Dedupe: web items by normalized URL (`normUrl`: no scheme/www/trailing slash/utm etc.), X posts by `x:<tweet id>`.
+- Cross-source merge: a tweet whose expanded link matches an article → stored with `merged_into`, shown as "也在 X" on the article (also reverse when the article arrives later).
+- Future-dated items are clamped to fetch time; undated items on a source's first fetch are ignored (backlog).
+- X: keep only the account's own posts and self-replies (drop reposts and replies to others).
+- **No scrape-only sources**: a source must have RSS/Atom or a JSON API with an adapter. HTML-only sites stay `supported=0`.
+
+## Adding a new source type / fetcher
+1. Implement `async (src) => FetchedItem[]` in `src/lib/fetchers.ts` (use `httpGet` from `util.ts` for UA/timeout/retry; produce `uid`, `title`, `url`, `summary` via `clean()`, `published` in epoch seconds or `null`, `isX`, optional `links` for X).
+2. Register it in `FETCHERS` and add the type to `SUPPORTED` in `db.ts` (and `SourceType` in `types.ts`).
+3. For a new JSON API, add a URL-matched branch in `fetchApi` instead of a new type.
+4. If users should add it from the UI, extend `detect()`.
+5. Add its rate-limit entry to `src/data/rate-limits.json` (official link or "no official documentation found"), run `npm run docs:rate-limits`.
+6. Add to `sources/sources.json` with `type`, `priority`, `pollInterval`, `group` if it's a curated source.
+
+## Adding a doc page
+1. Create `src/app/docs/<slug>/page.tsx` (reuse the header/breadcrumb pattern of `docs/rate-limits/page.tsx`).
+2. Append `{ slug, title, desc, updated }` to `DOCS` in `src/lib/docs-registry.ts` — the sidebar group (collapsible, open state in localStorage `sidebar.docs.open`), the /docs index and ⌘K pick it up automatically.
+
+## Feed filter model
+- `src/components/filters.ts`: ONE view at a time, chosen in the sidebar — 全部 / an exclusive section / a single source — plus an optional 仅 P0 toggle. **Sections are exclusive** (`sectionOf` in `common.ts`): every X post → `x`（X 快讯）; websites by seed `group` → 实验室 lab / 国内 cn / 开发 dev / 媒体 media. Section counts sum to 全部. New X sources need no group; new web sources should set `group`.
+- State lives in the URL (`/?section=cn`, `/?section=x`, `/?source=12`, `&p0=1`); use `setF` / `navigate` from `useApp()`.
+- Feed loads the whole 48 h window once (`/api/items?limit=1000`) and filters client-side; sidebar counts come from it.
+- Layout: day headers + a grid of equal-size shadcn `Card`s (fixed height, clamped title/summary): 1 col → 2 at md → 3 at xl → 4 at ≥1600px. j/k/←/→ move in reading order; Enter opens the drawer.
+- Read state: item ids in localStorage `read.ids` (marked on open), rendered dimmed.
+
+## UI conventions
+- All UI copy in Chinese. Times shown in **Beijing time** (`Asia/Shanghai`) plus relative time (`bj()`, `ago()` in `common.ts`).
+- Keep design tokens in `globals.css` (`--brand`, `--faint`, `--hover`, `--selected`, `--shadow-card`, cool-tinted dark / warm-neutral light). Use `text-faint` for meta, `text-muted-foreground` for summaries; maintain WCAG AA.
+- Use shadcn/ui components (Base UI API: `render={<a … />}` instead of `asChild`; Select/ToggleGroup values are arrays/unknown).
+- Motion: `duration-150 ease-out` for colors, `duration-200 ease-out` for transforms. Icons: lucide `size-4` (`size-3.5` in dense meta) with `strokeWidth={1.75}`. Counts/times use `tabular-nums`; spacing on a 4px grid.
+- Dark mode is the default (`next-themes`, class strategy).
+
+## Verification checklist
+- [ ] `npm run lint` and `npm run typecheck` clean; `npm run build` succeeds
+- [ ] restart prod on :3000; `curl localhost:3000/api/stats` → `sources.errors` is 0 and `fetched` equals active count after ~1 min
+- [ ] SSE: `curl -N localhost:3000/api/stream` receives `event: item` when new items arrive (or force via "立即抓取")
+- [ ] feed, /sources, /docs, /docs/rate-limits render in dark and light; mobile layout OK (`npm run screenshots`)
+
+## Rate-limit etiquette
+See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll faster than upstream cache times (hnrss 600 s, OpenRouter 120 s); X syndication lists allow only ~30 req / 15 min / IP; honor 429 backoff; current total load ≈ 11 req/min.
+
+## Performance notes
+- SQLite: WAL, `synchronous=NORMAL`, `busy_timeout=5000`, 4 MB cache, `auto_vacuum=INCREMENTAL`; `prune()` runs `incremental_vacuum` + `wal_checkpoint(TRUNCATE)`.
+- Fetchers use conditional GET (`condGet` in `fetchers.ts`: ETag / If-Modified-Since, 304 → no work).
+- `/api/items` gzips responses and ships a 420-char summary preview (`truncated: true`); the drawer fetches the full item with `?id=`. X post text is stored up to 4000 chars.
+- The card grid renders 60 cards at a time (IntersectionObserver); `ItemCard` is memoized.
+- Docker: `Dockerfile` (standalone output, non-root, healthcheck on `/api/health`) + `docker-compose.yml`.
+
+## Do / Don't
+- ✅ Do keep changes small and typed; reuse `common.ts` helpers and existing tokens.
+- ✅ Do update `sources/sources.json` (not the DB) for curated source changes.
+- ❌ Don't commit `data/` (SQLite) or `.next/`.
+- ❌ Don't run multiple server instances or a second poller against the same DB/IP.
+- ❌ Don't add scrape-only/HTML sources or invent feed URLs — verify by fetching.
+- ❌ Don't replace the design system or restyle components ad hoc; extend tokens instead.
