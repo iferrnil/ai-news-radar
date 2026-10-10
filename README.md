@@ -32,6 +32,7 @@
 | ![详情抽屉](docs/screenshots/drawer.png) | ![数据源管理](docs/screenshots/sources_dark.png) |
 | ![悬停预览](docs/screenshots/hover_card.png) | ![悬停预览（浅色）](docs/screenshots/hover_card_light.png) |
 | ![导出菜单](docs/screenshots/sources_export.png) | ![导入预览](docs/screenshots/sources_import.png) |
+| ![数据源工具栏](docs/screenshots/sources_toolbar.png) | <img src="docs/screenshots/sources_import_mobile.png" width="260" alt="导入（移动端）"> |
 | ![抓取限制文档](docs/screenshots/docs_page.png) | <img src="docs/screenshots/feed_mobile.png" width="260" alt="移动端"> |
 
 ## 架构

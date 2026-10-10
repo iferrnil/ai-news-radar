@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Download, FileUp, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileJson, FileUp, Rss, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import dynamic from "next/dynamic";
-import { buildJson, buildOpml, exportFileName, type ExportSource } from "@/lib/portable";
+import { buildJson, buildOpml, exportFileName, type ExportSource } from "@/lib/portable-export";
 
 const ImportDialog = dynamic(() => import("./import-dialog"), { ssr: false });
 
@@ -191,29 +191,36 @@ export default function Sources() {
           <h1 className="type-h1 font-semibold tracking-tight">数据源</h1>
           <p className="mt-0.5 type-body text-muted-foreground">启用/停用、调整抓取频率、立即抓取，或添加新的 RSS / X 账号 / X 列表。</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {deleted.length > 0 && <Button variant="outline" onClick={() => setRestoreOpen(true)}><RotateCcw />已删除的内置源 · {deleted.length}</Button>}
-          <Button variant="outline" onClick={() => setImpOpen(true)}><FileUp />导入</Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" />}><Download />导出</DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>范围</DropdownMenuLabel>
-                <DropdownMenuRadioGroup value={scope} onValueChange={(v) => setScope(v as typeof scope)}>
-                  <DropdownMenuRadioItem value="all" closeOnClick={false}>全部来源 · {rows.length}</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="enabled" closeOnClick={false}>仅启用 · {rows.filter((r) => r.enabled).length}</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="view" closeOnClick={false}>当前筛选 · {view.length}</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="sel" closeOnClick={false} disabled={sel.size === 0}>已选中 · {sel.size}</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>格式</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => doExport("json")}>JSON（完整设置，可再导入）</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => doExport("opml")}>OPML 2.0（通用阅读器）</DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center" role="group" aria-label="导入导出">
+            <Button variant="outline" className="rounded-r-none" onClick={() => setImpOpen(true)}><FileUp />导入</Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" className="-ml-px rounded-l-none" />}><Download />导出</DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="type-meta">导出范围</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={scope} onValueChange={(v) => setScope(v as typeof scope)}>
+                    {([["all", "全部来源", rows.length], ["enabled", "仅启用", rows.filter((r) => r.enabled).length], ["view", "当前筛选", view.length], ["sel", "已选中的行", sel.size]] as const).map(([v, l, n]) => (
+                      <DropdownMenuRadioItem key={v} value={v} closeOnClick={false} disabled={n === 0} className="type-body">
+                        {l}<span className="ml-auto pr-5 font-mono type-meta tabular-nums text-faint">{n}</span>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="type-meta">格式</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => doExport("json")} className="items-start py-1.5">
+                    <FileJson className="mt-0.5" /><span className="grid"><span className="type-body">JSON</span><span className="type-meta text-faint">完整设置，可再导入本应用</span></span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => doExport("opml")} className="items-start py-1.5">
+                    <Rss className="mt-0.5" /><span className="grid"><span className="type-body">OPML 2.0</span><span className="type-meta text-faint">通用格式，可导入其他阅读器</span></span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <Button onClick={() => setAddOpen(true)}><Plus />添加数据源</Button>
         </div>
       </div>
