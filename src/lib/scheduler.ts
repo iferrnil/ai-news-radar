@@ -1,3 +1,4 @@
+import { backfillTranslations } from "./translate";
 import { getDb } from "./db";
 import { FETCHERS } from "./fetchers";
 import { prune, storeItems } from "./store";
@@ -61,6 +62,7 @@ export function startScheduler() {
   st.started = true;
   getDb();
   console.log("[poller] scheduler started");
+  setTimeout(() => backfillTranslations(), 5000);
   tick();
   st.timers.push(setInterval(() => { try { tick(); } catch (e) { console.error("[poller] tick failed", e); } }, 10_000));
 }

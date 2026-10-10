@@ -114,3 +114,14 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## Fonts
 
 - `src/app/layout.tsx`: Inter (Latin, OFL) + Noto Sans SC 400/500/600 (CJK, OFL, `preload: false`, unicode-range slices) + JetBrains Mono (times/numbers), all via `next/font/google` (self-hosted at build). `--font-sans` = Inter → Noto Sans SC → system CJK. Do not add HarmonyOS Sans / MiSans (non-OFL licenses).
+
+## Translation (DeepSeek, optional)
+
+- `src/lib/translate.ts`: `storeItems` → `enqueueTranslation(newIds)`; worker batches (10, concurrency 2) to DeepSeek `chat/completions` with JSON output; cache `tcache(h=sha1(title,summary))`, 7-day prune. `items.title_zh/summary_zh`: NULL = not processed, '' = not needed (mostly CJK, see `needsTranslation`), else translation. On completion it publishes SSE `update` with zh fields.
+- Enabled only if `DEEPSEEK_API_KEY` is set; DB `settings.translate` ('1'/'0', via `PATCH /api/settings`) overrides `TRANSLATE_ENABLED`. Startup backfills untranslated retained items once.
+- API: `/api/items?zh=1` adds `title_zh`/`summary_zh` (list payload omits them otherwise). Client: `zh` in AppCtx (localStorage `zh`), `localize()` swaps fields and keeps `orig`; `TrBadge`/`Original` in `item-preview.tsx`.
+- Never commit keys; `.env*` is gitignored except `.env.example`.
+
+## Add-source dialog
+
+- One 分区 select (= `SECTIONS`), auto-suggested (X handle/URL → X 快讯, .cn/中文 → 国内媒体, else 国外媒体); POST `/api/sources` stores it as `grp`, region/category derived. Dialog uses `grid-cols-[minmax(0,1fr)]` + `min-w-0` so long previews truncate instead of widening it.

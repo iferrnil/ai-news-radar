@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS seen(uid TEXT PRIMARY KEY, ts REAL NOT NULL) WITHOUT 
 CREATE INDEX IF NOT EXISTS seen_ts ON seen(ts);
 CREATE INDEX IF NOT EXISTS items_src_pub ON items(source_id, published DESC);
 DROP INDEX IF EXISTS items_src;
+CREATE TABLE IF NOT EXISTS tcache(h TEXT PRIMARY KEY, t TEXT, s TEXT, ts REAL NOT NULL) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT) WITHOUT ROWID;
 `;
 
 interface SeedSource {
@@ -85,6 +87,9 @@ export function getDb(): Database.Database {
     db.pragma("temp_store = MEMORY");
     db.pragma("journal_size_limit = 4194304"); // cap the WAL file at 4 MB after checkpoints
     db.exec(SCHEMA);
+    // translation columns (NULL = not processed yet, '' = no translation needed)
+    const cols = new Set((db.prepare("PRAGMA table_info(items)").all() as { name: string }[]).map((c) => c.name));
+    if (!cols.has("title_zh")) db.exec("ALTER TABLE items ADD COLUMN title_zh TEXT; ALTER TABLE items ADD COLUMN summary_zh TEXT;");
     seed(db);
     // one-off repair: entities double-escaped in older rows (e.g. "&mdash;")
     const bad = db.prepare("SELECT id,title,summary FROM items WHERE title LIKE '%&%;%' OR summary LIKE '%&%;%'").all() as { id: number; title: string; summary: string }[];

@@ -12,13 +12,13 @@ import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { ItemPreview } from "./item-preview";
+import { TrBadge, ItemPreview } from "./item-preview";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
 import { useApp } from "./app-shell";
-import { ago, api, bj, dekText, handleOf, secZh, sectionOf, srcName, xText } from "./common";
+import { ago, api, bj, dekText, handleOf, localize, secZh, sectionOf, srcName, xText } from "./common";
 import { countOf, passes } from "./filters";
 import { SourceAvatar } from "./source-avatar";
 
@@ -57,6 +57,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
         {x && <span className="hidden min-w-0 shrink truncate text-faint sm:inline">@{h}</span>}
         {x && <Twitter className="size-2.5 shrink-0 text-faint" />}
         {it.priority === "P0" && <span className="shrink-0 rounded-[4px] bg-brand-soft px-1 font-mono text-[10px] font-semibold leading-4 tracking-[0.02em] text-brand shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--brand)_22%,transparent)]">P0</span>}
+        {it.tr && <TrBadge />}
         <time className="ml-auto shrink-0 font-mono text-[11px] tabular-nums text-faint" title={`北京时间 ${bj(it.published)}`}>{ago(it.published, true)}</time>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden px-4">
@@ -93,8 +94,9 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
 });
 
 export default function Feed() {
-  const { f, setF, onStream, setOpen, open, sources, setFacet, isRead } = useApp();
-  const [items, setItems] = useState<ItemOut[]>([]);
+  const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, zh } = useApp();
+  const [raw, setItems] = useState<ItemOut[]>([]);
+  const items = useMemo(() => (zh ? raw.map(localize) : raw), [raw, zh]);
   const [pending, setPending] = useState<ItemOut[]>([]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -106,16 +108,16 @@ export default function Feed() {
 
   // 48 h retention keeps the window small: load it all once, filter client-side.
   const load = useCallback(async () => {
-    const rs = await api<ItemOut[]>("/api/items?limit=1000");
+    const rs = await api<ItemOut[]>(`/api/items?limit=1000${zh ? "&zh=1" : ""}`); // translations only when shown
     seen.current = new Set(rs.map((r) => r.id));
     setItems(rs); setPending([]); setLoading(false);
-  }, []);
+  }, [zh]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setFacet(items); }, [items, setFacet]);
   useEffect(() => { setCursor(-1); }, [f]);
   useEffect(() => onStream((ev, d) => {
     if (ev === "item") { const it = d.item as ItemOut; if (!seen.current.has(it.id)) setPending((p) => (p.some((x) => x.id === it.id) ? p : [...p, it])); }
-    else if (ev === "update") { const it = d.item as ItemOut; setItems((cur) => cur.map((x) => (x.id === it.id ? it : x))); }
+    else if (ev === "update") { const it = d.item as ItemOut; setItems((cur) => cur.map((x) => (x.id === it.id ? it : x))); setPending((cur) => cur.map((x) => (x.id === it.id ? it : x))); }
     else if (ev === "removed") { setItems((c) => c.filter((x) => x.id !== d.id)); setPending((p) => p.filter((x) => x.id !== d.id)); }
   }), [onStream]);
   useEffect(() => { const h = () => setShowTop(window.scrollY > 900); window.addEventListener("scroll", h, { passive: true }); return () => window.removeEventListener("scroll", h); }, []);

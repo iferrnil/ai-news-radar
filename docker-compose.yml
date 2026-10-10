@@ -14,6 +14,8 @@ services:
       TZ: Asia/Shanghai
       NODE_OPTIONS: --max-old-space-size=256
       RETENTION_HOURS: ${RETENTION_HOURS:-48}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      TRANSLATE_ENABLED: ${TRANSLATE_ENABLED:-1}
       SEEN_DAYS: ${SEEN_DAYS:-30}
       DISABLE_POLLER: ${DISABLE_POLLER:-0}
       SYNC_SEED: ${SYNC_SEED:-1}

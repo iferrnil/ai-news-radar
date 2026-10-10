@@ -18,4 +18,6 @@ export interface ItemOut {
   author: string | null; also_on_x: { url: string; author: string | null }[];
   source_id: number; source: string; category: string | null; region: string | null; source_type: SourceType;
   priority: Priority | null; homepage: string | null; username: string | null; grp: string | null;
+  title_zh?: string; summary_zh?: string;
+  tr?: boolean; orig?: { title: string; summary: string }; // client-side: set by localize() when showing the translation // only when requested with zh=1 and a translation exists
 }

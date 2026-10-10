@@ -36,11 +36,15 @@ await shot("command_palette.png", "/", { act: async (pg) => { await pg.keyboard.
 await shot("sources_dark.png", "/sources");
 await shot("sources_light.png", "/sources", { theme: "light" });
 await shot("docs_page.png", "/docs/rate-limits", { act: async () => {} });
-await shot("add_source.png", "/sources", { act: async (pg) => {
+const addAct = async (pg) => {
   await pg.click("button:has-text('添加数据源')");
-  await pg.fill("#src-input", "https://simonwillison.net");
+  await pg.fill("#src-input", "@ClaudeDevs");
   await pg.click("[role=dialog] button:has-text('测试')");
   await pg.waitForSelector("[role=dialog] ul li", { timeout: 60000 });
-} });
+};
+await shot("add_source.png", "/sources", { act: addAct });
+await shot("add_source_mobile.png", "/sources", { mobile: true, act: addAct });
+await shot("translate_menu.png", "/", { act: (pg) => pg.click("button[aria-label='翻译设置']") });
+await shot("feed_original.png", "/", { act: async (pg) => { await pg.click("button[aria-label='翻译设置']"); await pg.click("[aria-label='翻译成中文']"); await pg.waitForTimeout(1500); await pg.keyboard.press("Escape"); } });
 await b.close();
 console.log("screenshots ->", OUT);

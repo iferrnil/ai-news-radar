@@ -212,6 +212,29 @@
    "riskNote": "非公开接口，随时可能失效或加签；10 分钟 1 次。"
   },
   {
+   "id": "deepseek",
+   "name": "DeepSeek API（翻译，可选）",
+   "match": {
+    "host": "api.deepseek.com"
+   },
+   "endpoint": "POST https://api.deepseek.com/chat/completions（model deepseek-chat，JSON 输出）",
+   "documented": "官方按账号限制并发（非 QPS）：deepseek-flash 2500 并发、deepseek-v4-pro 500 并发，超出返回 HTTP 429；未开始推理 10 分钟后服务端断开。计费按 token（flash：输入未命中缓存 $0.15–0.30/M，输出 $0.6–1.2/M，非高峰半价）。",
+   "official": true,
+   "sources": [
+    {
+     "label": "DeepSeek · Rate Limit & Isolation",
+     "url": "https://api-docs.deepseek.com/quick_start/rate_limit"
+    },
+    {
+     "label": "DeepSeek · Models & Pricing",
+     "url": "https://api-docs.deepseek.com/quick_start/pricing"
+    }
+   ],
+   "observed": "2026-10-10 实测：3 条标题+摘要一批，HTTP 200，约 0.85 s，184 输入 + 107 输出 token。",
+   "risk": "low",
+   "riskNote": "仅在设置 DEEPSEEK_API_KEY 时启用；每批 10 条、并发 2，远低于并发上限；不计入下方「轮询用量」（按新条目触发）。"
+  },
+  {
    "id": "rss",
    "name": "其他通用 RSS / Atom（官方博客与媒体）",
    "match": {

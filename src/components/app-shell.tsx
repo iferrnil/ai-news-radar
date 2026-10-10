@@ -23,7 +23,10 @@ import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
 import { SECTIONS, inAll, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, xText, REG, CAT } from "./common";
 import { SourceAvatar } from "./source-avatar";
-import { useFullItem } from "./item-preview";
+import { Original, TrBadge, useFullItem } from "./item-preview";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { Languages } from "lucide-react";
 
 export const SEC_ICON: Record<SectionKey | "all", React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
 
@@ -35,9 +38,46 @@ type Ctx = {
   live: boolean; setLive: (b: boolean) => void; open: ItemOut | null; setOpen: (i: ItemOut | null) => void;
   setPalette: (b: boolean) => void; addOpen: boolean; setAddOpen: (b: boolean) => void;
   onStream: (fn: (ev: string, data: any) => void) => () => void;
+  zh: boolean; setZh: (b: boolean) => void;
 };
 const AppCtx = createContext<Ctx>(null as unknown as Ctx);
 export const useApp = () => useContext(AppCtx);
+
+type TrStatus = { available: boolean; enabled: boolean; queued: number; done: number; cached: number; failed: number; lastError: string | null; model: string };
+/** Top-bar popover: client display toggle (localStorage) + server fetch-time translation toggle (DB setting). */
+function TranslateMenu() {
+  const { zh, setZh } = useApp();
+  const [st, setSt] = useState<TrStatus | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const get = () => api<{ translate: TrStatus }>("/api/settings").then((r) => setSt(r.translate)).catch(() => {});
+    get(); const t = setInterval(get, 3000); return () => clearInterval(t);
+  }, [open]);
+  const setServer = async (on: boolean) => { const r = await api<{ translate: TrStatus }>("/api/settings", { method: "PATCH", body: JSON.stringify({ translate: on }) }); setSt(r.translate); toast(on ? "已开启抓取时翻译" : "已关闭抓取时翻译"); };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger render={<Button variant="ghost" size="icon" aria-label="翻译设置" className={zh ? "text-brand" : ""} />}><Languages className="size-4" /></PopoverTrigger>
+      <PopoverContent align="end" className="w-[300px] gap-0 p-0">
+        <label className="flex cursor-pointer items-start gap-3 p-3.5">
+          <div className="flex-1"><div className="text-[13px] font-medium">翻译成中文</div><div className="mt-0.5 text-[12px] leading-snug text-muted-foreground">显示外文内容的中文译文（标「译」），悬停卡片和详情里可看原文。</div></div>
+          <Switch checked={zh} onCheckedChange={(v) => setZh(!!v)} aria-label="翻译成中文" />
+        </label>
+        <div className="border-t border-border/60" />
+        <label className="flex cursor-pointer items-start gap-3 p-3.5">
+          <div className="flex-1">
+            <div className="text-[13px] font-medium">抓取时翻译（DeepSeek）</div>
+            <div className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+              {!st ? "读取中…" : !st.available ? "未配置 DEEPSEEK_API_KEY，翻译不可用。" : `新外文条目自动翻译标题与摘要 · 已译 ${st.done}（缓存 ${st.cached}）· 排队 ${st.queued}${st.failed ? ` · 失败 ${st.failed}` : ""}`}
+            </div>
+            {st?.lastError && <div className="mt-1 text-[11.5px] text-red-500">{st.lastError}</div>}
+          </div>
+          <Switch checked={!!st?.enabled} disabled={!st?.available} onCheckedChange={(v) => setServer(!!v)} aria-label="抓取时翻译" />
+        </label>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
@@ -252,7 +292,7 @@ function ItemSheet() {
                   <div className="text-[12px] text-muted-foreground">{bjFull(it.published)} · {ago(it.published)}</div>
                 </div>
               </div>
-              <SheetTitle className="text-[19px] font-semibold leading-snug tracking-tight">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}</SheetTitle>
+              <SheetTitle className="text-[19px] font-semibold leading-snug tracking-tight">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}{it.tr && <TrBadge className="ml-2 align-middle" />}</SheetTitle>
               <SheetDescription className="sr-only">内容详情</SheetDescription>
               <div className="flex flex-wrap gap-1.5">
                 {it.priority && <Badge variant="outline" className={cn(it.priority === "P0" && "border-brand/40 bg-brand-soft text-brand")}>{it.priority}</Badge>}
@@ -264,6 +304,7 @@ function ItemSheet() {
             <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-5 p-5">
                 <p className="whitespace-pre-wrap text-[14.5px] leading-7 text-foreground/85">{it.is_x ? it.summary || it.title : dekText(it.summary) || "（该来源未提供摘要）"}</p>
+                {it.orig && <Original o={it.orig} x={!!it.is_x} />}
                 {it.also_on_x.length > 0 && (
                   <div className="rounded-lg border bg-muted/40 p-3">
                     <div className="mb-2 text-[12px] font-medium text-muted-foreground">也在 X 上发布</div>
@@ -304,6 +345,9 @@ function Shell({ children }: { children: React.ReactNode }) {
   const isRead = useCallback((id: number) => read.has(id), [read]);
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [live, setLive] = useState(false);
+  const [zh, setZhState] = useState(true);
+  useEffect(() => { setZhState(localStorage.getItem("zh") !== "0"); }, []);
+  const setZh = useCallback((b: boolean) => { setZhState(b); localStorage.setItem("zh", b ? "1" : "0"); }, []);
   const [open, setOpenState] = useState<ItemOut | null>(null);
   const setOpen = useCallback((i: ItemOut | null) => { setOpenState(i); if (i) markRead(i.id); }, [markRead]);
   const [palette, setPalette] = useState(false);
@@ -333,8 +377,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((p) => !p); } };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, []);
-  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, sources, reloadSources, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream }),
-    [f, setF, navigate, facet, isRead, markRead, sources, reloadSources, live, open, setOpen, addOpen, onStream]);
+  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, sources, reloadSources, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, zh, setZh }),
+    [f, setF, navigate, facet, isRead, markRead, sources, reloadSources, live, open, setOpen, addOpen, onStream, zh, setZh]);
   const title = path === "/sources" ? "数据源" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
     : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
 
@@ -365,6 +409,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               </TooltipTrigger>
               <TooltipContent>{live ? "实时推送已连接（SSE）" : "正在重连实时推送"}</TooltipContent>
             </Tooltip>
+            <TranslateMenu />
             <ThemeToggle />
             <Button variant="ghost" size="icon" render={<Link href="/sources" aria-label="数据源" />} className="hidden sm:inline-flex"><Database className="size-4" /></Button>
           </header>

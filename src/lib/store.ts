@@ -1,20 +1,28 @@
 import { getDb, RETENTION_HOURS } from "./db";
 import { publish } from "./bus";
 import { decode, normUrl } from "./util";
+import { enqueueTranslation } from "./translate";
 import type { FetchedItem, ItemOut, SourceRow } from "./types";
 
-const ITEM_SQL = `SELECT i.id,i.title,i.url,i.summary,i.published,i.fetched,i.is_x,i.author,i.also_on_x,
+const ITEM_SQL = `SELECT i.id,i.title,i.url,i.summary,i.published,i.fetched,i.is_x,i.author,i.also_on_x,i.title_zh,i.summary_zh,
   s.id AS source_id, s.name AS source, s.category, s.region, s.type AS source_type, s.priority, s.homepage, s.username, s.grp
   FROM items i JOIN sources s ON s.id=i.source_id WHERE i.merged_into IS NULL AND s.enabled=1`;
 
-export function queryItems(where = "", args: unknown[] = [], limit = 50, full = false): ItemOut[] {
+export const PREVIEW_CHARS = 280; // cards clamp to 3 lines; hover card / drawer fetch the full text via ?id=
+/** full: untruncated summary (single-item view). zh: include title_zh/summary_zh (omitted otherwise to keep the list payload small). */
+export function queryItems(where = "", args: unknown[] = [], limit = 50, full = false, zh = false): ItemOut[] {
   const rows = getDb().prepare(`${ITEM_SQL} ${where} ORDER BY i.published DESC LIMIT ${Math.min(Math.max(1, limit), 1000)}`).all(...args) as any[];
+  const clip = (x: string) => (full || x.length <= PREVIEW_CHARS ? x : x.slice(0, PREVIEW_CHARS));
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  return rows.map(({ fetched: _f, ...r }) => {
-    const summary = decode(r.summary ?? "");
-    // list payload: cards show ≤5 lines, so ship a preview; the drawer fetches the full text via ?id=
-    const cut = full ? summary : summary.length > 420 ? summary.slice(0, 420) : summary;
-    return { ...r, title: decode(r.title ?? ""), summary: cut, truncated: cut.length < summary.length, also_on_x: JSON.parse(r.also_on_x || "[]") };
+  return rows.map(({ fetched: _f, title_zh, summary_zh, ...r }) => {
+    const summary = decode(r.summary ?? ""), cut = clip(summary);
+    const out: ItemOut = { ...r, title: decode(r.title ?? ""), summary: cut, truncated: cut.length < summary.length, also_on_x: JSON.parse(r.also_on_x || "[]") };
+    if (zh && title_zh) {
+      out.title_zh = title_zh; out.summary_zh = clip(summary_zh ?? "");
+      // list view in Chinese mode: don't ship the original summary too (hover card / drawer fetch the full item with both)
+      if (!full && out.summary_zh) { out.summary = ""; out.truncated = true; }
+    }
+    return out;
   });
 }
 
@@ -73,6 +81,7 @@ export function storeItems(src: SourceRow, items: FetchedItem[]) {
       }
     }
   })();
+  enqueueTranslation(newIds);
   for (const id of removed) publish({ event: "removed", id });
   if (newIds.length) for (const r of queryItems(`AND i.id IN (${newIds.map(() => "?").join(",")})`, newIds, newIds.length)) publish({ event: "item", item: r });
   for (const id of updated) for (const r of queryItems("AND i.id=?", [id], 1)) publish({ event: "update", item: r });
@@ -85,6 +94,7 @@ export function prune() {
   const cutoff = Date.now() / 1000 - RETENTION_HOURS * 3600;
   const n = db.transaction(() => {
     db.prepare("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE published < ?)").run(cutoff);
+    db.prepare("DELETE FROM tcache WHERE ts < ?").run(Date.now() / 1000 - 7 * 86400);
     db.prepare("DELETE FROM seen WHERE ts < ?").run(Date.now() / 1000 - Number(process.env.SEEN_DAYS ?? 30) * 86400);
     return db.prepare("DELETE FROM items WHERE published < ?").run(cutoff).changes;
   })();

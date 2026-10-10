@@ -20,6 +20,7 @@
 | 网易娱乐 newsdata（JSONP） | 未找到官方文档：这是网易娱乐首页前端使用的 JSONP 数据文件，并非公开 API。 | 未找到官方文档 | 1 个源 · 0.1 次/分钟（6 次/小时） | 中 |
 | B 站热门 popular（web 接口） | 未找到官方文档：bilibili 未公开 web-interface 接口文档及限额（社区记录过高频请求会返回 -412 风控）。 | 未找到官方文档 | 1 个源 · 0.1 次/分钟（6 次/小时） | 中 |
 | 抖音热搜 billboard（web 接口） | 未找到官方文档：抖音分享页使用的非公开接口。 | 未找到官方文档 | 1 个源 · 0.1 次/分钟（6 次/小时） | 高 |
+| DeepSeek API（翻译，可选） | 官方按账号限制并发（非 QPS）：deepseek-flash 2500 并发、deepseek-v4-pro 500 并发，超出返回 HTTP 429；未开始推理 10 分钟后服务端断开。计费按 token（flash：输入未命中缓存 $0.15–0.30/M，输出 $0.6–1.2/M，非高峰半价）。 | [DeepSeek · Rate Limit & Isolation](https://api-docs.deepseek.com/quick_start/rate_limit)<br>[DeepSeek · Models & Pricing](https://api-docs.deepseek.com/quick_start/pricing) | 0 个源 · 0 次/分钟（0 次/小时） | 低 |
 | 其他通用 RSS / Atom（官方博客与媒体） | 各站点均未公布 feed 限额。RSS 2.0 规范仅提供可选的 &lt;ttl>（建议缓存分钟数）作为礼仪约定。 | [RSS 2.0 Specification · <ttl>](https://www.rssboard.org/rss-specification#ltttlgtSubelementOfLtchannelgt) | 23 个源 · 2.67 次/分钟（160 次/小时） | 低 |
 
 合计约 **11.9 次/分钟**（57 个启用来源）。
@@ -133,6 +134,15 @@
 - 实测（2026-10-10）：2026-10-10 实测 GET 200，返回 50 个热词（只有词与热度，无时间、无链接；我们用抖音搜索页作为链接，用抓取时间作为时间）；HEAD 404；无限额响应头。
 - 我们的用量：1 个源，约 0.1 次/分钟（6 次/小时）：抖音热搜
 - 风险：**高** — 非公开接口，随时可能失效或加签；10 分钟 1 次。
+
+### DeepSeek API（翻译，可选）
+
+- 端点：`POST https://api.deepseek.com/chat/completions（model deepseek-chat，JSON 输出）`
+- 文档限额：官方按账号限制并发（非 QPS）：deepseek-flash 2500 并发、deepseek-v4-pro 500 并发，超出返回 HTTP 429；未开始推理 10 分钟后服务端断开。计费按 token（flash：输入未命中缓存 $0.15–0.30/M，输出 $0.6–1.2/M，非高峰半价）。
+- 来源：[DeepSeek · Rate Limit & Isolation](https://api-docs.deepseek.com/quick_start/rate_limit)；[DeepSeek · Models & Pricing](https://api-docs.deepseek.com/quick_start/pricing)
+- 实测（2026-10-10）：2026-10-10 实测：3 条标题+摘要一批，HTTP 200，约 0.85 s，184 输入 + 107 输出 token。
+- 我们的用量：0 个源，约 0 次/分钟（0 次/小时）
+- 风险：**低** — 仅在设置 DEEPSEEK_API_KEY 时启用；每批 10 条、并发 2，远低于并发上限；不计入下方「轮询用量」（按新条目触发）。
 
 ### 其他通用 RSS / Atom（官方博客与媒体）
 

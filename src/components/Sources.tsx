@@ -17,7 +17,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useApp } from "./app-shell";
-import { CAT, REG, TYPE, type SourceRow, ago, api, bj, secZh, sectionOf } from "./common";
+import { SECTIONS, type SectionKey, TYPE, type SourceRow, ago, api, bj, secZh, sectionOf } from "./common";
 import { SourceAvatar } from "./source-avatar";
 
 const IV = [60, 120, 180, 300, 600, 1800, 3600];
@@ -37,13 +37,15 @@ function StatusBadge({ s }: { s: SourceRow }) {
 type Detect = { type: string; name: string; url: string; count: number; overlap: number; sample: { title: string; published: number | null }[] };
 
 function AddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: (b: boolean) => void; onAdded: () => void }) {
-  const [form, setForm] = useState({ input: "", name: "", category: "community", region: "global", priority: "P1", force: false });
+  const [form, setForm] = useState({ input: "", name: "", section: "media" as SectionKey, priority: "P1", force: false });
+  const [secTouched, setSecTouched] = useState(false); // stop auto-suggesting once the user picks a section
+  const suggest = (input: string, type?: string) => (/^@|x\.com\/|twitter\.com\//i.test(input.trim()) || type?.startsWith("x") ? "x" : /\.cn(\/|$)|[\u4e00-\u9fff]/.test(input) ? "cn" : "media") as SectionKey;
   const [res, setRes] = useState<Detect | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState<"" | "test" | "add">("");
   const test = async () => {
     setBusy("test"); setErr(""); setRes(null);
-    try { setRes(await api<Detect>("/api/sources/test", { method: "POST", body: JSON.stringify(form) })); } catch (e) { setErr((e as Error).message); }
+    try { const r = await api<Detect>("/api/sources/test", { method: "POST", body: JSON.stringify(form) }); setRes(r); if (!secTouched) setForm((f) => ({ ...f, section: suggest(f.input, r.type) })); } catch (e) { setErr((e as Error).message); }
     setBusy("");
   };
   const add = async () => {
@@ -51,46 +53,45 @@ function AddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChang
     try {
       const d = await api("/api/sources", { method: "POST", body: JSON.stringify(form) });
       toast.success(`已添加「${d.source.name}」`, { description: d.fetch.error ? `首次抓取失败：${d.fetch.error}` : `首次抓取 ${d.fetch.fetched} 条，新增 ${d.fetch.new} 条` });
-      onAdded(); onOpenChange(false); setRes(null); setForm({ ...form, input: "", name: "", force: false });
+      onAdded(); onOpenChange(false); setRes(null); setSecTouched(false); setForm({ ...form, input: "", name: "", force: false });
     } catch (e) { setErr((e as Error).message); }
     setBusy("");
   };
-  const sel = (k: "category" | "region" | "priority", opts: [string, string][]) => (
-    <Select value={form[k]} onValueChange={(v) => setForm({ ...form, [k]: v as string })}>
+  const sel = (k: "section" | "priority", opts: [string, string][]) => (
+    <Select value={form[k]} onValueChange={(v) => { if (k === "section") setSecTouched(true); setForm({ ...form, [k]: v as never }); }}>
       <SelectTrigger className="w-full"><SelectValue>{(v: string) => opts.find((o) => o[0] === v)?.[1]}</SelectValue></SelectTrigger>
       <SelectContent>{opts.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
     </Select>
   );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>添加数据源</DialogTitle>
           <DialogDescription>网页或 Feed URL（自动发现 RSS/Atom）、X 用户名 @handle，或 X 列表链接。</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4">
-          <div className="grid gap-1.5">
+        <div className="grid min-w-0 gap-4">
+          <div className="grid min-w-0 gap-1.5">
             <Label htmlFor="src-input">地址 / 账号</Label>
-            <div className="flex gap-2">
-              <Input id="src-input" autoFocus placeholder="https://simonwillison.net 或 @karpathy" value={form.input}
-                onChange={(e) => { setForm({ ...form, input: e.target.value }); setRes(null); }} onKeyDown={(e) => e.key === "Enter" && form.input && test()} />
-              <Button variant="outline" onClick={test} disabled={!form.input || !!busy}>{busy === "test" ? <Loader2 className="animate-spin" /> : <RefreshCw />}测试</Button>
+            <div className="flex min-w-0 gap-2">
+              <Input id="src-input" className="min-w-0 flex-1" autoFocus placeholder="https://simonwillison.net 或 @karpathy" value={form.input}
+                onChange={(e) => { const v = e.target.value; setForm({ ...form, input: v, section: secTouched ? form.section : suggest(v) }); setRes(null); }} onKeyDown={(e) => e.key === "Enter" && form.input && test()} />
+              <Button variant="outline" className="shrink-0" onClick={test} disabled={!form.input || !!busy}>{busy === "test" ? <Loader2 className="animate-spin" /> : <RefreshCw />}测试</Button>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="col-span-2 grid gap-1.5 sm:col-span-1"><Label>名称</Label><Input placeholder="可选" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-            <div className="grid gap-1.5"><Label>分类</Label>{sel("category", Object.entries(CAT))}</div>
-            <div className="grid gap-1.5"><Label>地区</Label>{sel("region", [["global", "国际"], ["cn", "国内"]])}</div>
-            <div className="grid gap-1.5"><Label>优先级</Label>{sel("priority", [["P0", "P0"], ["P1", "P1"], ["P2", "P2"]])}</div>
+          <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
+            <div className="col-span-2 grid min-w-0 gap-1.5 sm:col-span-1"><Label>名称</Label><Input className="w-full" placeholder="可选" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="grid min-w-0 gap-1.5"><Label>分区</Label>{sel("section", SECTIONS.map((x) => [x.key, x.zh]))}</div>
+            <div className="grid min-w-0 gap-1.5"><Label>优先级</Label>{sel("priority", [["P0", "P0"], ["P1", "P1"], ["P2", "P2"]])}</div>
           </div>
           {err && <div className="flex gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[13px] text-red-600 dark:text-red-400"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{err}</div>}
           {res && (
-            <div className="rounded-lg border bg-muted/30">
+            <div className="min-w-0 overflow-hidden rounded-lg border bg-muted/30">
               <div className="flex items-start gap-2 border-b p-3">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-                <div className="min-w-0 text-[13px]">
-                  <div className="font-medium">{res.name} <Badge variant="secondary" className="ml-1">{TYPE[res.type]}</Badge></div>
-                  <div className="truncate text-muted-foreground">{res.url} · {res.count} 条</div>
+                <div className="min-w-0 flex-1 text-[13px]">
+                  <div className="flex min-w-0 items-center gap-1 font-medium"><span className="truncate">{res.name}</span><Badge variant="secondary" className="ml-1 shrink-0">{TYPE[res.type]}</Badge></div>
+                  <div className="break-all text-muted-foreground">{res.url} · {res.count} 条</div>
                 </div>
               </div>
               {res.overlap >= 0.5 && (
@@ -101,8 +102,8 @@ function AddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChang
                   </div>
                 </div>
               )}
-              <ul className="max-h-40 space-y-1.5 overflow-auto p-3 text-[12.5px]">
-                {res.sample.map((s, i) => <li key={i} className="flex gap-2"><span className="shrink-0 font-mono text-muted-foreground">{bj(s.published)}</span><span className="truncate">{s.title}</span></li>)}
+              <ul className="max-h-48 min-w-0 space-y-1.5 overflow-y-auto overflow-x-hidden p-3 text-[12.5px]">
+                {res.sample.map((s, i) => <li key={i} className="flex min-w-0 gap-2"><span className="shrink-0 font-mono text-muted-foreground">{bj(s.published)}</span><span className="min-w-0 flex-1 truncate" title={s.title}>{s.title}</span></li>)}
               </ul>
             </div>
           )}
@@ -118,13 +119,13 @@ function AddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChang
 
 export default function Sources() {
   const { sources: rows, reloadSources, addOpen, setAddOpen } = useApp();
-  const [q, setQ] = useState(""); const [ft, setFt] = useState("all"); const [fs, setFs] = useState("active");
+  const [q, setQ] = useState(""); const [ft, setFt] = useState("all"); const [fsec, setFsec] = useState("all"); const [fs, setFs] = useState("active");
   const [busy, setBusy] = useState<Record<number, boolean>>({});
   useEffect(() => { const t = setInterval(reloadSources, 10000); return () => clearInterval(t); }, [reloadSources]);
 
   const view = useMemo(() => rows.filter((s) =>
-    (!q || (s.name + s.url).toLowerCase().includes(q.toLowerCase())) && (ft === "all" || s.type === ft) &&
-    (fs === "all" || (fs === "active" ? s.enabled && s.supported : fs === "off" ? !s.enabled || !s.supported : s.enabled && s.supported && s.last_error))), [rows, q, ft, fs]);
+    (!q || (s.name + s.url).toLowerCase().includes(q.toLowerCase())) && (ft === "all" || s.type === ft) && (fsec === "all" || sectionOf({ ...s, is_x: s.type.startsWith("x") }) === fsec) &&
+    (fs === "all" || (fs === "active" ? s.enabled && s.supported : fs === "off" ? !s.enabled || !s.supported : s.enabled && s.supported && s.last_error))), [rows, q, ft, fs, fsec]);
   const nAct = rows.filter((s) => s.enabled && s.supported).length;
   const nErr = rows.filter((s) => s.enabled && s.supported && s.last_error).length;
   const nItems = rows.reduce((a, s) => a + (s.enabled ? s.item_count : 0), 0);
@@ -173,6 +174,10 @@ export default function Sources() {
           <ToggleGroupItem value="off" className="px-3">停用</ToggleGroupItem>
           <ToggleGroupItem value="all" className="px-3">全部</ToggleGroupItem>
         </ToggleGroup>
+        <Select value={fsec} onValueChange={(v) => setFsec(v as string)}>
+          <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部分区" : secZh(v as SectionKey))}</SelectValue></SelectTrigger>
+          <SelectContent><SelectItem value="all">全部分区</SelectItem>{SECTIONS.map((x) => <SelectItem key={x.key} value={x.key}>{x.zh}</SelectItem>)}</SelectContent>
+        </Select>
         <Select value={ft} onValueChange={(v) => setFt(v as string)}>
           <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部类型" : TYPE[v])}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="all">全部类型</SelectItem>{Object.entries(TYPE).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
@@ -214,7 +219,7 @@ export default function Sources() {
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="hidden text-[13px] text-muted-foreground md:table-cell">{secZh(sectionOf({ ...s, is_x: s.type.startsWith("x") }))} · {REG[s.region ?? ""] ?? ""}</TableCell>
+                <TableCell className="hidden text-[13px] text-muted-foreground md:table-cell">{secZh(sectionOf({ ...s, is_x: s.type.startsWith("x") }))}</TableCell>
                 <TableCell className="hidden sm:table-cell">
                   {s.supported ? (
                     <Select value={String(s.poll_interval)} onValueChange={(v) => patch(s, { poll_interval: Number(v) }, `${s.name} 改为每 ${ivLabel(Number(v))}`)}>

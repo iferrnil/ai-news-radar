@@ -61,3 +61,9 @@ export type SourceRow = {
   enabled: number; supported: number; unsupported_reason: string | null; priority: string | null; poll_interval: number; grp: string | null;
   last_fetched: number | null; last_error: string | null; last_new: number; origin: string; item_count: number; latest: number | null;
 };
+
+/** Show the Chinese translation (if any) in place of title/summary, keeping the original in `orig`. */
+export function localize(it: ItemOut): ItemOut {
+  if (!it.title_zh || it.tr) return it;
+  return { ...it, title: it.title_zh, summary: it.summary_zh || it.summary, tr: true, orig: { title: it.title, summary: it.summary } };
+}

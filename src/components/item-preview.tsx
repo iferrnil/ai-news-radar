@@ -4,7 +4,7 @@ import { ArrowUpRight, MousePointerClick } from "lucide-react";
 import { XLogo as Twitter } from "./x-logo";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ItemOut } from "@/lib/types";
-import { ago, api, bjFull, dekText, handleOf, secZh, sectionOf, srcName } from "./common";
+import { ago, api, bjFull, dekText, handleOf, localize, secZh, sectionOf, srcName } from "./common";
 import { SourceAvatar } from "./source-avatar";
 
 // One shared cache for full item bodies (list payload only carries a 420-char preview).
@@ -12,7 +12,7 @@ const cache = new Map<number, Promise<ItemOut | null>>();
 export function fetchFull(id: number) {
   let p = cache.get(id);
   if (!p) {
-    p = api<ItemOut[]>(`/api/items?id=${id}&limit=1`).then((r) => r[0] ?? null).catch(() => { cache.delete(id); return null; });
+    p = api<ItemOut[]>(`/api/items?id=${id}&limit=1&zh=1`).then((r) => r[0] ?? null).catch(() => { cache.delete(id); return null; });
     cache.set(id, p);
   }
   return p;
@@ -27,7 +27,8 @@ export function useFullItem(it: ItemOut | null) {
   }, [it]);
   if (!it) return { item: null, loading: false };
   if (!it.truncated) return { item: it, loading: false };
-  return full?.id === it.id ? { item: full, loading: false } : { item: it, loading: true };
+  // keep the language the card was shown in: translated card -> translated full text (original kept in .orig)
+  return full?.id === it.id ? { item: it.tr ? localize(full) : full, loading: false } : { item: it, loading: true };
 }
 
 /** Body of the feed-card hover preview. Mounted only while the hover card is open. */
@@ -53,6 +54,7 @@ export function ItemPreview({ it: base }: { it: ItemOut }) {
         {body && <p className={x ? "whitespace-pre-wrap break-words text-[13.5px] leading-[1.7] text-foreground/90 [overflow-wrap:anywhere]" : "mt-1.5 whitespace-pre-wrap break-words text-[13px] leading-[1.7] text-muted-foreground [overflow-wrap:anywhere]"}>{body}</p>}
         {loading && <div className="mt-2 space-y-1.5"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-11/12" /><Skeleton className="h-3 w-2/3" /></div>}
         {!body && !loading && !x && <p className="mt-1.5 text-[12.5px] text-faint">该来源未提供摘要</p>}
+        {it!.orig && <Original o={it!.orig} x={x} />}
         {it!.also_on_x.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted-foreground">
             <span className="inline-flex items-center gap-1 rounded-[4px] bg-secondary px-1.5 leading-[18px]"><Twitter className="size-2" />也在 X</span>
@@ -65,6 +67,21 @@ export function ItemPreview({ it: base }: { it: ItemOut }) {
         <span className="flex items-center gap-1"><MousePointerClick className="size-3" strokeWidth={1.75} />点击查看详情</span>
         <a href={it!.url} target="_blank" rel="noopener" className="ml-auto flex items-center gap-0.5 font-medium text-brand hover:underline">原文<ArrowUpRight className="size-3.5" strokeWidth={1.75} /></a>
       </div>
+    </div>
+  );
+}
+
+export function TrBadge({ className = "" }: { className?: string }) {
+  return <span title="DeepSeek 机器翻译" className={`shrink-0 rounded-[4px] bg-secondary px-1 text-[10px] font-medium leading-4 text-muted-foreground ${className}`}>译</span>;
+}
+/** Original (untranslated) text, shown under a translated item in the hover card and drawer. */
+export function Original({ o, x }: { o: { title: string; summary: string }; x: boolean }) {
+  const body = x ? o.summary || o.title : dekText(o.summary);
+  return (
+    <div className="mt-3 border-t border-dashed border-border/70 pt-2.5">
+      <div className="mb-1 text-[11px] font-medium text-faint">原文</div>
+      {!x && <div className="break-words text-[13px] font-medium leading-[1.5] text-foreground/80 [overflow-wrap:anywhere]">{o.title}</div>}
+      {body && <p className="mt-1 whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-muted-foreground [overflow-wrap:anywhere]">{body}</p>}
     </div>
   );
 }
