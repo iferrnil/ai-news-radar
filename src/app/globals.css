@@ -86,6 +86,11 @@
 
 /* Type scale utilities: `type-*` (not `text-*`) so the class merger never mistakes them for colours */
 /* Elevation: card (resting) → raised (hover) → pop (popovers/hover card). Hairline = inset 1px border for chips. */
+/* Inline chip (cards, hover card, palette, docs): 18px tall, xs radius; size inherits unless type-2xs is added.
+   Variants: chip-brand (P0), bg-secondary (muted), shadow-hair (outline). Drawer/tables use the shadcn <Badge> (20px). */
+@utility chip { display: inline-flex; align-items: center; height: 18px; padding-inline: 6px; border-radius: var(--radius-xs); line-height: 1; white-space: nowrap; }
+@utility chip-brand { background: var(--brand-soft); color: var(--brand); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--brand) 22%, transparent); }
+
 @utility shadow-raised { box-shadow: var(--shadow-card), 0 8px 24px -12px rgb(0 0 0 / 0.35); }
 @utility shadow-pop { box-shadow: var(--shadow-card), 0 16px 40px -12px rgb(0 0 0 / 0.45); }
 @utility shadow-hair { box-shadow: inset 0 0 0 1px var(--border); }
@@ -164,6 +169,8 @@
   * { @apply border-border outline-ring/50; }
   html { @apply font-sans; font-synthesis: none; } /* WenKai ships Regular+Medium only; never fake bold/italic */
   body { @apply bg-background text-foreground antialiased; font-feature-settings: "cv11", "ss01", "ss03"; font-optical-sizing: auto; text-rendering: optimizeLegibility; }
+  /* one stroke weight for every lucide icon (overrides the per-icon attribute) */
+  svg.lucide { stroke-width: 1.75; }
   time, .font-mono, kbd { font-variant-numeric: tabular-nums; }
   h1, h2, h3 { text-wrap: balance; }
   p { text-wrap: pretty; }

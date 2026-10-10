@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { BookOpen, Database, FileText, Moon, Plus } from "lucide-react";
+import { BookOpen, Database, FileText, Moon, Plus, SearchX } from "lucide-react";
+import { EmptyState } from "./empty-state";
 import { CommandDialog, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from "@/components/ui/command";
 import { DOCS, docHref } from "@/lib/docs-registry";
 import type { ItemOut } from "@/lib/types";
@@ -28,41 +29,45 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
   }, [q, open, zh]);
   const run = (fn: () => void) => { onOpenChange(false); setQ(""); fn(); };
   const goFeed = (p: Partial<Filters>) => run(() => navigate({ section: "", source: null, ...p }));
+  const ql = q.trim().toLowerCase();
+  const navSec = SECTIONS.filter((s) => !ql || s.zh.includes(q.trim()));
+  const navSrc = ql ? sources.filter((s) => s.enabled && s.name.toLowerCase().includes(ql)).slice(0, 6) : [];
+  const acts = [
+    { k: "add", label: "添加数据源", icon: Plus, go: () => { router.push("/sources"); setAddOpen(true); } },
+    { k: "sources", label: "管理数据源", icon: Database, go: () => router.push("/sources") },
+    { k: "docs", label: "文档", icon: BookOpen, go: () => router.push("/docs") },
+    ...DOCS.map((d) => ({ k: `docs-${d.slug}`, label: `文档 / ${d.title}`, icon: FileText, go: () => router.push(docHref(d)) })),
+    { k: "theme", label: "切换深色/浅色", icon: Moon, go: () => setTheme(resolvedTheme === "dark" ? "light" : "dark") },
+  ].filter((a) => !ql || a.label.toLowerCase().includes(ql) || a.k.includes(ql));
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} title="命令面板" description="搜索内容、来源与操作" className="sm:max-w-xl">
       <Command shouldFilter={false} className="rounded-xl">
         <CommandInput placeholder="搜索新闻、来源、操作…" value={q} onValueChange={setQ} />
         <CommandList className="max-h-[420px]">
-          <CommandEmpty>没有结果</CommandEmpty>
+          <CommandEmpty className="py-0"><EmptyState icon={SearchX} className="py-8" title="没有结果" hint="换个关键词试试；搜索标题、摘要与来源名称。" /></CommandEmpty>
           {hits.length > 0 && (
             <CommandGroup heading={q ? "内容" : "最新"}>
               {hits.map((it) => (
                 <CommandItem key={it.id} value={`item-${it.id}`} onSelect={() => run(() => setOpen(it))}>
                   <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} className="size-5" />
                   <span className="truncate">{it.is_x ? xText(it) : it.title}</span>
-                  {!inAll(sectionOf(it)) && <span className="shrink-0 rounded-xs px-1.5 type-meta leading-[18px] text-muted-foreground shadow-hair">{secZh(sectionOf(it))}</span>}
+                  {!inAll(sectionOf(it)) && <span className="chip shrink-0 shadow-hair type-meta text-muted-foreground">{secZh(sectionOf(it))}</span>}
                   <CommandShortcut className="whitespace-nowrap tracking-normal">{ago(it.published, true)}</CommandShortcut>
                 </CommandItem>
               ))}
             </CommandGroup>
           )}
-          <CommandSeparator />
-          <CommandGroup heading="跳转">
-            {SECTIONS.filter((s) => !q || s.zh.includes(q)).map((s) => { const I = SEC_ICON[s.key]; return (
+          {navSec.length + navSrc.length > 0 && <><CommandSeparator /><CommandGroup heading="跳转">
+            {navSec.map((s) => { const I = SEC_ICON[s.key]; return (
               <CommandItem key={s.key} value={`sec-${s.key}`} onSelect={() => goFeed({ section: s.key })}><I />{s.zh}</CommandItem>); })}
-            {sources.filter((s) => s.enabled && q && s.name.toLowerCase().includes(q.toLowerCase())).slice(0, 6).map((s) => (
+            {navSrc.map((s) => (
               <CommandItem key={s.id} value={`src-${s.id}`} onSelect={() => goFeed({ source: s.id })}>
                 <SourceAvatar name={s.name} username={s.username} homepage={s.homepage} url={s.url} x={s.type.startsWith("x")} className="size-5" />{s.name}
               </CommandItem>))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="操作">
-            <CommandItem value="add" onSelect={() => run(() => { router.push("/sources"); setAddOpen(true); })}><Plus />添加数据源</CommandItem>
-            <CommandItem value="sources" onSelect={() => run(() => router.push("/sources"))}><Database />管理数据源</CommandItem>
-            <CommandItem value="docs 文档" onSelect={() => run(() => router.push("/docs"))}><BookOpen />文档</CommandItem>
-            {DOCS.map((d) => <CommandItem key={d.slug} value={`docs ${d.slug} 文档 ${d.title}`} onSelect={() => run(() => router.push(docHref(d)))}><FileText />文档 / {d.title}</CommandItem>)}
-            <CommandItem value="theme" onSelect={() => run(() => setTheme(resolvedTheme === "dark" ? "light" : "dark"))}><Moon />切换深色/浅色</CommandItem>
-          </CommandGroup>
+          </CommandGroup></>}
+          {acts.length > 0 && <><CommandSeparator /><CommandGroup heading="操作">
+            {acts.map((a) => { const I = a.icon; return <CommandItem key={a.k} value={a.k} onSelect={() => run(a.go)}><I />{a.label}</CommandItem>; })}
+          </CommandGroup></>}
         </CommandList>
       </Command>
     </CommandDialog>

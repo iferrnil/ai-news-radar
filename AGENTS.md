@@ -175,3 +175,8 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - Borders: `border-border` for structure, `border-border/50` for in-panel hairline dividers only.
 - Focus: `focus-visible:ring-3 focus-visible:ring-ring/50` everywhere (same as shadcn primitives).
 - Type: `type-*` scale only (no `text-[Npx]`).
+- Spacing: 4px grid for container padding and gaps between blocks (`p-3/p-4`, `gap-2/3/4`, `py-3`…). Half steps (`*-0.5/1.5/2.5`, i.e. 2/6/10px) only inside compact controls (chips, badges, icon↔label gaps, nav rows). Allowed geometric exceptions: sidebar tree guide lines `ml-[11px]`/`ml-[17px]`/`-left-[9.5px]` (align to icon centres), `w-[3px]` active indicator, avatar `p-[3px]` inset, import-mode hint `pl-5.5` (aligns with the radio label).
+- Icons: lucide only, one stroke (`svg.lucide { stroke-width: 1.75 }` in globals.css — don't pass `strokeWidth`). Sizes: `size-4` in buttons/menus (shadcn default), `size-3.5` next to meta/caption text, `size-3` inside 2xs badges, `size-5` in empty-state tiles; the filled X glyph is sized to its chip (2–2.5).
+- Chips: `chip` utility (18px, `rounded-xs`, px 6px) + variant: `chip-brand` (P0), `bg-secondary` (muted: 译, X, counts), `shadow-hair` (outline: section, risk). Drawer header and tables use shadcn `<Badge>` (20px).
+- States: use `components/empty-state.tsx` (icon tile + title + hint + actions; `tone="error"` for failures) for feed empty/error, palette no-results, sources empty filter. Inline form errors (import) use the red alert row. SSE disconnected = amber dot + "重连中".
+- Toasts: Sonner bottom-right, `shadow-pop`, title `type-body`, description `type-caption`. Wording: short past-tense title ("已导出 22 个来源", "已复制链接"); failures = `toast.error("<动作>失败", { description: message })`.

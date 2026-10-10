@@ -56,17 +56,17 @@ function TranslateMenu() {
     const get = () => api<{ translate: TrStatus }>("/api/settings").then((r) => setSt(r.translate)).catch(() => {});
     get(); const t = setInterval(get, 3000); return () => clearInterval(t);
   }, [open]);
-  const setServer = async (on: boolean) => { const r = await api<{ translate: TrStatus }>("/api/settings", { method: "PATCH", body: JSON.stringify({ translate: on }) }); setSt(r.translate); toast(on ? "已开启抓取时翻译" : "已关闭抓取时翻译"); };
+  const setServer = async (on: boolean) => { const r = await api<{ translate: TrStatus }>("/api/settings", { method: "PATCH", body: JSON.stringify({ translate: on }) }); setSt(r.translate); toast.success(on ? "已开启抓取时翻译" : "已关闭抓取时翻译"); };
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button variant="ghost" size="icon" aria-label="翻译设置" className={zh ? "text-brand" : ""} />}><Languages className="size-4" /></PopoverTrigger>
       <PopoverContent align="end" className="w-[300px] gap-0 p-0">
-        <label className="flex cursor-pointer items-start gap-3 p-3.5">
+        <label className="flex cursor-pointer items-start gap-3 p-4">
           <div className="flex-1"><div className="type-body font-medium">翻译成中文</div><div className="mt-0.5 type-caption leading-snug text-muted-foreground">显示外文内容的中文译文（标「译」），悬停卡片和详情里可看原文。</div></div>
           <Switch checked={zh} onCheckedChange={(v) => setZh(!!v)} aria-label="翻译成中文" />
         </label>
         <div className="border-t border-border/50" />
-        <label className="flex cursor-pointer items-start gap-3 p-3.5">
+        <label className="flex cursor-pointer items-start gap-3 p-4">
           <div className="flex-1">
             <div className="type-body font-medium">抓取时翻译（DeepSeek）</div>
             <div className="mt-0.5 type-caption leading-snug text-muted-foreground">
@@ -94,7 +94,7 @@ function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo
       if (f.source === s.id) navigate({ source: null, section: "" });
       await reloadSources();
       toast(`已取消订阅「${label}」`, { description: "可在「数据源 › 停用」中重新启用", action: { label: "撤销", onClick: async () => { await setEnabled(true); await reloadSources(); toast.success(`已恢复订阅「${label}」`); } } });
-    } catch (e) { toast.error(`操作失败：${(e as Error).message}`); }
+    } catch (e) { toast.error("操作失败", { description: (e as Error).message }); }
   };
   return (
     <>
@@ -106,13 +106,13 @@ function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo
       </button>
       <button aria-label={`取消订阅 ${label}`} title="取消订阅" aria-expanded={confirm} onClick={() => setConfirm((v) => !v)}
         className={cn("absolute right-1 grid size-5 place-items-center rounded-xs text-faint opacity-0 outline-none transition-[opacity,color,background-color] duration-150 hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 group-hover/src:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:mr-1 [@media(hover:none)]:opacity-100", confirm && "text-red-500 opacity-100")}>
-        <MinusCircle className="size-3.5" strokeWidth={1.75} />
+        <MinusCircle className="size-3.5" />
       </button>
     </div>
     {/* inline confirm inside the sidebar, so nothing covers the feed */}
     {confirm && (
       <div role="alertdialog" aria-label={`确认取消订阅 ${label}`} onKeyDown={(e) => e.key === "Escape" && setConfirm(false)}
-        className="mx-0.5 mb-1 mt-0.5 rounded-lg bg-popover p-2.5 type-caption leading-snug shadow-card ring-1 ring-border animate-in fade-in-0 slide-in-from-top-1 duration-150">
+        className="mx-0.5 mb-1 mt-0.5 rounded-lg bg-popover p-3 type-caption leading-snug shadow-card ring-1 ring-border animate-in fade-in-0 slide-in-from-top-1 duration-150">
         <div className="font-medium text-foreground">取消订阅「{label}」？</div>
         <div className="mt-1 text-muted-foreground">停止抓取并隐藏内容，可在「数据源」页重新启用。</div>
         <div className="mt-2 flex justify-end gap-1.5">
@@ -147,7 +147,7 @@ function NavItem({ active, icon: Icon, label, count, onClick }: { active: boolea
     <button onClick={onClick} className={cn("group relative flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 type-body font-medium tracking-[-0.005em] transition-colors duration-150 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
       active ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : "text-muted-foreground hover:bg-hover hover:text-foreground", !active && count === 0 && "opacity-60")}>
       {active && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
-      <Icon strokeWidth={1.75} className={cn("size-4 transition-colors duration-150 ease-out", active ? "text-brand" : "text-faint group-hover:text-foreground")} />
+      <Icon className={cn("size-4 transition-colors duration-150 ease-out", active ? "text-brand" : "text-faint group-hover:text-foreground")} />
       <span className="flex-1 text-left">{label}</span>
       {count != null && <span className={cn("font-mono type-meta tabular-nums", count === 0 ? "text-faint/60" : "text-faint")}>{count}</span>}
     </button>
@@ -170,11 +170,11 @@ function DocsGroup({ path, onGo }: { path: string; onGo: (href: string) => void 
         path === "/docs" ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : inDocs ? "text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
         {path === "/docs" && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
         <button onClick={() => { onGo("/docs"); if (!open) toggle(true); }} className="flex h-full flex-1 items-center gap-2.5 rounded-lg pl-2.5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-          <BookOpen strokeWidth={1.75} className={cn("size-4 transition-colors duration-150 ease-out", inDocs ? "text-brand" : "text-faint group-hover:text-foreground")} />
+          <BookOpen className={cn("size-4 transition-colors duration-150 ease-out", inDocs ? "text-brand" : "text-faint group-hover:text-foreground")} />
           <span className="flex-1 text-left">文档</span>
         </button>
         <CollapsibleTrigger aria-label={open ? "收起文档" : "展开文档"} className="mr-1 grid size-6 place-items-center rounded-md text-faint outline-none transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
-          <ChevronRight strokeWidth={2} className={cn("size-3.5 transition-transform duration-200 ease-out", open && "rotate-90")} />
+          <ChevronRight className={cn("size-3.5 transition-transform duration-200 ease-out", open && "rotate-90")} />
         </CollapsibleTrigger>
       </div>
       <CollapsibleContent>
@@ -230,7 +230,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
           <DocsGroup path={path} onGo={(h) => { router.push(h); onNavigate?.(); }} />
           <Collapsible defaultOpen className="pt-4">
             <CollapsibleTrigger className="group flex h-6 w-full items-center gap-1 px-2 type-meta font-medium tracking-[0.04em] text-faint transition-colors duration-150 ease-out hover:text-foreground">
-              <ChevronRight strokeWidth={2} className="size-3 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90" />订阅源<span className="ml-auto font-mono tabular-nums">{active.length}</span>
+              <ChevronRight className="size-3.5 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90" />订阅源<span className="ml-auto font-mono tabular-nums">{active.length}</span>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-px">
               {SECTIONS.map((sec) => {
@@ -250,7 +250,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border p-3 type-meta text-faint">
-        <div className="flex h-5 items-center gap-2 tabular-nums"><Activity className="size-3.5" strokeWidth={1.75} />{active.length} 个源在线{errs ? <span className="text-red-500">· {errs} 报错</span> : null}</div>
+        <div className="flex h-5 items-center gap-2 tabular-nums"><Activity className="size-3.5" />{active.length} 个源在线{errs ? <span className="text-red-500">· {errs} 报错</span> : null}</div>
       </div>
     </div>
   );
@@ -299,7 +299,7 @@ function ItemSheet() {
             </ScrollArea>
             <div className="flex gap-2 border-t p-4">
               <Button className="flex-1" render={<a href={it.url} target="_blank" rel="noopener" />}>打开原文<ExternalLink /></Button>
-              <Button variant="outline" onClick={() => { navigator.clipboard?.writeText(it.url); toast.success("链接已复制"); }}>复制链接</Button>
+              <Button variant="outline" onClick={() => { navigator.clipboard?.writeText(it.url); toast.success("已复制链接"); }}>复制链接</Button>
             </div>
           </>
         )}
@@ -400,10 +400,10 @@ function Shell({ children }: { children: React.ReactNode }) {
               <TooltipTrigger render={<span className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 type-meta font-medium text-muted-foreground shadow-hair sm:flex" />}>
                 <span className="relative flex size-1.5">
                   {live && <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
-                  <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-muted-foreground")} />
-                </span>{live ? "Live" : "离线"}
+                  <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-amber-500")} />
+                </span>{live ? "Live" : "重连中"}
               </TooltipTrigger>
-              <TooltipContent>{live ? "实时推送已连接（SSE）" : "正在重连实时推送"}</TooltipContent>
+              <TooltipContent>{live ? "实时推送已连接（SSE）" : "实时推送已断开，正在自动重连；内容仍可浏览"}</TooltipContent>
             </Tooltip>
             <TranslateMenu />
             <ThemeToggle />

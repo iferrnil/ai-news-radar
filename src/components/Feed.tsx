@@ -7,7 +7,7 @@ function useCanHover() {
   return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
 }
 import { AnimatePresence, LazyMotion, domAnimation, m as motion } from "framer-motion";
-import { ArrowUp, ArrowUpRight, Inbox, RefreshCw } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Inbox, RefreshCw, WifiOff } from "lucide-react";
 import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import { TrBadge, ItemPreview } from "./item-preview";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "./empty-state";
 import type { ItemOut } from "@/lib/types";
 import { useApp } from "./app-shell";
 import { ago, api, bj, dekText, handleOf, localize, secZh, sectionOf, srcName, xText } from "./common";
@@ -60,7 +61,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
         <span className={cn("min-w-0 truncate font-medium", x ? "text-foreground/85" : "text-muted-foreground")}>{x ? srcName(it).replace(/^@/, "") : it.source}</span>
         {x && <span className="hidden min-w-0 shrink truncate text-faint sm:inline">@{h}</span>}
         {x && <Twitter className="size-2.5 shrink-0 text-faint" />}
-        {it.priority === "P0" && <span className="shrink-0 rounded-xs bg-brand-soft px-1 font-mono type-2xs font-semibold leading-4 tracking-[0.02em] text-brand shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--brand)_22%,transparent)]">P0</span>}
+        {it.priority === "P0" && <span className="chip chip-brand shrink-0 px-1 font-mono type-2xs font-semibold tracking-[0.02em]">P0</span>}
         {it.tr && <TrBadge />}
         <time className="ml-auto shrink-0 font-mono type-meta tabular-nums text-faint" title={`北京时间 ${bj(it.published)}`}>{ago(it.published, true)}</time>
       </div>
@@ -81,11 +82,11 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
         )}
       </div>
       <div className="flex h-10 shrink-0 items-center gap-1.5 border-t border-border/50 px-4 type-meta text-faint">
-        <span className="rounded-xs px-1.5 leading-[18px] shadow-hair">{secZh(sectionOf(it))}</span>
-        {it.also_on_x.length > 0 && <span className="inline-flex min-w-0 items-center gap-1 truncate rounded-xs bg-secondary px-1.5 leading-[18px] text-muted-foreground"><Twitter className="size-2 shrink-0" />也在 X</span>}
+        <span className="chip shadow-hair">{secZh(sectionOf(it))}</span>
+        {it.also_on_x.length > 0 && <span className="chip min-w-0 gap-1 truncate bg-secondary text-muted-foreground"><Twitter className="size-2 shrink-0" />也在 X</span>}
         <a href={it.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} aria-label="打开原文"
           className="-mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded-md opacity-60 transition-[opacity,background-color,color] duration-150 ease-out group-hover/item:opacity-100 hover:bg-secondary hover:text-foreground">
-          <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
+          <ArrowUpRight className="size-3.5" />
         </a>
       </div>
     </Card>
@@ -113,6 +114,7 @@ export default function Feed() {
   const [pending, setPending] = useState<ItemOut[]>([]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [cursor, setCursor] = useState(-1);
   const [showTop, setShowTop] = useState(false);
@@ -121,9 +123,11 @@ export default function Feed() {
 
   // 48 h retention keeps the window small: load it all once, filter client-side.
   const load = useCallback(async () => {
-    const rs = await api<ItemOut[]>(`/api/items?limit=1000${zh ? "&zh=1" : ""}`); // translations only when shown
+    let rs: ItemOut[];
+    try { rs = await api<ItemOut[]>(`/api/items?limit=1000${zh ? "&zh=1" : ""}`); } // translations only when shown
+    catch (e) { setLoadErr(e instanceof Error ? e.message : String(e)); setLoading(false); return; }
     seen.current = new Set(rs.map((r) => r.id));
-    setItems(rs); setPending([]); setLoading(false);
+    setLoadErr(null); setItems(rs); setPending([]); setLoading(false);
   }, [zh]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setFacet(items); }, [items, setFacet]);
@@ -194,7 +198,7 @@ export default function Feed() {
         {pend.length > 0 && (
           <motion.div initial={{ y: -16, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: -16, opacity: 0 }} transition={{ type: "spring", stiffness: 420, damping: 32 }}
             className="pointer-events-none sticky top-[68px] z-20 -mb-8 flex justify-center">
-            <button onClick={showPending} className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-[oklch(0.52_0.2_282)] px-3.5 py-1.5 type-body font-medium text-white shadow-[0_10px_30px_-8px_oklch(0.52_0.2_282/0.7)] ring-1 ring-white/15 transition duration-150 ease-out hover:brightness-110">
+            <button onClick={showPending} className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-[oklch(0.52_0.2_282)] px-4 py-1.5 type-body font-medium text-white shadow-[0_10px_30px_-8px_oklch(0.52_0.2_282/0.7)] ring-1 ring-white/15 transition duration-150 ease-out hover:brightness-110">
               <ArrowUp className="size-3.5" />{pend.length} 条新内容<kbd className="ml-1 rounded-xs bg-white/15 px-1 font-mono type-2xs">N</kbd>
             </button>
           </motion.div>
@@ -214,30 +218,31 @@ export default function Feed() {
           </span>
           <Tooltip>
             <TooltipTrigger render={<button onClick={refresh} className="flex h-7 items-center gap-1.5 rounded-md px-1.5 tabular-nums transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground" aria-label="刷新" />}>
-              <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} strokeWidth={1.75} /><span className="font-mono">{view.length}</span> 条
+              <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} /><span className="font-mono">{view.length}</span> 条
             </TooltipTrigger>
             <TooltipContent>{lastFetch ? `最近抓取 ${ago(lastFetch)}（北京时间 ${bj(lastFetch).slice(6)}）` : "等待首轮抓取"} · 点击刷新</TooltipContent>
           </Tooltip>
         </div>
       </div>
 
-      {loading ? (
+      {loadErr && !items.length ? (
+        <EmptyState icon={WifiOff} tone="error" className="mt-6 rounded-xl border border-dashed py-14" title="加载失败" hint={`无法获取内容：${loadErr}`}>
+          <Button variant="outline" size="sm" onClick={() => { setLoading(true); load(); }}><RefreshCw />重试</Button>
+        </EmptyState>
+      ) : loading ? (
         <div className={cn(GRID, "mt-4")}>{Array.from({ length: 12 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>
       ) : view.length === 0 ? (
-        <div className="mt-6 flex flex-col items-center rounded-xl border border-dashed px-6 py-14 text-center">
-          <div className="grid size-10 place-items-center rounded-lg border bg-card"><Inbox className="size-4 text-muted-foreground" strokeWidth={1.75} /></div>
-          <div className="mt-4 type-ui font-semibold">{f.p0 ? "这里 48 小时内没有 P0 内容" : f.section || f.source != null ? "这里 48 小时内还没有内容" : "这里暂时很安静"}</div>
-          <p className="mt-1 max-w-sm type-body leading-5 text-muted-foreground">{f.section || f.source != null || f.p0 ? "新内容会实时推送到这里。" : "首次启动需要等待一轮抓取，新内容会实时推送到这里。"}</p>
-          <div className="mt-4 flex gap-2">
-            {f.p0 && <Button variant="outline" size="sm" onClick={() => setF({ p0: false })}>取消仅 P0</Button>}
-            {(f.section || f.source != null) && <Button variant="ghost" size="sm" onClick={() => setF({ section: "", source: null })}>查看全部</Button>}
-          </div>
-        </div>
+        <EmptyState icon={Inbox} className="mt-6 rounded-xl border border-dashed py-14"
+          title={f.p0 ? "这里 48 小时内没有 P0 内容" : f.section || f.source != null ? "这里 48 小时内还没有内容" : "这里暂时很安静"}
+          hint={f.section || f.source != null || f.p0 ? "新内容会实时推送到这里。" : "首次启动需要等待一轮抓取，新内容会实时推送到这里。"}>
+          {f.p0 && <Button variant="outline" size="sm" onClick={() => setF({ p0: false })}>取消仅 P0</Button>}
+          {(f.section || f.source != null) && <Button variant="ghost" size="sm" onClick={() => setF({ section: "", source: null })}>查看全部</Button>}
+        </EmptyState>
       ) : (
         groups.map((g, gi) => (
           <section key={g.day}>
             <div className={cn("sticky top-14 z-10 flex items-center gap-2 bg-background/85 pb-3 type-caption font-medium text-muted-foreground backdrop-blur-xl backdrop-saturate-150", gi === 0 ? "pt-4" : "pt-7", BLEED)}>
-              {g.day}<span className="rounded-xs bg-secondary px-1.5 font-mono type-2xs leading-4 tabular-nums text-faint">{dayCount.get(g.day) ?? g.items.length}</span><span className="h-px flex-1 bg-border/60" />
+              {g.day}<span className="chip bg-secondary font-mono type-2xs tabular-nums text-faint">{dayCount.get(g.day) ?? g.items.length}</span><span className="h-px flex-1 bg-border/60" />
             </div>
             <div className={GRID}>
               {g.items.map((it) => {
@@ -255,7 +260,7 @@ export default function Feed() {
           <motion.button initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18, ease: "easeOut" }}
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="回到顶部"
             className="fixed bottom-6 right-6 z-30 grid size-9 place-items-center rounded-full bg-popover text-muted-foreground shadow-card ring-1 ring-border transition-colors duration-150 ease-out hover:text-foreground">
-            <ArrowUp className="size-4" strokeWidth={1.75} />
+            <ArrowUp className="size-4" />
           </motion.button>
         )}
       </AnimatePresence>

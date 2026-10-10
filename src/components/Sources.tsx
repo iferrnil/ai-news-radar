@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Download, FileJson, FileUp, Rss, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileJson, FileUp, Rss, SearchX, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "./empty-state";
 import { useApp } from "./app-shell";
 import { SECTIONS, type SectionKey, TYPE, type SourceRow, ago, api, bj, secZh, sectionOf } from "./common";
 import { SourceAvatar } from "./source-avatar";
@@ -162,7 +163,7 @@ export default function Sources() {
       const r = await api<{ deleted: number; items: number }>("/api/sources/bulk", { method: "POST", body: JSON.stringify({ action: "delete", ids: list.map((x) => x.id) }) });
       toast.success(list.length === 1 ? `已删除「${list[0].name}」` : `已删除 ${r.deleted} 个来源`, { description: `同时删除 ${r.items} 条已存内容${list.some((x) => x.origin !== "user") ? "；内置源可在「已删除的内置源」中恢复" : ""}` });
       setSel(new Set()); await reloadSources(); loadDeleted();
-    } catch (e) { toast.error(`删除失败：${(e as Error).message}`); }
+    } catch (e) { toast.error("删除失败", { description: (e as Error).message }); }
   };
   const restore = async (names: string[] | "all") => {
     const r = await api<{ restored: number }>("/api/sources/deleted", { method: "POST", body: JSON.stringify({ names }) });
@@ -311,14 +312,17 @@ export default function Sources() {
                     <DropdownMenuContent align="end" className="w-44">
                       <DropdownMenuItem disabled={!s.supported} onClick={() => fetchNow(s)}><RefreshCw />立即抓取</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => window.open(s.homepage || s.url, "_blank")}><ExternalLink />打开主页</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(s.url); toast.success("已复制 URL"); }}><Link2 />复制 URL</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(s.url); toast.success("已复制链接"); }}><Link2 />复制 URL</DropdownMenuItem>
                       <DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => setToDel([s])}><Trash2 />删除</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
-            {rows.length > 0 && view.length === 0 && <TableRow><TableCell colSpan={9} className="py-16 text-center"><div className="type-body font-medium">没有匹配的来源</div><div className="mt-1 type-caption text-faint">调整搜索词或筛选条件后重试</div></TableCell></TableRow>}
+            {rows.length > 0 && view.length === 0 && <TableRow className="hover:bg-transparent"><TableCell colSpan={9} className="p-0">
+              <EmptyState icon={SearchX} title="没有匹配的来源" hint="调整搜索词或筛选条件后重试。">
+                <Button variant="outline" size="sm" onClick={() => { setQ(""); setFs("all"); setFsec("all"); setFt("all"); }}>清除筛选</Button>
+              </EmptyState></TableCell></TableRow>}
           </TableBody>
         </Table>
       </div>

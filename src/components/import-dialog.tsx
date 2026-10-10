@@ -94,7 +94,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
               <span className="type-meta text-faint">.json（本应用导出）· .opml / .xml（其他阅读器）· 最大 1 MB</span>
             </button>
           ) : (
-            <div className="flex min-w-0 items-center gap-3 rounded-xl border bg-muted/30 px-3 py-2.5">
+            <div className="flex min-w-0 items-center gap-3 rounded-xl border bg-muted/30 px-3 py-3">
               <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-card text-muted-foreground shadow-card"><FileText className="size-4" /></span>
               <div className="min-w-0 flex-1">
                 <div className="truncate type-body font-medium" title={file.name}>{file.name}</div>
