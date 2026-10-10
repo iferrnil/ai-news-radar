@@ -99,6 +99,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - SQLite: WAL, `synchronous=NORMAL`, `busy_timeout=5000`, 4 MB cache, `auto_vacuum=INCREMENTAL`; `prune()` runs `incremental_vacuum` + `wal_checkpoint(TRUNCATE)`.
 - Fetchers use conditional GET (`condGet` in `fetchers.ts`: ETag / If-Modified-Since, 304 → no work).
 - `/api/items` gzips responses and ships a 420-char summary preview (`truncated: true`); the drawer fetches the full item with `?id=`. X post text is stored up to 4000 chars.
+- Feed cards have a hover preview (`ui/hover-card` = Base UI PreviewCard, delay 450/150 ms, side right with collision flip) only on `(hover: hover) and (pointer: fine)`; content mounts only while open. Full bodies come from the shared cache in `item-preview.tsx` (`fetchFull` / `useFullItem`), also used by the drawer.
 - The card grid renders 60 cards at a time (IntersectionObserver); `ItemCard` is memoized.
 - Docker: `Dockerfile` (standalone output, non-root, healthcheck on `/api/health`) + `docker-compose.yml`.
 

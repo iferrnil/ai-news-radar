@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
 import { SECTIONS, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, xText, REG, CAT } from "./common";
 import { SourceAvatar } from "./source-avatar";
+import { useFullItem } from "./item-preview";
 
 export const SEC_ICON: Record<SectionKey | "all", React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, dev: Code2, media: Newspaper, x: Twitter };
 
@@ -229,15 +230,7 @@ function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: bool
 
 function ItemSheet() {
   const { open, setOpen } = useApp();
-  const [full, setFull] = useState<ItemOut | null>(null);
-  // list payload carries a preview; fetch the full text when the drawer opens a truncated item
-  useEffect(() => {
-    if (!open?.truncated) return;
-    let alive = true;
-    api<ItemOut[]>(`/api/items?id=${open.id}&limit=1`).then((r) => { if (alive && r[0]) setFull(r[0]); }).catch(() => {});
-    return () => { alive = false; };
-  }, [open]);
-  const it = open && full?.id === open.id ? full : open;
+  const { item: it } = useFullItem(open); // shared cache with the hover preview
   return (
     <Sheet open={!!it} onOpenChange={(b) => !b && setOpen(null)}>
       <SheetContent initialFocus={false} className="w-full gap-0 border-border bg-popover p-0 sm:max-w-[520px]">

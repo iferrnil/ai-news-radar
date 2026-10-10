@@ -17,6 +17,7 @@
 - **实时推送**：SSE，新内容出现“N 条新内容”提示
 - **去重与合并**：按规范化 URL / 推文 ID 去重；推文链接到已有文章时合并为“也在 X”
 - **互斥分区**：实验室 / 国内 / 开发 / 媒体 / X 快讯，每条内容只属于一个分区
+- **悬停预览**：鼠标停留在卡片上显示 Hover Card（全文、时间、原文链接），触屏设备自动关闭
 - **界面**：shadcn/ui 卡片网格、深浅色主题、⌘K 命令面板、J/K 键盘导航、已读变暗、移动端适配
 - **数据源管理**：启用/停用、调整间隔、立即抓取、按 URL / @用户名 / X 列表添加并预览
 - **站内文档**：`/docs/rate-limits` 列出各类源的官方限额与当前负载
@@ -27,6 +28,7 @@
 |---|---|
 | ![深色信息流](docs/screenshots/feed_dark.png) | ![浅色信息流](docs/screenshots/feed_light.png) |
 | ![详情抽屉](docs/screenshots/drawer.png) | ![数据源管理](docs/screenshots/sources_dark.png) |
+| ![悬停预览](docs/screenshots/hover_card.png) | ![悬停预览（浅色）](docs/screenshots/hover_card_light.png) |
 | ![抓取限制文档](docs/screenshots/docs_page.png) | <img src="docs/screenshots/feed_mobile.png" width="260" alt="移动端"> |
 
 ## 架构

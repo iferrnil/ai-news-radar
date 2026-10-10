@@ -1,10 +1,18 @@
 "use client";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+
+// hover previews only where a real pointer can hover (mobile keeps tap → drawer)
+const HOVER_Q = "(hover: hover) and (pointer: fine)";
+function useCanHover() {
+  return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
+}
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, ArrowUpRight, Inbox, RefreshCw } from "lucide-react";
 import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { ItemPreview } from "./item-preview";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -32,13 +40,13 @@ const GRID = "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols
 const CARD_H = "h-[204px]";
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
-const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void }) {
+const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; hover: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (active) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [active]);
   const x = !!it.is_x, h = x ? handleOf(it) : null, t = x ? xText(it) : "";
   const linkOnly = x && /^https?:\/\//.test(t);
   const dek = x ? "" : dekText(it.summary);
-  return (
+  const card = (
     <Card ref={ref} size="sm" onClick={() => onOpen(it)} data-active={active} data-read={read} role="button" tabIndex={-1}
       className={cn(CARD_H, "group/item cursor-pointer gap-0 py-0 shadow-card ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
         "hover:-translate-y-px hover:ring-foreground/[0.16] hover:shadow-[var(--shadow-card),0_8px_24px_-12px_rgb(0_0_0/0.35)]",
@@ -73,6 +81,15 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen }: { i
       </div>
     </Card>
   );
+  if (!hover) return card;
+  return (
+    <HoverCard>
+      <HoverCardTrigger delay={450} closeDelay={150} render={<div className="min-w-0" />}>{card}</HoverCardTrigger>
+      <HoverCardContent side="right" align="start" sideOffset={8} className="w-[min(420px,calc(100vw-24px))] overflow-hidden p-0 shadow-[var(--shadow-card),0_16px_40px_-12px_rgb(0_0_0/0.45)] ring-border">
+        <ItemPreview it={it} />
+      </HoverCardContent>
+    </HoverCard>
+  );
 });
 
 export default function Feed() {
@@ -85,6 +102,7 @@ export default function Feed() {
   const [cursor, setCursor] = useState(-1);
   const [showTop, setShowTop] = useState(false);
   const seen = useRef(new Set<number>());
+  const canHover = useCanHover();
 
   // 48 h retention keeps the window small: load it all once, filter client-side.
   const load = useCallback(async () => {
@@ -202,7 +220,7 @@ export default function Feed() {
             <div className={GRID}>
               {g.items.map((it) => {
                 const i = idx.get(it.id)!;
-                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={openItem} />;
+                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={openItem} hover={canHover && !open} />;
               })}
             </div>
           </section>
