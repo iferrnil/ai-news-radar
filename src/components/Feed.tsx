@@ -96,7 +96,12 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
 export default function Feed() {
   const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, zh } = useApp();
   const [raw, setItems] = useState<ItemOut[]>([]);
-  const items = useMemo(() => (zh ? raw.map(localize) : raw), [raw, zh]);
+  // hide items of sources that were unsubscribed (sidebar / sources page / another tab) without a refetch
+  const enabledIds = useMemo(() => (sources.length ? new Set(sources.filter((s) => s.enabled).map((s) => s.id)) : null), [sources]);
+  const items = useMemo(() => {
+    const vis = enabledIds ? raw.filter((it) => enabledIds.has(it.source_id)) : raw;
+    return zh ? vis.map(localize) : vis;
+  }, [raw, zh, enabledIds]);
   const [pending, setPending] = useState<ItemOut[]>([]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -114,6 +119,12 @@ export default function Feed() {
   }, [zh]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setFacet(items); }, [items, setFacet]);
+  // a source was re-enabled (undo / sources page): its items aren't in the list yet -> reload once
+  const prevIds = useRef<Set<number> | null>(null);
+  useEffect(() => {
+    if (enabledIds && prevIds.current && [...enabledIds].some((id) => !prevIds.current!.has(id))) load();
+    prevIds.current = enabledIds;
+  }, [enabledIds, load]);
   useEffect(() => { setCursor(-1); }, [f]);
   useEffect(() => onStream((ev, d) => {
     if (ev === "item") { const it = d.item as ItemOut; if (!seen.current.has(it.id)) setPending((p) => (p.some((x) => x.id === it.id) ? p : [...p, it])); }

@@ -50,7 +50,7 @@ Restart prod after a build: stop the old `next start` process first (only one in
 - Priority tiers (seconds): P0 X 120 / feed 300; P1 X 300 / feed 600; P2 1800 (env `P0_X`, `P0_FEED`, …).
 - **SSE**: `GET /api/stream`, events `item | update | removed`, 15 s ping; fed by an in-process EventEmitter (`src/lib/bus.ts`, on `globalThis`). The client opens one EventSource in `app-shell.tsx` and fans out via `onStream`.
 - **Retention**: items older than 48 h (`RETENTION_HOURS`) are pruned every 10 min and skipped on insert. **`seen` table** keeps every uid for 30 days (`SEEN_DAYS`) so pruned items never come back as "new".
-- **Seed sync**: on every start, `sources/sources.json` is imported; for `origin='seed'` rows, enabled/priority/interval/url are re-synced (`SYNC_SEED=0` to disable). User-added sources (`origin='user'`) are never touched (`SYNC_DISABLE_USER=1` disables them).
+- **Seed sync**: on every start, `sources/sources.json` is imported: new seed sources are added; for existing `origin='seed'` rows url/username/group are re-synced, and enabled/priority/interval only if the user hasn't changed them. Any UI change (`PATCH /api/sources/:id`: sidebar 取消订阅, sources-page switch/interval/priority) appends the field to `sources.overrides` (e.g. `enabled,poll_interval`), and the seed never overwrites those fields (`SYNC_SEED=0` disables sync entirely). PATCH also publishes SSE `sources` so other tabs refresh. User-added sources (`origin='user'`) are never touched (`SYNC_DISABLE_USER=1` disables them).
 - DB path `data/news.db` (`NEWS_DB`), seed path `SOURCES_JSON`.
 
 ## Data rules (keep these)
@@ -126,3 +126,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## Add-source dialog
 
 - One 分区 select (= `SECTIONS`), auto-suggested (X handle/URL → X 快讯, .cn/中文 → 国内媒体, else 国外媒体); POST `/api/sources` stores it as `grp`, region/category derived. Dialog uses `grid-cols-[minmax(0,1fr)]` + `min-w-0` so long previews truncate instead of widening it.
+
+## Sidebar unsubscribe
+
+- `SourceRowNav` in `app-shell.tsx`: hover/focus (always on touch) shows a MinusCircle button → popover confirm → `PATCH enabled:false` → Sonner toast with 撤销. Disabled sources vanish from the sidebar and the feed hides their items immediately (Feed filters by enabled source ids; re-enabling triggers a reload). Sources are never deleted here; they stay on the sources page under 停用.

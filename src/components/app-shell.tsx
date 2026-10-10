@@ -26,7 +26,7 @@ import { SourceAvatar } from "./source-avatar";
 import { Original, useFullItem } from "./item-preview";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
-import { Languages } from "lucide-react";
+import { Languages, MinusCircle } from "lucide-react";
 
 export const SEC_ICON: Record<SectionKey | "all", React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
 
@@ -76,6 +76,46 @@ function TranslateMenu() {
         </label>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** Sidebar source row: click to filter; hover/focus (always on touch) reveals 取消订阅 with a small confirm + undo toast. */
+function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo: () => void }) {
+  const { reloadSources, f, navigate } = useApp();
+  const [confirm, setConfirm] = useState(false);
+  const label = s.name.replace(/^X @(\S+).*$/, "@$1");
+  const setEnabled = (enabled: boolean) => api(`/api/sources/${s.id}`, { method: "PATCH", body: JSON.stringify({ enabled }) });
+  const unsubscribe = async () => {
+    setConfirm(false);
+    try {
+      await setEnabled(false);
+      if (f.source === s.id) navigate({ source: null, section: "" });
+      await reloadSources();
+      toast(`已取消订阅「${label}」`, { description: "可在「数据源 › 停用」中重新启用", action: { label: "撤销", onClick: async () => { await setEnabled(true); await reloadSources(); toast.success(`已恢复订阅「${label}」`); } } });
+    } catch (e) { toast.error(`操作失败：${(e as Error).message}`); }
+  };
+  return (
+    <div className={cn("group/src relative flex h-7 items-center rounded-md transition-colors duration-150 ease-out", active ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground", confirm && "bg-hover text-foreground")}>
+      <button onClick={onGo} title={s.last_error ?? s.name} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+        <StatusDot s={s} />
+        <span className="flex-1 truncate text-left">{label}</span>
+        <span className={cn("font-mono text-[11px] tabular-nums text-faint transition-opacity duration-150 group-hover/src:opacity-0 group-focus-within/src:opacity-0 [@media(hover:none)]:hidden", confirm && "opacity-0")}>{s.item_count || ""}</span>
+      </button>
+      <Popover open={confirm} onOpenChange={setConfirm}>
+        <PopoverTrigger render={<button aria-label={`取消订阅 ${label}`} title="取消订阅"
+          className={cn("absolute right-1 grid size-5 place-items-center rounded text-faint opacity-0 outline-none transition-[opacity,color,background-color] duration-150 hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/src:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:mr-1 [@media(hover:none)]:opacity-100", confirm && "opacity-100 text-red-500")} />}>
+          <MinusCircle className="size-3.5" strokeWidth={1.75} />
+        </PopoverTrigger>
+        <PopoverContent side="right" align="center" sideOffset={10} className="w-60 gap-2.5 p-3">
+          <div className="text-[13px] font-medium leading-snug">取消订阅「{label}」？</div>
+          <div className="text-[12px] leading-snug text-muted-foreground">停止抓取并从首页隐藏它的内容。来源不会被删除，可在「数据源」页重新启用。</div>
+          <div className="flex justify-end gap-1.5 pt-0.5">
+            <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>保留</Button>
+            <Button size="sm" variant="destructive" autoFocus onClick={unsubscribe}>取消订阅</Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
 
@@ -194,15 +234,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
                   <div key={sec.key} className="pt-2">
                     <div className="flex h-6 items-center px-2 text-[11px] text-faint">{sec.zh}</div>
                     <div className="relative ml-[11px] space-y-px border-l border-border pl-1.5">
-                    {list.map((s) => (
-                      <button key={s.id} onClick={() => go({ source: s.id })} title={s.last_error ?? s.name}
-                        className={cn("flex h-7 w-full items-center gap-2 rounded-md px-2 text-[12.5px] transition-colors duration-150 ease-out",
-                          f.source === s.id && feed ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
-                        <StatusDot s={s} />
-                        <span className="flex-1 truncate text-left">{s.name.replace(/^X @(\S+).*$/, "@$1")}</span>
-                        <span className="font-mono text-[11px] tabular-nums text-faint">{s.item_count || ""}</span>
-                      </button>
-                    ))}
+                    {list.map((s) => <SourceRowNav key={s.id} s={s} active={f.source === s.id && feed} onGo={() => go({ source: s.id })} />)}
                     </div>
                   </div>
                 );
@@ -353,15 +385,17 @@ function Shell({ children }: { children: React.ReactNode }) {
   const [mobileNav, setMobileNav] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const reloadSourcesRef = useRef<(() => void) | null>(null);
+  const reloadNowRef = useRef<(() => void) | null>(null);
   const listeners = useRef(new Set<(ev: string, data: any) => void>());
   const onStream = useCallback((fn: (ev: string, data: any) => void) => { listeners.current.add(fn); return () => { listeners.current.delete(fn); }; }, []);
   useEffect(() => {
     const es = new EventSource("/api/stream");
     es.onopen = () => setLive(true);
     es.onerror = () => setLive(false);
-    for (const ev of ["item", "update", "removed"]) es.addEventListener(ev, (e) => {
+    for (const ev of ["item", "update", "removed", "sources"]) es.addEventListener(ev, (e) => {
       const d = JSON.parse((e as MessageEvent).data); listeners.current.forEach((fn) => fn(ev, d));
       if (ev === "item") reloadSourcesRef.current?.();
+      if (ev === "sources") reloadNowRef.current?.();
     });
     return () => es.close();
   }, []);
@@ -371,6 +405,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const navigate = useCallback((p: Partial<Filters>) => router.push(toQuery({ ...fRef.current, ...p }), { scroll: false }), [router]);
   const reloadSources = useCallback(async () => setSources(await api<SourceRow[]>("/api/sources")), []);
   useEffect(() => { let t: ReturnType<typeof setTimeout> | null = null; reloadSourcesRef.current = () => { if (!t) t = setTimeout(() => { t = null; reloadSources(); }, 3000); }; }, [reloadSources]);
+  useEffect(() => { reloadNowRef.current = () => { reloadSources(); }; }, [reloadSources]);
   useEffect(() => { reloadSources(); const t = setInterval(reloadSources, 20000); return () => clearInterval(t); }, [reloadSources]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((p) => !p); } };

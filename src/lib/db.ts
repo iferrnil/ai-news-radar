@@ -52,7 +52,12 @@ function seed(db: Database.Database) {
   const sync = process.env.SYNC_SEED !== "0";
   const ins = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,unsupported_reason,priority,poll_interval,origin,grp,note,created)
     VALUES(@name,@region,@category,@type,@url,@homepage,@username,@enabled,@supported,@reason,@priority,@interval,'seed',@grp,@note,@now)`);
-  const upd = db.prepare(`UPDATE sources SET enabled=@enabled, priority=@priority, poll_interval=@interval, url=@url, username=@username, grp=@grp
+  // user overrides win: fields changed in the UI (listed in `overrides`) are never reset by the seed
+  const upd = db.prepare(`UPDATE sources SET
+    enabled = CASE WHEN instr(overrides, 'enabled') THEN enabled ELSE @enabled END,
+    priority = CASE WHEN instr(overrides, 'priority') THEN priority ELSE @priority END,
+    poll_interval = CASE WHEN instr(overrides, 'poll_interval') OR instr(overrides, 'priority') THEN poll_interval ELSE @interval END,
+    url=@url, username=@username, grp=@grp
     WHERE id=@id AND origin='seed'`);
   const tx = db.transaction(() => {
     for (const s of data.sources) {
@@ -89,6 +94,8 @@ export function getDb(): Database.Database {
     db.exec(SCHEMA);
     // translation columns (NULL = not processed yet, '' = no translation needed)
     const cols = new Set((db.prepare("PRAGMA table_info(items)").all() as { name: string }[]).map((c) => c.name));
+    const scols = new Set((db.prepare("PRAGMA table_info(sources)").all() as { name: string }[]).map((c) => c.name));
+    if (!scols.has("overrides")) db.exec("ALTER TABLE sources ADD COLUMN overrides TEXT NOT NULL DEFAULT ''");
     if (!cols.has("title_zh")) db.exec("ALTER TABLE items ADD COLUMN title_zh TEXT; ALTER TABLE items ADD COLUMN summary_zh TEXT;");
     seed(db);
     // one-off repair: entities double-escaped in older rows (e.g. "&mdash;")
