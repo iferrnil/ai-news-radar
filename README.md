@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-violet.svg)](LICENSE)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
-[![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fiferrnil%2Fai--news--radar-blue)](https://github.com/iferrnil/ai-news-radar/pkgs/container/ai-news-radar)
+[![Docker](https://img.shields.io/badge/docker-build%20locally-blue)](#中国大陆构建说明)
 
 > A self-hosted, near-real-time radar for domestic + international AI news: 22 curated sources (P0 lab blogs & API notes, scoop X accounts, Chinese AI media, Techmeme, plus a few Chinese entertainment/funny feeds), polled by priority and pushed live to the browser.
 
@@ -139,3 +139,17 @@ npm run build && npm run start -- -p 3000
 ## License
 
 [MIT](LICENSE) © 2026 lang li
+
+## 中国大陆构建说明
+
+- 不发布预构建镜像：`docker compose` 只在本地构建（`image: ai-news-radar:local` + `pull_policy: build`），不会去 ghcr.io 拉取。
+- 字体（Inter / Noto Sans SC / JetBrains Mono，均为 OFL-1.1）通过 npm 包 `@fontsource-variable/*` 自托管，`next build` 不访问 Google Fonts；Noto Sans SC 仍按 unicode-range 分片，浏览器只下载页面用到的字。
+- 构建只需要 npm 源和 Debian apt 源，可用构建参数换国内镜像：
+
+```bash
+git pull
+NPM_REGISTRY=https://registry.npmmirror.com APT_MIRROR=mirrors.tuna.tsinghua.edu.cn docker compose up -d --build
+# 或写入 .env：NPM_REGISTRY=...  APT_MIRROR=...
+```
+
+- 基础镜像 `node:22-bookworm-slim` 来自 Docker Hub；若拉不下来，请在 Docker/OrbStack 设置里配置 registry mirror。

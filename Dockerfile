@@ -1,12 +1,17 @@
 # syntax=docker/dockerfile:1
 # AI News Radar — production image (multi-arch: amd64 / arm64, e.g. Oracle Ampere A1)
-#   docker build -t ghcr.io/iferrnil/ai-news-radar .
+#   docker build -t ai-news-radar:local .
+#   China mainland: --build-arg NPM_REGISTRY=https://registry.npmmirror.com --build-arg APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+# The build needs only the npm registry (+ Debian apt); fonts are vendored via npm, nothing is fetched from Google.
 FROM node:22-bookworm-slim AS deps
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG APT_MIRROR=
 WORKDIR /app
+RUN if [ -n "$APT_MIRROR" ]; then sed -i "s#deb.debian.org#$APT_MIRROR#g" /etc/apt/sources.list.d/debian.sources; fi
 # toolchain only needed if no prebuilt better-sqlite3 binary exists for the platform
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm config set registry "$NPM_REGISTRY" && npm ci --no-audit --no-fund
 
 FROM deps AS build
 COPY . .

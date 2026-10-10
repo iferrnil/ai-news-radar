@@ -2,8 +2,15 @@
 # Run exactly ONE instance per data directory (the poller lives inside the server).
 services:
   radar:
-    image: ghcr.io/iferrnil/ai-news-radar:latest
-    build: .
+    # Built locally — no prebuilt image is published, so compose never pulls from a registry.
+    image: ai-news-radar:local
+    pull_policy: build
+    build:
+      context: .
+      args:
+        # China mainland: NPM_REGISTRY=https://registry.npmmirror.com  APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+        APT_MIRROR: ${APT_MIRROR:-}
     container_name: ai-news-radar
     restart: unless-stopped
     ports:

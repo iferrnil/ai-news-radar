@@ -152,3 +152,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - Fonts: Noto Sans SC is a variable font sliced by unicode-range (~1.3 MB on a cold CJK-heavy feed, then cached immutably). It is the biggest cold-load cost; the remaining option would be falling back to system CJK fonts (visual change, not done).
 - Thumbnails: fixed-height box + `loading=lazy decoding=async` → CLS 0.
 - `npm ci` needs `make`/`g++` if the better-sqlite3 prebuild download fails.
+
+## Offline-friendly build (China mainland)
+- Fonts come from `@fontsource-variable/{inter,noto-sans-sc,jetbrains-mono}` imported in `app/layout.tsx`; CSS vars `--font-latin/--font-cjk/--font-mono-face` are set in `globals.css`. Never reintroduce `next/font/google` — the build must not touch Google.
+- Compose builds `ai-news-radar:local` with `pull_policy: build`; build args `NPM_REGISTRY`, `APT_MIRROR`.
