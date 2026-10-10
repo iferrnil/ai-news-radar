@@ -21,9 +21,9 @@ import { DOCS, docHref } from "@/lib/docs-registry";
 import { type Filters, countOf, parseFilters, toQuery } from "./filters";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
-import { SECTIONS, inAll, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, xText, REG, CAT } from "./common";
+import { SECTIONS, inAll, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, xText, localize } from "./common";
 import { SourceAvatar } from "./source-avatar";
-import { Original, TrBadge, useFullItem } from "./item-preview";
+import { Original, useFullItem } from "./item-preview";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Languages } from "lucide-react";
@@ -219,7 +219,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
-  const { navigate, sources, setOpen, setAddOpen } = useApp();
+  const { navigate, sources, setOpen, setAddOpen, zh } = useApp();
   const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -228,11 +228,11 @@ function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: bool
     if (!open) return;
     const t = setTimeout(async () => {
       // "最新" (no query) mirrors 全部 and skips 娱乐; a real search may still hit 娱乐 items (labelled)
-      const r = await api<ItemOut[]>(`/api/items?limit=${q.trim() ? 12 : 40}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`);
+      const r = (await api<ItemOut[]>(`/api/items?limit=${q.trim() ? 12 : 40}${zh ? "&zh=1" : ""}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`)).map((it) => (zh ? localize(it) : it));
       setHits(q.trim() ? r : r.filter((it) => inAll(sectionOf(it))).slice(0, 12));
     }, 150);
     return () => clearTimeout(t);
-  }, [q, open]);
+  }, [q, open, zh]);
   const run = (fn: () => void) => { onOpenChange(false); setQ(""); fn(); };
   const goFeed = (p: Partial<Filters>) => run(() => navigate({ section: "", source: null, ...p }));
   return (
@@ -289,16 +289,15 @@ function ItemSheet() {
                 <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} />
                 <div className="min-w-0 leading-tight">
                   <div className="truncate text-[13px] font-medium">{it.is_x ? `@${handleOf(it)}` : it.source}</div>
-                  <div className="text-[12px] text-muted-foreground">{bjFull(it.published)} · {ago(it.published)}</div>
+                  <div className="truncate text-[12px] tabular-nums text-muted-foreground">{bjFull(it.published)} · {ago(it.published)}</div>
                 </div>
               </div>
-              <SheetTitle className="text-[19px] font-semibold leading-snug tracking-tight">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}{it.tr && <TrBadge className="ml-2 align-middle" />}</SheetTitle>
+              <SheetTitle className="text-[19px] font-semibold leading-snug tracking-tight">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}</SheetTitle>
               <SheetDescription className="sr-only">内容详情</SheetDescription>
               <div className="flex flex-wrap gap-1.5">
                 {it.priority && <Badge variant="outline" className={cn(it.priority === "P0" && "border-brand/40 bg-brand-soft text-brand")}>{it.priority}</Badge>}
                 <Badge variant="secondary">{secZh(sectionOf(it))}</Badge>
-                {it.category && <Badge variant="secondary">{CAT[it.category] ?? it.category}</Badge>}
-                {it.region && <Badge variant="secondary">{REG[it.region]}</Badge>}
+                {it.tr && <Badge variant="secondary" title="DeepSeek 机器翻译，原文见下方">译</Badge>}
               </div>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1">

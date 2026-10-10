@@ -1,4 +1,4 @@
-# One-command start:  docker compose up -d   ->  http://localhost:3000
+# One-command start:  docker compose up -d   ->  http://localhost:3080
 # Run exactly ONE instance per data directory (the poller lives inside the server).
 services:
   radar:
@@ -7,7 +7,7 @@ services:
     container_name: ai-news-radar
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-3000}:3000"
+      - "${HOST_PORT:-3080}:3000"
     volumes:
       - ${DATA_DIR:-./data}:/app/data
     environment:

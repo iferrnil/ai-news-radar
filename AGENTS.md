@@ -88,6 +88,7 @@ Restart prod after a build: stop the old `next start` process first (only one in
 
 ## Verification checklist
 - [ ] `npm run lint` and `npm run typecheck` clean; `npm run build` succeeds
+- [ ] docker compose maps host 3080 → container 3000 (http://localhost:3080); the box's local prod server stays on :3000
 - [ ] restart prod on :3000; `curl localhost:3000/api/stats` → `sources.errors` is 0 and `fetched` equals active count after ~1 min
 - [ ] SSE: `curl -N localhost:3000/api/stream` receives `event: item` when new items arrive (or force via "立即抓取")
 - [ ] feed, /sources, /docs, /docs/rate-limits render in dark and light; mobile layout OK (`npm run screenshots`)

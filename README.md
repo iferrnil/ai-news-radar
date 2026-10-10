@@ -73,7 +73,7 @@ flowchart LR
 ```bash
 git clone https://github.com/iferrnil/ai-news-radar.git && cd ai-news-radar
 docker compose up -d          # 首次会本地构建镜像
-open http://localhost:3000    # 数据保存在 ./data
+open http://localhost:3080    # 数据保存在 ./data（容器内仍监听 3000）
 ```
 
 ### 本地 Node（需 Node ≥ 22）
@@ -104,7 +104,7 @@ npm run build && npm run start -- -p 3000
 | `X_CONCURRENCY` / `FEED_CONCURRENCY` | 3 / 8 | 并发上限 |
 | `DISABLE_POLLER` | 0 | 设为 1 只提供网页、不抓取 |
 | `SYNC_SEED` | 1 | 设为 0 不再用 sources.json 覆盖内置源设置 |
-| `HOST_PORT` / `DATA_DIR` | 3000 / `./data` | 仅 docker compose：宿主机端口与数据目录 |
+| `HOST_PORT` / `DATA_DIR` | 3080 / `./data` | 仅 docker compose：宿主机端口与数据目录 |
 
 ## 添加信息源
 
