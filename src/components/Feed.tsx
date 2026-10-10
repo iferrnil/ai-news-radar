@@ -36,7 +36,11 @@ function groupByDay(list: ItemOut[]) {
   return out;
 }
 
-const GRID = "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:gap-4"; // max 3 per row
+// max 3 per row; one gap value for both axes: 12px mobile · 16px md · 20px xl (1280) · 24px 2xl (1536+)
+const GRID = "grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3 xl:gap-5 2xl:gap-6";
+// content side padding (mirrored by the sticky day header's negative margin): 16 · 24 (sm) · 32 (xl) · 40 (2xl)
+const PAD = "px-4 sm:px-6 xl:px-8 2xl:px-10";
+const BLEED = "-mx-4 px-4 sm:-mx-6 sm:px-6 xl:-mx-8 xl:px-8 2xl:-mx-10 2xl:px-10";
 const CARD_H = "h-[204px]";
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
@@ -184,7 +188,7 @@ export default function Feed() {
   const lastFetch = Math.max(0, ...sources.filter((s) => s.enabled).map((s) => s.last_fetched ?? 0));
 
   return (
-    <div className="mx-auto w-full max-w-[1480px] px-4 pb-24 pt-4 sm:px-6">
+    <div className={cn("mx-auto w-full max-w-[1480px] pb-24 pt-4", PAD)}>
       <AnimatePresence>
         {pend.length > 0 && (
           <motion.div initial={{ y: -16, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: -16, opacity: 0 }} transition={{ type: "spring", stiffness: 420, damping: 32 }}
@@ -229,9 +233,9 @@ export default function Feed() {
           </div>
         </div>
       ) : (
-        groups.map((g) => (
+        groups.map((g, gi) => (
           <section key={g.day}>
-            <div className="sticky top-14 z-10 -mx-4 flex items-center gap-2 bg-background/85 px-4 pb-2.5 pt-5 text-[12px] font-medium text-muted-foreground backdrop-blur-xl backdrop-saturate-150 sm:-mx-6 sm:px-6">
+            <div className={cn("sticky top-14 z-10 flex items-center gap-2 bg-background/85 pb-3 text-[12px] font-medium text-muted-foreground backdrop-blur-xl backdrop-saturate-150", gi === 0 ? "pt-4" : "pt-7", BLEED)}>
               {g.day}<span className="rounded-[4px] bg-secondary px-1.5 font-mono text-[10.5px] leading-4 tabular-nums text-faint">{dayCount.get(g.day) ?? g.items.length}</span><span className="h-px flex-1 bg-border/60" />
             </div>
             <div className={GRID}>
@@ -243,7 +247,7 @@ export default function Feed() {
           </section>
         ))
       )}
-      {!loading && shown < view.length && <div ref={sentinel} className={cn(GRID, "mt-3")}>{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>}
+      {!loading && shown < view.length && <div ref={sentinel} className={cn(GRID, "mt-3 md:mt-4 xl:mt-5 2xl:mt-6")}>{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>}
 
       <AnimatePresence>
         {showTop && (
