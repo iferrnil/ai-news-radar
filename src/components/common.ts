@@ -1,24 +1,25 @@
 import type { ItemOut } from "@/lib/types";
 
 // Exclusive sections: every item belongs to exactly one. ALL X accounts -> "x"; websites by their group.
+// Exclusive sections: each SOURCE maps to exactly one section (seed `group`), so every item is in exactly one.
+// X accounts default to "x" (X 快讯) unless their group says otherwise (e.g. entertainment X accounts -> 娱乐).
 export const SECTIONS = [
   { key: "lab", zh: "实验室", en: "Labs" },
-  { key: "cn", zh: "国内", en: "China" },
-  { key: "dev", zh: "开发", en: "Dev" },
-  { key: "media", zh: "媒体", en: "Media" },
+  { key: "cn", zh: "国内媒体", en: "China media" },
+  { key: "media", zh: "国外媒体", en: "Global media" },
   { key: "x", zh: "X 快讯", en: "X" },
+  { key: "ent", zh: "娱乐", en: "Entertainment" },
 ] as const;
 export type SectionKey = (typeof SECTIONS)[number]["key"];
 
 const GRP: Record<string, SectionKey> = {
-  官方实验室: "lab", 国内: "cn", 开发与工具: "dev", 媒体与聚合: "media", Newsletter: "media", "X 快讯": "x", 爆料与榜单X: "x", 人物与产品X: "x",
+  官方实验室: "lab", 国内: "cn", 开发与工具: "media", 媒体与聚合: "media", 娱乐: "ent", Newsletter: "media", "X 快讯": "x", 爆料与榜单X: "x", 人物与产品X: "x",
 };
 export function sectionOf(it: { grp?: string | null; region?: string | null; category?: string | null; is_x?: number | boolean }): SectionKey {
-  if (it.is_x) return "x";
   if (it.grp && GRP[it.grp]) return GRP[it.grp];
+  if (it.is_x) return "x";
   if (it.region === "cn") return "cn";
   if (it.category === "official") return "lab";
-  if (it.category === "infra" || it.category === "research") return "dev";
   return "media";
 }
 export const secZh = (k: SectionKey) => SECTIONS.find((s) => s.key === k)!.zh;

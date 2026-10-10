@@ -3,62 +3,81 @@
 > 生成时间：2026-10-10 18:26（北京时间）。数据：`sources.yaml`；表格版：`docs/sources.xlsx`。
 > 流程：`scripts/verify_sources.py`（实测）→ `scripts/verify_x_fxembed.py`（X 账号经 FxEmbed 实测）→ `scripts/dedupe_sources.py`（去重）→ `scripts/x_vs_blog.py` + `scripts/apply_x_vs_blog.py`（同一组织 X 与官网二选一，见 `docs/x_vs_blog.md`）→ `scripts/render_sources_md.py`（本文档与 xlsx）。均用 `uv run python` 运行。
 
-## 核心 50（当前启用）
+## 当前启用（57 个）
 
-按 `scripts/core50.yaml` 选出，轮询间隔：P0 = X 120s / feed 300s，P1 = X 300s / feed 600s，P2 = 1800s。其余来源保留在 sources.yaml，`enabled: false`（`disabled_reason: trimmed to core 50`），可以在网站「数据源管理」重新启用或添加。
+2026-10-10 更新：移除「开发」分区（7 个源改为 `enabled: false`，`disabledReason: removed 开发 section`），新增「娱乐」分区（14 个源，P1/P2）。侧栏分区互斥：每个**来源**只属于一个分区（按 `group`），娱乐类 X 账号归「娱乐」，其余 X 账号归「X 快讯」。
 
-| 分组 | 优先级 | 名称 | 类型 | URL | 间隔(s) | 最新 |
-|---|---|---|---|---|---|---|
-| 官方实验室 | P0 | OpenAI News | rss | <https://openai.com/news/rss.xml> | 300 | 2026-10-09 15:00 |
-| 官方实验室 | P0 | Claude Platform release notes | rss | <https://platform.claude.com/docs/en/release-notes/feed.xml> | 300 |  |
-| 官方实验室 | P0 | Google Blog - Gemini | rss | <https://blog.google/products/gemini/rss/> | 300 | 2026-10-02 23:00 |
-| 官方实验室 | P0 | Google DeepMind Blog | rss | <https://deepmind.google/blog/rss.xml> | 300 | 2026-10-07 03:57 |
-| 官方实验室 | P1 | Google Developers Blog | rss | <https://developers.googleblog.com/feeds/posts/default> | 600 |  |
-| 官方实验室 | P1 | Google Research Blog | rss | <https://research.google/blog/rss/> | 600 | 2026-10-08 04:19 |
-| 官方实验室 | P1 | Hugging Face Blog | rss | <https://huggingface.co/blog/feed.xml> | 600 | 2026-10-09 23:20 |
-| 官方实验室 | P1 | Mistral AI News | rss | <https://mistral.ai/news/rss> | 600 | 2026-10-06 20:00 |
-| 官方实验室 | P2 | Microsoft Research Blog | rss | <https://www.microsoft.com/en-us/research/feed/> | 1800 | 2026-10-08 00:00 |
-| 官方实验室 | P2 | Apple Machine Learning Research | rss | <https://machinelearning.apple.com/rss.xml> | 1800 | 2026-10-08 08:00 |
-| 爆料与榜单X | P0 | X @testingcatalog | x | <https://x.com/testingcatalog> | 120 | 2026-10-10 15:16 |
-| 爆料与榜单X | P0 | X @btibor91 | x | <https://x.com/btibor91> | 120 | 2026-10-10 03:22 |
-| 爆料与榜单X | P0 | X @AiBreakfast | x | <https://x.com/AiBreakfast> | 120 | 2026-10-10 07:36 |
-| 爆料与榜单X | P0 | X @ArtificialAnlys | x | <https://x.com/ArtificialAnlys> | 120 | 2026-10-10 06:43 |
-| 爆料与榜单X | P0 | X @arena | x | <https://x.com/arena> | 120 | 2026-10-10 05:44 |
-| 爆料与榜单X | P1 | X @apples_jimmy | x | <https://x.com/apples_jimmy> | 300 | 2026-10-10 04:27 |
-| 爆料与榜单X | P1 | X @kimmonismus | x | <https://x.com/kimmonismus> | 300 | 2026-10-10 16:42 |
-| 人物与产品X | P0 | X @OpenAI (OpenAI) | x | <https://x.com/OpenAI> | 120 | 2026-10-08 03:03 |
-| 人物与产品X | P0 | X @OpenAIDevs (OpenAI Developers) | x | <https://x.com/OpenAIDevs> | 120 | 2026-10-09 23:00 |
-| 人物与产品X | P0 | X @AnthropicAI (Anthropic) | x | <https://x.com/AnthropicAI> | 120 | 2026-10-09 05:04 |
-| 人物与产品X | P1 | X @claudeai (Claude) | x | <https://x.com/claudeai> | 300 | 2026-10-09 11:49 |
-| 人物与产品X | P1 | X @SpaceXAI (SpaceXAI) | x | <https://x.com/SpaceXAI> | 300 | 2026-10-09 02:13 |
-| 人物与产品X | P1 | X @OfficialLoganK (Logan Kilpatrick) | x | <https://x.com/OfficialLoganK> | 300 | 2026-10-08 22:55 |
-| 人物与产品X | P1 | X @sama (Sam Altman) | x | <https://x.com/sama> | 300 | 2026-10-08 04:03 |
-| 人物与产品X | P1 | X @karpathy (Andrej Karpathy) | x | <https://x.com/karpathy> | 300 | 2026-10-02 14:35 |
-| 人物与产品X | P1 | X @cursor_ai (Cursor) | x | <https://x.com/cursor_ai> | 300 | 2026-10-09 04:13 |
-| 人物与产品X | P1 | X @bcherny | x | <https://x.com/bcherny> | 300 | 2026-10-08 09:57 |
-| 人物与产品X | P1 | X @_akhaliq (AK) | x | <https://x.com/_akhaliq> | 300 | 2026-10-09 07:08 |
-| 国内 | P0 | 量子位 | rss | <https://www.qbitai.com/feed> | 300 | 2026-10-09 17:19 |
-| 国内 | P0 | 机器之心 | api | <https://www.jiqizhixin.com/api/article_library/articles.json?sort=time&page=1> | 300 | 2026-10-09 17:46 |
-| 国内 | P1 | 极客公园 | rss | <https://www.geekpark.net/rss> | 600 | 2026-10-09 12:34 |
-| 国内 | P0 | X @dotey | x | <https://x.com/dotey> | 120 | 2026-10-10 14:33 |
-| 国内 | P1 | X @op7418 | x | <https://x.com/op7418> | 300 | 2026-10-10 10:46 |
-| 国内 | P0 | X @deepseek_ai (DeepSeek) | x | <https://x.com/deepseek_ai> | 120 | 2026-10-02 15:00 |
-| 国内 | P0 | X @Alibaba_Qwen (Qwen) | x | <https://x.com/Alibaba_Qwen> | 120 | 2026-10-09 21:24 |
-| 国内 | P1 | X @Kimi_Moonshot (Kimi.ai) | x | <https://x.com/Kimi_Moonshot> | 300 | 2026-09-22 20:20 |
-| 国内 | P1 | X @Zai_org (Z.ai) | x | <https://x.com/Zai_org> | 300 | 2026-10-06 08:49 |
-| 开发与工具 | P0 | OpenRouter models API | api | <https://openrouter.ai/api/v1/models> | 300 | 2026-10-08 20:34 |
-| 开发与工具 | P1 | Hugging Face Daily Papers API | api | <https://huggingface.co/api/daily_papers> | 600 | 2026-10-08 04:00 |
-| 开发与工具 | P1 | hnrss newest points>=100 | rss | <https://hnrss.org/newest?points=100> | 600 | 2026-10-10 12:40 |
-| 开发与工具 | P1 | GitHub Releases anthropics/claude-code | rss | <https://github.com/anthropics/claude-code/releases.atom> | 600 | 2026-10-10 03:28 |
-| 开发与工具 | P1 | GitHub Releases openai/codex | rss | <https://github.com/openai/codex/releases.atom> | 600 | 2026-10-10 09:27 |
-| 开发与工具 | P2 | GitHub Releases ollama/ollama | rss | <https://github.com/ollama/ollama/releases.atom> | 1800 | 2026-10-09 11:37 |
-| 开发与工具 | P1 | Cursor Changelog | rss | <https://cursor.com/changelog/rss.xml> | 600 | 2026-10-06 08:00 |
-| 媒体与聚合 | P0 | Techmeme | rss | <https://www.techmeme.com/feed.xml> | 300 | 2026-10-10 16:40 |
-| 媒体与聚合 | P1 | The Decoder | rss | <https://the-decoder.com/feed/> | 600 | 2026-10-10 01:54 |
-| 媒体与聚合 | P1 | TechCrunch AI | rss | <https://techcrunch.com/category/artificial-intelligence/feed/> | 600 | 2026-10-10 00:56 |
-| 媒体与聚合 | P1 | The Verge AI | rss | <https://www.theverge.com/rss/ai-artificial-intelligence/index.xml> | 600 | 2026-10-10 02:06 |
-| Newsletter | P1 | Simon Willison's Weblog | rss | <https://simonwillison.net/atom/everything/> | 600 | 2026-10-09 23:02 |
-| Newsletter | P2 | Latent Space | rss | <https://www.latent.space/feed> | 1800 | 2026-10-09 07:29 |
+| 分区 | 优先级 | 名称 | 类型 | URL | 备注 |
+|---|---|---|---|---|---|
+| 实验室 | P0 | Claude Platform release notes | rss | <https://platform.claude.com/docs/en/release-notes/feed.xml> | Claude API/平台 release notes 官方 RSS（docs 页 <link rel=alternate> 发现） |
+| 实验室 | P0 | Google Blog - Gemini | rss | <https://blog.google/products/gemini/rss/> |  |
+| 实验室 | P0 | Google DeepMind Blog | rss | <https://deepmind.google/blog/rss.xml> | www.deepmind.com/blog/rss.xml 也可（同内容） |
+| 实验室 | P0 | OpenAI News | rss | <https://openai.com/news/rss.xml> | 全量历史（1000+条），openai.com/blog/rss.xml 是同一份 |
+| 实验室 | P1 | Google Developers Blog | rss | <https://developers.googleblog.com/feeds/posts/default> | 条目无发布日期字段，需用 link 去重 |
+| 实验室 | P1 | Google Research Blog | rss | <https://research.google/blog/rss/> | 旧 ai.googleblog.com 已失效 |
+| 实验室 | P1 | Hugging Face Blog | rss | <https://huggingface.co/blog/feed.xml> |  |
+| 实验室 | P1 | Mistral AI News | rss | <https://mistral.ai/news/rss> | 通过页面 <link rel=alternate> 自动发现 |
+| 实验室 | P2 | Apple Machine Learning Research | rss | <https://machinelearning.apple.com/rss.xml> |  |
+| 实验室 | P2 | Microsoft Research Blog | rss | <https://www.microsoft.com/en-us/research/feed/> |  |
+| 国内媒体 | P0 | 机器之心 | api | <https://www.jiqizhixin.com/api/article_library/articles.json?sort=time&page=1> | 官网前端使用的JSON接口（非公开文档API）；/rss 不是feed |
+| 国内媒体 | P0 | 量子位 | rss | <https://www.qbitai.com/feed> |  |
+| 国内媒体 | P1 | 极客公园 | rss | <https://www.geekpark.net/rss> |  |
+| 国外媒体 | P0 | Techmeme | rss | <https://www.techmeme.com/feed.xml> |  |
+| 国外媒体 | P1 | Simon Willison's Weblog | rss | <https://simonwillison.net/atom/everything/> |  |
+| 国外媒体 | P1 | TechCrunch AI | rss | <https://techcrunch.com/category/artificial-intelligence/feed/> |  |
+| 国外媒体 | P1 | The Decoder | rss | <https://the-decoder.com/feed/> |  |
+| 国外媒体 | P1 | The Verge AI | rss | <https://www.theverge.com/rss/ai-artificial-intelligence/index.xml> |  |
+| 国外媒体 | P2 | Latent Space | rss | <https://www.latent.space/feed> |  |
+| X 快讯 | P0 | X @AiBreakfast | x | <https://api.fxtwitter.com/2/profile/AiBreakfast/statuses> | ；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P0 | X @Alibaba_Qwen (Qwen) | x | <https://api.fxtwitter.com/2/profile/Alibaba_Qwen/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P0 | X @AnthropicAI (Anthropic) | x | <https://api.fxtwitter.com/2/profile/AnthropicAI/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P0 | X @ArtificialAnlys | x | <https://api.fxtwitter.com/2/profile/ArtificialAnlys/statuses> | ；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P0 | X @OpenAI (OpenAI) | x | <https://api.fxtwitter.com/2/profile/OpenAI/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P0 | X @OpenAIDevs (OpenAI Developers) | x | <https://api.fxtwitter.com/2/profile/OpenAIDevs/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P0 | X @arena | x | <https://api.fxtwitter.com/2/profile/arena/statuses> | ；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P0 | X @btibor91 | x | <https://api.fxtwitter.com/2/profile/btibor91/statuses> | ；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P0 | X @deepseek_ai (DeepSeek) | x | <https://api.fxtwitter.com/2/profile/deepseek_ai/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P0 | X @dotey | x | <https://api.fxtwitter.com/2/profile/dotey/statuses> | 宝玉；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P0 | X @testingcatalog | x | <https://api.fxtwitter.com/2/profile/testingcatalog/statuses> | ；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P1 | X @Kimi_Moonshot (Kimi.ai) | x | <https://api.fxtwitter.com/2/profile/Kimi_Moonshot/statuses> | 未认证但为官方（简介含 moonshot.ai PR 邮箱）；无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P1 | X @OfficialLoganK (Logan Kilpatrick) | x | <https://api.fxtwitter.com/2/profile/OfficialLoganK/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P1 | X @SpaceXAI (SpaceXAI) | x | <https://api.fxtwitter.com/2/profile/SpaceXAI/statuses> | xAI 现用账号（@xai 简介写 Now at @SpaceXAI）；无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P1 | X @Zai_org (Z.ai) | x | <https://api.fxtwitter.com/2/profile/Zai_org/statuses> | 智谱；无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P1 | X @_akhaliq (AK) | x | <https://api.fxtwitter.com/2/profile/_akhaliq/statuses> | 论文推送；无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P1 | X @apples_jimmy | x | <https://api.fxtwitter.com/2/profile/apples_jimmy/statuses> | 传闻号，准确率参差；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P1 | X @bcherny | x | <https://api.fxtwitter.com/2/profile/bcherny/statuses> | Claude Code 负责人；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P1 | X @claudeai (Claude) | x | <https://api.fxtwitter.com/2/profile/claudeai/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P1 | X @cursor_ai (Cursor) | x | <https://api.fxtwitter.com/2/profile/cursor_ai/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P1 | X @karpathy (Andrej Karpathy) | x | <https://api.fxtwitter.com/2/profile/karpathy/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| X 快讯 | P1 | X @kimmonismus | x | <https://api.fxtwitter.com/2/profile/kimmonismus/statuses> | ；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P1 | X @op7418 | x | <https://api.fxtwitter.com/2/profile/op7418/statuses> | 歸藏；经 FxEmbed 抓取（第三方） |
+| X 快讯 | P1 | X @sama (Sam Altman) | x | <https://api.fxtwitter.com/2/profile/sama/statuses> | OpenAI CEO；无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
+| 娱乐 | P1 | Page Six | rss | <https://pagesix.com/feed/> |  |
+| 娱乐 | P1 | TMZ | rss | <https://www.tmz.com/rss.xml> |  |
+| 娱乐 | P1 | X @PopBase | x | <https://api.fxtwitter.com/2/profile/PopBase/statuses> |  |
+| 娱乐 | P1 | X @PopCrave | x | <https://api.fxtwitter.com/2/profile/PopCrave/statuses> |  |
+| 娱乐 | P1 | 抖音热搜 | api | <https://www.iesdouyin.com/web/api/v2/hotsearch/billboard/word/> | 抖音 web 接口（非公开 API），只有热词无时间 |
+| 娱乐 | P1 | 网易娱乐 | api | <https://ent.163.com/special/000380VU/newsdata_index.js> | 网易前端 JSONP 数据接口（非公开 API） |
+| 娱乐 | P2 | Bored Panda | rss | <https://www.boredpanda.com/feed/> | funny/viral |
+| 娱乐 | P2 | B站热门 | api | <https://api.bilibili.com/x/web-interface/popular?ps=20> | bilibili web 接口（非公开 API） |
+| 娱乐 | P2 | Deadline | rss | <https://deadline.com/feed/> |  |
+| 娱乐 | P2 | E! News | rss | <https://www.eonline.com/syndication/feeds/rssfeeds/topstories.xml> |  |
+| 娱乐 | P2 | Just Jared | rss | <https://www.justjared.com/feed/> |  |
+| 娱乐 | P2 | UPI Odd News | rss | <https://rss.upi.com/news/odd_news.rss> | funny/odd |
+| 娱乐 | P2 | Variety | rss | <https://variety.com/feed/> |  |
+| 娱乐 | P2 | X @DiscussingFilm | x | <https://api.fxtwitter.com/2/profile/DiscussingFilm/statuses> |  |
+
+### 已停用：原「开发」分区
+
+| 名称 | URL |
+|---|---|
+| OpenRouter models API | <https://openrouter.ai/api/v1/models> |
+| Hugging Face Daily Papers API | <https://huggingface.co/api/daily_papers> |
+| hnrss newest points>=100 | <https://hnrss.org/newest?points=100> |
+| GitHub Releases anthropics/claude-code | <https://github.com/anthropics/claude-code/releases.atom> |
+| GitHub Releases openai/codex | <https://github.com/openai/codex/releases.atom> |
+| GitHub Releases ollama/ollama | <https://github.com/ollama/ollama/releases.atom> |
+| Cursor Changelog | <https://cursor.com/changelog/rss.xml> |
 
 ## 汇总
 

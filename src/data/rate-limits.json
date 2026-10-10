@@ -1,142 +1,235 @@
 {
-  "checked": "2026-10-10",
-  "entries": [
+ "checked": "2026-10-10",
+ "entries": [
+  {
+   "id": "fxembed",
+   "name": "FxEmbed / FxTwitter API（X 账号时间线）",
+   "match": {
+    "type": "x"
+   },
+   "endpoint": "https://api.fxtwitter.com/2/profile/{handle}/statuses?count=20",
+   "documented": "API v2 每个 IP 每分钟 1000 次（约 16.7 次/秒）；超出建议自建实例。",
+   "official": true,
+   "sources": [
     {
-      "id": "fxembed",
-      "name": "FxEmbed / FxTwitter API（X 账号时间线）",
-      "match": { "type": "x" },
-      "endpoint": "https://api.fxtwitter.com/2/profile/{handle}/statuses?count=20",
-      "documented": "API v2 每个 IP 每分钟 1000 次（约 16.7 次/秒）；超出建议自建实例。",
-      "official": true,
-      "sources": [
-        { "label": "FxEmbed API Overview · Rate limiting", "url": "https://docs.fxembed.com/api/introduction" },
-        { "label": "FxEmbed GitHub README（指向文档）", "url": "https://github.com/FxEmbed/FxEmbed" }
-      ],
-      "observed": "响应头无 x-rate-limit-* / RateLimit 字段（server: cloudflare）。偶发“假 404”（真实账号返回 User not found），重试后恢复；我们对 404/429/5xx 最多重试 5 次、线性退避。",
-      "risk": "low",
-      "riskNote": "我们约 8 次/分钟，远低于 1000/分钟；主要风险是第三方服务稳定性与 X 侧变更，而非限流。"
+     "label": "FxEmbed API Overview · Rate limiting",
+     "url": "https://docs.fxembed.com/api/introduction"
     },
     {
-      "id": "syndication",
-      "name": "X syndication 嵌入时间线（timeline-list / timeline-profile）",
-      "match": { "type": "x_list" },
-      "endpoint": "https://syndication.twitter.com/srv/timeline-list/list-id/{id}",
-      "documented": "未找到官方文档（X 开发者文档只列 X API v2 端点的限额，不含 syndication 嵌入接口）。",
-      "official": false,
-      "sources": [
-        { "label": "X API Rate Limits（仅 API v2，不含此接口）", "url": "https://docs.x.com/x-api/fundamentals/rate-limits" },
-        { "label": "社区观察：wet-boew issue #10047（30 次 / 约 15 分钟）", "url": "https://github.com/wet-boew/wet-boew/issues/10047" }
-      ],
-      "observed": "2026-10-10 实测响应头 x-rate-limit-limit: 30、x-rate-limit-remaining、x-rate-limit-reset（约 15 分钟窗口，按 IP）；本机当时已返回 429 且 remaining=0。cache-control: no-cache。",
-      "risk": "high",
-      "riskNote": "未公开接口，额度仅约 30 次/15 分钟/IP，随时可能变更或关闭。核心 50 中未使用；若添加 X 列表，间隔不应低于 2 分钟且同一 IP 只放 1~2 个列表。"
-    },
-    {
-      "id": "github-atom",
-      "name": "GitHub Releases Atom（releases.atom）",
-      "match": { "host": "github.com" },
-      "endpoint": "https://github.com/{owner}/{repo}/releases.atom",
-      "documented": "未找到 Atom feed 的专门限额文档。.atom 属于 github.com 网页端而非 REST API；作为参考，REST API 未认证为每 IP 60 次/小时，另有二级限额（并发 ≤100、每分钟 900 点等）。",
-      "official": false,
-      "sources": [
-        { "label": "GitHub Docs · Rate limits for the REST API（参考）", "url": "https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api" }
-      ],
-      "observed": "响应头无 x-ratelimit-*；有 ETag（W/\"…\"）与 cache-control: max-age=0, private, must-revalidate，可用 If-None-Match 条件请求。",
-      "risk": "low",
-      "riskNote": "3 个仓库合计约 14 次/小时；即使按 REST 未认证 60/小时的保守标准也在范围内。"
-    },
-    {
-      "id": "hf",
-      "name": "Hugging Face（Daily Papers API + Blog RSS）",
-      "match": { "host": "huggingface.co" },
-      "endpoint": "https://huggingface.co/api/daily_papers ；https://huggingface.co/blog/feed.xml",
-      "documented": "Hub 限额按 5 分钟固定窗口计：匿名用户（按 IP）API 500 次、Pages 100 次、Resolvers 3000 次；免费用户 API 1000 次。超限返回 429，并带 RateLimit / RateLimit-Policy 头。",
-      "official": true,
-      "sources": [
-        { "label": "Hugging Face Docs · Hub Rate limits", "url": "https://huggingface.co/docs/hub/rate-limits" }
-      ],
-      "observed": "实测 /api/daily_papers 响应头：ratelimit: \"api\";r=499;t=246，ratelimit-policy: \"fixed window\";\"api\";q=500;w=300（与文档一致）。",
-      "risk": "low",
-      "riskNote": "两个端点各每 10 分钟 1 次，相当于每 5 分钟 0.5 次，远低于 500（API）/100（Pages）。"
-    },
-    {
-      "id": "openrouter",
-      "name": "OpenRouter 模型列表 API",
-      "match": { "host": "openrouter.ai" },
-      "endpoint": "https://openrouter.ai/api/v1/models",
-      "documented": "文档的限额针对推理请求（免费模型 20 次/分钟等）与 Cloudflare DDoS 防护；未给出 /models 列表端点的具体限额。",
-      "official": true,
-      "sources": [
-        { "label": "OpenRouter Docs · API Limits", "url": "https://openrouter.ai/docs/api/reference/limits" }
-      ],
-      "observed": "响应头 cache-control: public, max-age=120, stale-while-revalidate=3600；cf-cache-status: HIT（CDN 缓存），无 X-RateLimit-* 头（文档说明只在 429 时返回）。",
-      "risk": "low",
-      "riskNote": "每 5 分钟 1 次，且命中 CDN 缓存；无需 API Key。"
-    },
-    {
-      "id": "hnrss",
-      "name": "hnrss.org（Hacker News RSS）",
-      "match": { "host": "hnrss.org" },
-      "endpoint": "https://hnrss.org/newest?points=100",
-      "documented": "未找到明确的数值限额。文档仅要求对 favorites 类 feed“请格外保守地设置刷新频率”，count 上限 100。",
-      "official": false,
-      "sources": [
-        { "label": "hnrss 项目页（官方文档）", "url": "https://hnrss.github.io/" },
-        { "label": "hnrss GitHub README", "url": "https://github.com/hnrss/hnrss" }
-      ],
-      "observed": "响应头 cache-control: max-age=600、x-cache: HIT、last-modified；即服务端缓存 10 分钟，更快的轮询没有意义。",
-      "risk": "low",
-      "riskNote": "我们 10 分钟 1 次，正好与其缓存时间一致。"
-    },
-    {
-      "id": "jiqizhixin",
-      "name": "机器之心 文章 JSON",
-      "match": { "host": "www.jiqizhixin.com" },
-      "endpoint": "https://www.jiqizhixin.com/api/article_library/articles.json?sort=time&page=1",
-      "documented": "未找到官方文档（站点前端使用的内部 JSON 接口，非公开 API）。",
-      "official": false,
-      "sources": [],
-      "observed": "nginx，响应头有 ETag，cache-control: max-age=0, private, must-revalidate；无限额相关头。",
-      "risk": "medium",
-      "riskNote": "非公开接口，可能无预警变更；保持 5 分钟间隔、带正常 UA。"
-    },
-    {
-      "id": "substack",
-      "name": "Substack 通讯 feed（Latent Space 等）",
-      "match": { "host": "www.latent.space" },
-      "endpoint": "https://www.latent.space/feed",
-      "documented": "未找到官方限额文档。",
-      "official": false,
-      "sources": [],
-      "observed": "Cloudflare，cache-control: no-cache，带 ETag 与 age（实测约 1983 秒，说明前面有缓存层）。",
-      "risk": "low",
-      "riskNote": "每 30 分钟 1 次。"
-    },
-    {
-      "id": "techmeme",
-      "name": "Techmeme RSS",
-      "match": { "host": "www.techmeme.com" },
-      "endpoint": "https://www.techmeme.com/feed.xml",
-      "documented": "未找到官方限额文档。",
-      "official": false,
-      "sources": [],
-      "observed": "Cloudflare（cf-cache-status: DYNAMIC），有 Last-Modified 与 ETag，可做条件请求。",
-      "risk": "low",
-      "riskNote": "每 5 分钟 1 次。"
-    },
-    {
-      "id": "rss",
-      "name": "其他通用 RSS / Atom（官方博客与媒体）",
-      "match": { "type": "rss", "rest": true },
-      "endpoint": "OpenAI、Google/DeepMind、Claude 发布说明、量子位、极客公园、TechCrunch、The Verge 等",
-      "documented": "各站点均未公布 feed 限额。RSS 2.0 规范仅提供可选的 <ttl>（建议缓存分钟数）作为礼仪约定。",
-      "official": false,
-      "sources": [
-        { "label": "RSS 2.0 Specification · <ttl>", "url": "https://www.rssboard.org/rss-specification#ltttlgtSubelementOfLtchannelgt" }
-      ],
-      "observed": "多数经 Cloudflare/CDN（如 openai.com cache-control: public, max-age=0，age≈1843），未见限额头；目前全部 200。",
-      "risk": "low",
-      "riskNote": "单站点每 5~30 分钟 1 次；同一主机（如 Google 多个博客）合计也不到 1 次/分钟。"
+     "label": "FxEmbed GitHub README（指向文档）",
+     "url": "https://github.com/FxEmbed/FxEmbed"
     }
-  ]
+   ],
+   "observed": "响应头无 x-rate-limit-* / RateLimit 字段（server: cloudflare）。偶发“假 404”（真实账号返回 User not found），重试后恢复；我们对 404/429/5xx 最多重试 5 次、线性退避。",
+   "risk": "low",
+   "riskNote": "我们约 8 次/分钟，远低于 1000/分钟；主要风险是第三方服务稳定性与 X 侧变更，而非限流。"
+  },
+  {
+   "id": "syndication",
+   "name": "X syndication 嵌入时间线（timeline-list / timeline-profile）",
+   "match": {
+    "type": "x_list"
+   },
+   "endpoint": "https://syndication.twitter.com/srv/timeline-list/list-id/{id}",
+   "documented": "未找到官方文档（X 开发者文档只列 X API v2 端点的限额，不含 syndication 嵌入接口）。",
+   "official": false,
+   "sources": [
+    {
+     "label": "X API Rate Limits（仅 API v2，不含此接口）",
+     "url": "https://docs.x.com/x-api/fundamentals/rate-limits"
+    },
+    {
+     "label": "社区观察：wet-boew issue #10047（30 次 / 约 15 分钟）",
+     "url": "https://github.com/wet-boew/wet-boew/issues/10047"
+    }
+   ],
+   "observed": "2026-10-10 实测响应头 x-rate-limit-limit: 30、x-rate-limit-remaining、x-rate-limit-reset（约 15 分钟窗口，按 IP）；本机当时已返回 429 且 remaining=0。cache-control: no-cache。",
+   "risk": "high",
+   "riskNote": "未公开接口，额度仅约 30 次/15 分钟/IP，随时可能变更或关闭。核心 50 中未使用；若添加 X 列表，间隔不应低于 2 分钟且同一 IP 只放 1~2 个列表。"
+  },
+  {
+   "id": "github-atom",
+   "name": "GitHub Releases Atom（releases.atom）",
+   "match": {
+    "host": "github.com"
+   },
+   "endpoint": "https://github.com/{owner}/{repo}/releases.atom",
+   "documented": "未找到 Atom feed 的专门限额文档。.atom 属于 github.com 网页端而非 REST API；作为参考，REST API 未认证为每 IP 60 次/小时，另有二级限额（并发 ≤100、每分钟 900 点等）。",
+   "official": false,
+   "sources": [
+    {
+     "label": "GitHub Docs · Rate limits for the REST API（参考）",
+     "url": "https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api"
+    }
+   ],
+   "observed": "响应头无 x-ratelimit-*；有 ETag（W/\"…\"）与 cache-control: max-age=0, private, must-revalidate，可用 If-None-Match 条件请求。",
+   "risk": "low",
+   "riskNote": "3 个仓库合计约 14 次/小时；即使按 REST 未认证 60/小时的保守标准也在范围内。（2026-10-10 起「开发」分区已移除，核心列表中 0 个源）"
+  },
+  {
+   "id": "hf",
+   "name": "Hugging Face（Daily Papers API + Blog RSS）",
+   "match": {
+    "host": "huggingface.co"
+   },
+   "endpoint": "https://huggingface.co/api/daily_papers ；https://huggingface.co/blog/feed.xml",
+   "documented": "Hub 限额按 5 分钟固定窗口计：匿名用户（按 IP）API 500 次、Pages 100 次、Resolvers 3000 次；免费用户 API 1000 次。超限返回 429，并带 RateLimit / RateLimit-Policy 头。",
+   "official": true,
+   "sources": [
+    {
+     "label": "Hugging Face Docs · Hub Rate limits",
+     "url": "https://huggingface.co/docs/hub/rate-limits"
+    }
+   ],
+   "observed": "实测 /api/daily_papers 响应头：ratelimit: \"api\";r=499;t=246，ratelimit-policy: \"fixed window\";\"api\";q=500;w=300（与文档一致）。",
+   "risk": "low",
+   "riskNote": "两个端点各每 10 分钟 1 次，相当于每 5 分钟 0.5 次，远低于 500（API）/100（Pages）。（2026-10-10 起「开发」分区已移除，核心列表中 0 个源）"
+  },
+  {
+   "id": "openrouter",
+   "name": "OpenRouter 模型列表 API",
+   "match": {
+    "host": "openrouter.ai"
+   },
+   "endpoint": "https://openrouter.ai/api/v1/models",
+   "documented": "文档的限额针对推理请求（免费模型 20 次/分钟等）与 Cloudflare DDoS 防护；未给出 /models 列表端点的具体限额。",
+   "official": true,
+   "sources": [
+    {
+     "label": "OpenRouter Docs · API Limits",
+     "url": "https://openrouter.ai/docs/api/reference/limits"
+    }
+   ],
+   "observed": "响应头 cache-control: public, max-age=120, stale-while-revalidate=3600；cf-cache-status: HIT（CDN 缓存），无 X-RateLimit-* 头（文档说明只在 429 时返回）。",
+   "risk": "low",
+   "riskNote": "每 5 分钟 1 次，且命中 CDN 缓存；无需 API Key。（2026-10-10 起「开发」分区已移除，核心列表中 0 个源）"
+  },
+  {
+   "id": "hnrss",
+   "name": "hnrss.org（Hacker News RSS）",
+   "match": {
+    "host": "hnrss.org"
+   },
+   "endpoint": "https://hnrss.org/newest?points=100",
+   "documented": "未找到明确的数值限额。文档仅要求对 favorites 类 feed“请格外保守地设置刷新频率”，count 上限 100。",
+   "official": false,
+   "sources": [
+    {
+     "label": "hnrss 项目页（官方文档）",
+     "url": "https://hnrss.github.io/"
+    },
+    {
+     "label": "hnrss GitHub README",
+     "url": "https://github.com/hnrss/hnrss"
+    }
+   ],
+   "observed": "响应头 cache-control: max-age=600、x-cache: HIT、last-modified；即服务端缓存 10 分钟，更快的轮询没有意义。",
+   "risk": "low",
+   "riskNote": "我们 10 分钟 1 次，正好与其缓存时间一致。（2026-10-10 起「开发」分区已移除，核心列表中 0 个源）"
+  },
+  {
+   "id": "jiqizhixin",
+   "name": "机器之心 文章 JSON",
+   "match": {
+    "host": "www.jiqizhixin.com"
+   },
+   "endpoint": "https://www.jiqizhixin.com/api/article_library/articles.json?sort=time&page=1",
+   "documented": "未找到官方文档（站点前端使用的内部 JSON 接口，非公开 API）。",
+   "official": false,
+   "sources": [],
+   "observed": "nginx，响应头有 ETag，cache-control: max-age=0, private, must-revalidate；无限额相关头。",
+   "risk": "medium",
+   "riskNote": "非公开接口，可能无预警变更；保持 5 分钟间隔、带正常 UA。"
+  },
+  {
+   "id": "substack",
+   "name": "Substack 通讯 feed（Latent Space 等）",
+   "match": {
+    "host": "www.latent.space"
+   },
+   "endpoint": "https://www.latent.space/feed",
+   "documented": "未找到官方限额文档。",
+   "official": false,
+   "sources": [],
+   "observed": "Cloudflare，cache-control: no-cache，带 ETag 与 age（实测约 1983 秒，说明前面有缓存层）。",
+   "risk": "low",
+   "riskNote": "每 30 分钟 1 次。"
+  },
+  {
+   "id": "techmeme",
+   "name": "Techmeme RSS",
+   "match": {
+    "host": "www.techmeme.com"
+   },
+   "endpoint": "https://www.techmeme.com/feed.xml",
+   "documented": "未找到官方限额文档。",
+   "official": false,
+   "sources": [],
+   "observed": "Cloudflare（cf-cache-status: DYNAMIC），有 Last-Modified 与 ETag，可做条件请求。",
+   "risk": "low",
+   "riskNote": "每 5 分钟 1 次。"
+  },
+  {
+   "id": "netease",
+   "name": "网易娱乐 newsdata（JSONP）",
+   "match": {
+    "host": "ent.163.com"
+   },
+   "endpoint": "https://ent.163.com/special/000380VU/newsdata_index.js",
+   "documented": "未找到官方文档：这是网易娱乐首页前端使用的 JSONP 数据文件，并非公开 API。",
+   "official": false,
+   "sources": [],
+   "observed": "2026-10-10 实测 HTTP 200，openresty，cache-control: max-age=60，无限额响应头；返回 40 条（UTF-8，data_callback([...]) 包裹）。",
+   "risk": "medium",
+   "riskNote": "非公开接口，格式或地址可能随网站改版变化；我们 10 分钟 1 次，远低于其 60 秒 CDN 缓存。"
+  },
+  {
+   "id": "bilibili",
+   "name": "B 站热门 popular（web 接口）",
+   "match": {
+    "host": "api.bilibili.com"
+   },
+   "endpoint": "https://api.bilibili.com/x/web-interface/popular?ps=20",
+   "documented": "未找到官方文档：bilibili 未公开 web-interface 接口文档及限额（社区记录过高频请求会返回 -412 风控）。",
+   "official": false,
+   "sources": [],
+   "observed": "2026-10-10 实测 GET 200（code 0，20 条）；HEAD 返回 405；无限额响应头。",
+   "risk": "medium",
+   "riskNote": "非公开接口，有风控（-412）；30 分钟 1 次。"
+  },
+  {
+   "id": "douyin",
+   "name": "抖音热搜 billboard（web 接口）",
+   "match": {
+    "host": "www.iesdouyin.com"
+   },
+   "endpoint": "https://www.iesdouyin.com/web/api/v2/hotsearch/billboard/word/",
+   "documented": "未找到官方文档：抖音分享页使用的非公开接口。",
+   "official": false,
+   "sources": [],
+   "observed": "2026-10-10 实测 GET 200，返回 50 个热词（只有词与热度，无时间、无链接；我们用抖音搜索页作为链接，用抓取时间作为时间）；HEAD 404；无限额响应头。",
+   "risk": "high",
+   "riskNote": "非公开接口，随时可能失效或加签；10 分钟 1 次。"
+  },
+  {
+   "id": "rss",
+   "name": "其他通用 RSS / Atom（官方博客与媒体）",
+   "match": {
+    "type": "rss",
+    "rest": true
+   },
+   "endpoint": "OpenAI、Google/DeepMind、Claude 发布说明、量子位、极客公园、TechCrunch、The Verge 等；娱乐：TMZ、Page Six、E! News、Variety、Deadline 等",
+   "documented": "各站点均未公布 feed 限额。RSS 2.0 规范仅提供可选的 <ttl>（建议缓存分钟数）作为礼仪约定。",
+   "official": false,
+   "sources": [
+    {
+     "label": "RSS 2.0 Specification · <ttl>",
+     "url": "https://www.rssboard.org/rss-specification#ltttlgtSubelementOfLtchannelgt"
+    }
+   ],
+   "observed": "多数经 Cloudflare/CDN（如 openai.com cache-control: public, max-age=0，age≈1843），未见限额头；目前全部 200。",
+   "risk": "low",
+   "riskNote": "单站点每 5~30 分钟 1 次；同一主机（如 Google 多个博客）合计也不到 1 次/分钟。"
+  }
+ ]
 }

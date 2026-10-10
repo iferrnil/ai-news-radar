@@ -4,19 +4,19 @@
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fiferrnil%2Fai--news--radar-blue)](https://github.com/iferrnil/ai-news-radar/pkgs/container/ai-news-radar)
 
-> A self-hosted, near-real-time radar for domestic + international AI news: 50 curated sources (lab blogs, API changelogs, X accounts, Chinese media, dev tooling), polled by priority and pushed live to the browser.
+> A self-hosted, near-real-time radar for domestic + international AI news: 57 curated sources (lab blogs, API changelogs, X accounts, Chinese & global media, entertainment), polled by priority and pushed live to the browser.
 
-为 AI 内容创作者打造的**自托管实时 AI 资讯聚合器**：精选 50 个国内外信息源（官方实验室博客与 API 发布说明、X 账号、中文媒体、开发工具、科技媒体），按优先级轮询，通过 SSE 实时推送到网页。只保留 48 小时内的内容，单进程 + SQLite，几百 MB 内存即可运行。
+为 AI 内容创作者打造的**自托管实时 AI 资讯聚合器**：精选 57 个国内外信息源（官方实验室博客与 API 发布说明、X 账号、国内外科技媒体、娱乐八卦与热榜），按优先级轮询，通过 SSE 实时推送到网页。只保留 48 小时内的内容，单进程 + SQLite，几百 MB 内存即可运行。
 
 仓库：<https://github.com/iferrnil/ai-news-radar>
 
 ## 功能
 
-- **50 个精选源**：RSS/Atom、JSON API（HF Daily Papers、OpenRouter 新模型、机器之心、hnrss）、GitHub Releases、X 账号（经 FxEmbed，无需 X API Token）
+- **57 个精选源**：RSS/Atom、JSON API（机器之心、网易娱乐、B 站热门、抖音热搜）、X 账号（经 FxEmbed，无需 X API Token）
 - **优先级轮询**：P0 X 2 分钟 / 网站 5 分钟，P1 5/10 分钟，P2 30 分钟；条件请求（ETag / If-Modified-Since）节省带宽
 - **实时推送**：SSE，新内容出现“N 条新内容”提示
 - **去重与合并**：按规范化 URL / 推文 ID 去重；推文链接到已有文章时合并为“也在 X”
-- **互斥分区**：实验室 / 国内 / 开发 / 媒体 / X 快讯，每条内容只属于一个分区
+- **互斥分区**：实验室 / 国内媒体 / 国外媒体 / X 快讯 / 娱乐，每个来源只属于一个分区（娱乐类 X 账号归「娱乐」）
 - **悬停预览**：鼠标停留在卡片上显示 Hover Card（全文、时间、原文链接），触屏设备自动关闭
 - **界面**：shadcn/ui 卡片网格、深浅色主题、⌘K 命令面板、J/K 键盘导航、已读变暗、移动端适配
 - **数据源管理**：启用/停用、调整间隔、立即抓取、按 URL / @用户名 / X 列表添加并预览
@@ -56,7 +56,7 @@ flowchart LR
 
 ## 信息源
 
-当前启用 50 个源，完整目录（含停用参考源）与核验记录见 [docs/sources.md](docs/sources.md)；各类源的官方限额、实测与我们的请求量见 [docs/rate-limits.md](docs/rate-limits.md)（站内 `/docs/rate-limits`）。选源思路见 [docs/recommendations.md](docs/recommendations.md)。
+当前启用 57 个源（实验室、国内媒体、国外媒体、X 快讯、娱乐 14 个；原「开发」分区 7 个源已停用），完整目录（含停用参考源）与核验记录见 [docs/sources.md](docs/sources.md)；各类源的官方限额、实测与我们的请求量见 [docs/rate-limits.md](docs/rate-limits.md)（站内 `/docs/rate-limits`）。选源思路见 [docs/recommendations.md](docs/recommendations.md)。
 
 ## 快速开始
 
@@ -115,6 +115,10 @@ npm run build && npm run start -- -p 3000
 - X 内容通过第三方 **FxEmbed**（api.fxtwitter.com）获取，X 列表使用**未公开**的 syndication 接口；二者都不是 X 官方 API，可能随时变更、限流或失效，偶尔出现“假 404”。
 - 各站点 feed 的可用性与限额以其自身为准，请遵守各来源的服务条款，保持合理轮询频率（见 rate-limits 文档）。
 - 本项目仅聚合标题、摘要与链接，版权归原作者与原站点所有。
+
+## 字体
+
+界面字体：Latin 用 **Inter**，中文用 **Noto Sans SC**（400/500/600），时间与数字用 **JetBrains Mono**。三者均为 SIL Open Font License 1.1，可随 MIT 项目再分发；由 `next/font` 在构建时自托管为 woff2，中文按 unicode-range 切片按需加载。
 
 ## License
 

@@ -16,6 +16,7 @@ async function shot(name, path, { theme = "dark", mobile = false, act, w = 1280,
   if (act) await act(pg);
   await pg.waitForTimeout(900);
   await pg.screenshot({ path: OUT + name });
+  if (name === "feed_dark.png") await pg.screenshot({ path: OUT + "sidebar.png", clip: { x: 0, y: 0, width: 200, height: h } });
   await ctx.close();
 }
 await shot("feed_dark.png", "/");
@@ -23,6 +24,8 @@ await shot("feed_light.png", "/", { theme: "light" });
 await shot("feed_1920.png", "/", { w: 1920, h: 1080 });
 await shot("section_cn.png", "/?section=cn");
 await shot("section_x.png", "/?section=x");
+await shot("section_ent.png", "/?section=ent");
+await shot("section_ent_light.png", "/?section=ent", { theme: "light" });
 const hover = async (pg) => { const c = pg.locator("[data-slot=card]").nth(2); await c.hover(); await pg.waitForSelector("[data-slot=hover-card-content]"); await pg.waitForTimeout(900); };
 await shot("hover_card.png", "/", { act: hover });
 await shot("hover_card_light.png", "/", { theme: "light", act: hover });

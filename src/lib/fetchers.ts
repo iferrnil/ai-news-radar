@@ -34,9 +34,31 @@ export async function fetchApi(src: Src): Promise<FetchedItem[]> {
   const r = await condGet(u, { Accept: "application/json" });
   if (r.status === 304) return [];
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const d = (await r.json()) as any;
+  // some endpoints are JSONP (e.g. 网易 data_callback([...])) — strip the wrapper
+  const raw = (await r.text()).trim().replace(/^[\w$.]+\(([\s\S]*)\)\s*;?$/, "$1");
+  const d = JSON.parse(raw) as any;
   const out: FetchedItem[] = [];
-  if (u.includes("hn.algolia.com")) {
+  if (u.includes("ent.163.com/special/")) {
+    // 网易娱乐 newsdata: time "MM/DD/YYYY HH:mm:ss" in Beijing time
+    for (const a of (Array.isArray(d) ? d : []) as any[]) {
+      if (!a.docurl || !a.title) continue;
+      const m = String(a.time ?? "").match(/(\d\d)\/(\d\d)\/(\d{4}) (\d\d):(\d\d):(\d\d)/);
+      const pub = m ? Date.parse(`${m[3]}-${m[1]}-${m[2]}T${m[4]}:${m[5]}:${m[6]}+08:00`) / 1000 : null;
+      out.push({ uid: normUrl(a.docurl), title: clean(a.title, 200), url: a.docurl, summary: (a.keywords ?? []).map((k: any) => k.keyname ?? k).filter(Boolean).join(" · "), published: pub, isX: false });
+    }
+  } else if (u.includes("api.bilibili.com/x/web-interface/popular")) {
+    for (const v of d.data?.list ?? []) {
+      const link = `https://www.bilibili.com/video/${v.bvid}`;
+      out.push({ uid: normUrl(link), title: clean(v.title, 200), url: link, summary: clean(`UP主 ${v.owner?.name ?? ""} · ${v.desc ?? ""}`), published: v.pubdate ?? null, isX: false, author: v.owner?.name });
+    }
+  } else if (u.includes("hotsearch/billboard/word")) {
+    // 抖音热搜: hot words only (no time) -> new entries are dated at fetch time; the first fetch is treated as backlog
+    for (const w of d.word_list ?? []) {
+      if (!w.word) continue;
+      const link = `https://www.douyin.com/search/${encodeURIComponent(w.word)}`;
+      out.push({ uid: `douyin:${w.word}`, title: w.word, url: link, summary: `抖音热搜 · 热度 ${w.hot_value ?? "?"}`, published: null, isX: false });
+    }
+  } else if (u.includes("hn.algolia.com")) {
     for (const h of d.hits ?? []) {
       const link = h.url || `https://news.ycombinator.com/item?id=${h.objectID}`;
       out.push({ uid: normUrl(link), title: h.title ?? "", url: link, isX: false, author: h.author,

@@ -1,6 +1,6 @@
 {
  "generated": "2026-10-10",
- "description": "Core 50 enabled (priority P0/P1/P2); the rest kept disabled for reference.",
+ "description": "Core list enabled (AI labs, 国内媒体, 国外媒体, X 快讯, 娱乐); dev section removed 2026-10-10; the rest kept disabled for reference.",
  "tiers": {
   "P0": {
    "x": 120,
@@ -602,13 +602,14 @@
    "type": "api",
    "url": "https://openrouter.ai/api/v1/models",
    "homepage": "https://openrouter.ai/models",
-   "enabled": true,
+   "enabled": false,
    "priority": "P0",
    "pollInterval": 300,
    "group": "开发与工具",
    "status": "works",
    "thirdParty": false,
-   "note": "JSON；按模型 id 去重即可发现新模型上线"
+   "note": "JSON；按模型 id 去重即可发现新模型上线",
+   "disabledReason": "removed 开发 section (2026-10-10)"
   },
   {
    "name": "Hugging Face Daily Papers API",
@@ -617,13 +618,14 @@
    "type": "api",
    "url": "https://huggingface.co/api/daily_papers",
    "homepage": "https://huggingface.co/papers",
-   "enabled": true,
+   "enabled": false,
    "priority": "P1",
    "pollInterval": 600,
    "group": "开发与工具",
    "status": "works",
    "thirdParty": false,
-   "note": "官方JSON（含upvotes、摘要），支持 ?limit= / ?date="
+   "note": "官方JSON（含upvotes、摘要），支持 ?limit= / ?date=",
+   "disabledReason": "removed 开发 section (2026-10-10)"
   },
   {
    "name": "hnrss newest points>=100",
@@ -632,13 +634,14 @@
    "type": "rss",
    "url": "https://hnrss.org/newest?points=100",
    "homepage": "https://news.ycombinator.com/",
-   "enabled": true,
+   "enabled": false,
    "priority": "P1",
    "pollInterval": 600,
    "group": "开发与工具",
    "status": "works",
    "thirdParty": true,
-   "note": "hnrss.org 第三方；HN ≥100 分"
+   "note": "hnrss.org 第三方；HN ≥100 分",
+   "disabledReason": "removed 开发 section (2026-10-10)"
   },
   {
    "name": "GitHub Releases anthropics/claude-code",
@@ -647,13 +650,14 @@
    "type": "rss",
    "url": "https://github.com/anthropics/claude-code/releases.atom",
    "homepage": "https://github.com/anthropics/claude-code/releases",
-   "enabled": true,
+   "enabled": false,
    "priority": "P1",
    "pollInterval": 600,
    "group": "开发与工具",
    "status": "works",
    "thirdParty": false,
-   "note": ""
+   "note": "",
+   "disabledReason": "removed 开发 section (2026-10-10)"
   },
   {
    "name": "GitHub Releases openai/codex",
@@ -662,13 +666,14 @@
    "type": "rss",
    "url": "https://github.com/openai/codex/releases.atom",
    "homepage": "https://github.com/openai/codex/releases",
-   "enabled": true,
+   "enabled": false,
    "priority": "P1",
    "pollInterval": 600,
    "group": "开发与工具",
    "status": "works",
    "thirdParty": false,
-   "note": ""
+   "note": "",
+   "disabledReason": "removed 开发 section (2026-10-10)"
   },
   {
    "name": "GitHub Releases ollama/ollama",
@@ -677,13 +682,14 @@
    "type": "rss",
    "url": "https://github.com/ollama/ollama/releases.atom",
    "homepage": "https://github.com/ollama/ollama/releases",
-   "enabled": true,
+   "enabled": false,
    "priority": "P2",
    "pollInterval": 1800,
    "group": "开发与工具",
    "status": "works",
    "thirdParty": false,
-   "note": ""
+   "note": "",
+   "disabledReason": "removed 开发 section (2026-10-10)"
   },
   {
    "name": "Cursor Changelog",
@@ -692,13 +698,14 @@
    "type": "rss",
    "url": "https://cursor.com/changelog/rss.xml",
    "homepage": "https://cursor.com/changelog",
-   "enabled": true,
+   "enabled": false,
    "priority": "P1",
    "pollInterval": 600,
    "group": "开发与工具",
    "status": "works",
    "thirdParty": false,
-   "note": ""
+   "note": "",
+   "disabledReason": "removed 开发 section (2026-10-10)"
   },
   {
    "name": "Techmeme",
@@ -3911,6 +3918,182 @@
    "thirdParty": true,
    "disabledReason": "trimmed to core 50",
    "note": "无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠"
+  },
+  {
+   "name": "TMZ",
+   "region": "global",
+   "category": "media",
+   "type": "rss",
+   "url": "https://www.tmz.com/rss.xml",
+   "homepage": "https://www.tmz.com",
+   "priority": "P1",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "Page Six",
+   "region": "global",
+   "category": "media",
+   "type": "rss",
+   "url": "https://pagesix.com/feed/",
+   "homepage": "https://pagesix.com",
+   "priority": "P1",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "E! News",
+   "region": "global",
+   "category": "media",
+   "type": "rss",
+   "url": "https://www.eonline.com/syndication/feeds/rssfeeds/topstories.xml",
+   "homepage": "https://www.eonline.com",
+   "priority": "P2",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "Just Jared",
+   "region": "global",
+   "category": "media",
+   "type": "rss",
+   "url": "https://www.justjared.com/feed/",
+   "homepage": "https://www.justjared.com",
+   "priority": "P2",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "Deadline",
+   "region": "global",
+   "category": "media",
+   "type": "rss",
+   "url": "https://deadline.com/feed/",
+   "homepage": "https://deadline.com",
+   "priority": "P2",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "Variety",
+   "region": "global",
+   "category": "media",
+   "type": "rss",
+   "url": "https://variety.com/feed/",
+   "homepage": "https://variety.com",
+   "priority": "P2",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "Bored Panda",
+   "region": "global",
+   "category": "media",
+   "type": "rss",
+   "url": "https://www.boredpanda.com/feed/",
+   "homepage": "https://www.boredpanda.com",
+   "priority": "P2",
+   "note": "funny/viral",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "UPI Odd News",
+   "region": "global",
+   "category": "media",
+   "type": "rss",
+   "url": "https://rss.upi.com/news/odd_news.rss",
+   "homepage": "https://www.upi.com/Odd_News/",
+   "priority": "P2",
+   "note": "funny/odd",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "网易娱乐",
+   "region": "cn",
+   "category": "media",
+   "type": "api",
+   "url": "https://ent.163.com/special/000380VU/newsdata_index.js",
+   "homepage": "https://ent.163.com",
+   "priority": "P1",
+   "note": "网易前端 JSONP 数据接口（非公开 API）",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "B站热门",
+   "region": "cn",
+   "category": "community",
+   "type": "api",
+   "url": "https://api.bilibili.com/x/web-interface/popular?ps=20",
+   "homepage": "https://www.bilibili.com/v/popular/all",
+   "priority": "P2",
+   "note": "bilibili web 接口（非公开 API）",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "抖音热搜",
+   "region": "cn",
+   "category": "community",
+   "type": "api",
+   "url": "https://www.iesdouyin.com/web/api/v2/hotsearch/billboard/word/",
+   "homepage": "https://www.douyin.com/hot",
+   "priority": "P1",
+   "note": "抖音 web 接口（非公开 API），只有热词无时间",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "X @PopBase",
+   "region": "global",
+   "category": "media",
+   "type": "x",
+   "username": "PopBase",
+   "url": "https://api.fxtwitter.com/2/profile/PopBase/statuses",
+   "homepage": "https://x.com/PopBase",
+   "priority": "P1",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "X @PopCrave",
+   "region": "global",
+   "category": "media",
+   "type": "x",
+   "username": "PopCrave",
+   "url": "https://api.fxtwitter.com/2/profile/PopCrave/statuses",
+   "homepage": "https://x.com/PopCrave",
+   "priority": "P1",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
+  },
+  {
+   "name": "X @DiscussingFilm",
+   "region": "global",
+   "category": "media",
+   "type": "x",
+   "username": "DiscussingFilm",
+   "url": "https://api.fxtwitter.com/2/profile/DiscussingFilm/statuses",
+   "homepage": "https://x.com/DiscussingFilm",
+   "priority": "P2",
+   "enabled": true,
+   "group": "娱乐",
+   "status": "works"
   }
  ]
 }

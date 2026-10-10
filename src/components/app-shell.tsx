@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BookOpen, ChevronRight, FileText, Code2, Command as CommandIcon, Database, ExternalLink, FlaskConical, Globe2, Inbox, Menu, Moon, Newspaper,
+  Activity, BookOpen, ChevronRight, Clapperboard, FileText, Command as CommandIcon, Database, ExternalLink, FlaskConical, Globe2, Inbox, Menu, Moon, Newspaper,
   Plus, Radio, Search, Sun,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,7 +25,7 @@ import { SECTIONS, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekTex
 import { SourceAvatar } from "./source-avatar";
 import { useFullItem } from "./item-preview";
 
-export const SEC_ICON: Record<SectionKey | "all", React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, dev: Code2, media: Newspaper, x: Twitter };
+export const SEC_ICON: Record<SectionKey | "all", React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
 
 type Ctx = {
   f: Filters; setF: (p: Partial<Filters>) => void;

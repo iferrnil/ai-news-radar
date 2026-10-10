@@ -3,7 +3,7 @@
 Guide for coding agents working in this repo. 中文 UI，代码与注释以英文为主。
 
 ## Purpose / 项目目的
-Real-time aggregator of domestic + international AI news for an AI content creator: ~50 curated sources (lab blogs & API changelogs, scoop/benchmark X accounts, key people, Chinese media, dev tooling, media/newsletters), polled by priority, pushed live to the browser via SSE. Only the last 48 h of items are kept.
+Real-time aggregator of domestic + international AI news for an AI content creator: ~57 curated sources (lab blogs & API changelogs, scoop/benchmark X accounts, key people, Chinese media, global media/newsletters, entertainment), polled by priority, pushed live to the browser via SSE. Only the last 48 h of items are kept.
 
 ## Stack
 - Next.js 16 (App Router) · TypeScript · React 19
@@ -25,7 +25,7 @@ src/lib/scheduler.ts     poll loop, limiters, pollOne
 src/instrumentation.ts   starts the scheduler once (nodejs runtime only)
 src/lib/docs-registry.ts DOCS array → sidebar "文档" group children, /docs index, ⌘K entries
 src/data/rate-limits.json + src/lib/rate-usage.ts   data for /docs/rate-limits and docs/rate-limits.md
-sources/sources.json     source catalog (core 50 enabled + disabled reference entries)
+sources/sources.json     source catalog (core list enabled + disabled reference entries; the 开发 section was removed 2026-10-10 (its sources disabled))
 docs/                    reports (sources.md, recommendations.md, x_vs_blog.md, rate-limits.md), screenshots/
 scripts/                 screenshots.mjs (playwright), gen-rate-limits-md.mts
 data/                    runtime SQLite (gitignored)
@@ -73,7 +73,7 @@ Restart prod after a build: stop the old `next start` process first (only one in
 2. Append `{ slug, title, desc, updated }` to `DOCS` in `src/lib/docs-registry.ts` — the sidebar group (collapsible, open state in localStorage `sidebar.docs.open`), the /docs index and ⌘K pick it up automatically.
 
 ## Feed filter model
-- `src/components/filters.ts`: ONE view at a time, chosen in the sidebar — 全部 / an exclusive section / a single source — plus an optional 仅 P0 toggle. **Sections are exclusive** (`sectionOf` in `common.ts`): every X post → `x`（X 快讯）; websites by seed `group` → 实验室 lab / 国内 cn / 开发 dev / 媒体 media. Section counts sum to 全部. New X sources need no group; new web sources should set `group`.
+- `src/components/filters.ts`: ONE view at a time, chosen in the sidebar — 全部 / an exclusive section / a single source — plus an optional 仅 P0 toggle. **Sections are exclusive, assigned per SOURCE** (`sectionOf` in `common.ts`): seed `group` wins → 实验室 lab / 国内媒体 cn / 国外媒体 media / 娱乐 ent (group `娱乐`, incl. entertainment X accounts like @PopBase); otherwise any X source → `x`（X 快讯）; otherwise region/category fallback. Section counts sum to 全部. There is no 开发 section any more.
 - State lives in the URL (`/?section=cn`, `/?section=x`, `/?source=12`, `&p0=1`); use `setF` / `navigate` from `useApp()`.
 - Feed loads the whole 48 h window once (`/api/items?limit=1000`) and filters client-side; sidebar counts come from it.
 - Layout: day headers + a grid of equal-size shadcn `Card`s (fixed height, clamped title/summary): 1 col → 2 at md → 3 at xl → 4 at ≥1600px. j/k/←/→ move in reading order; Enter opens the drawer.
@@ -110,3 +110,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - ❌ Don't run multiple server instances or a second poller against the same DB/IP.
 - ❌ Don't add scrape-only/HTML sources or invent feed URLs — verify by fetching.
 - ❌ Don't replace the design system or restyle components ad hoc; extend tokens instead.
+
+## Fonts
+
+- `src/app/layout.tsx`: Inter (Latin, OFL) + Noto Sans SC 400/500/600 (CJK, OFL, `preload: false`, unicode-range slices) + JetBrains Mono (times/numbers), all via `next/font/google` (self-hosted at build). `--font-sans` = Inter → Noto Sans SC → system CJK. Do not add HarmonyOS Sans / MiSans (non-OFL licenses).
