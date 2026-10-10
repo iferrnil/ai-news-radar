@@ -21,7 +21,7 @@ import { DOCS, docHref } from "@/lib/docs-registry";
 import { type Filters, countOf, parseFilters, toQuery } from "./filters";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
-import { SECTIONS, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, xText, REG, CAT } from "./common";
+import { SECTIONS, inAll, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, xText, REG, CAT } from "./common";
 import { SourceAvatar } from "./source-avatar";
 import { useFullItem } from "./item-preview";
 
@@ -116,7 +116,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const active = sources.filter((s) => s.enabled && s.supported);
   const feed = path === "/";
   const count = (section: Filters["section"]) => facet.length ? countOf(facet, { section, source: null, p0: f.p0 })
-    : active.filter((s) => !section || sectionOf({ ...s, is_x: s.type.startsWith("x") }) === section).reduce((a, s) => a + s.item_count, 0);
+    : active.filter((s) => { const k = sectionOf({ ...s, is_x: s.type.startsWith("x") }); return section ? k === section : inAll(k); }).reduce((a, s) => a + s.item_count, 0);
   const go = (p: Partial<Filters>) => { navigate({ section: "", source: null, ...p }); onNavigate?.(); };
   const on = (section: Filters["section"]) => feed && f.source == null && f.section === section;
   const errs = active.filter((s) => s.last_error).length;
@@ -135,7 +135,10 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         <div className="space-y-0.5 px-2.5 pb-3">
           <SectionLabel first>信息流</SectionLabel>
           <NavItem active={on("")} icon={Inbox} label="全部" count={count("")} onClick={() => go({})} />
-          {SECTIONS.map((s) => <NavItem key={s.key} active={on(s.key)} icon={SEC_ICON[s.key]} label={s.zh} count={count(s.key)} onClick={() => go({ section: s.key })} />)}
+          {SECTIONS.filter((s) => inAll(s.key)).map((s) => <NavItem key={s.key} active={on(s.key)} icon={SEC_ICON[s.key]} label={s.zh} count={count(s.key)} onClick={() => go({ section: s.key })} />)}
+          {/* sections outside 全部 (e.g. 娱乐) sit below a divider */}
+          <div className="mx-2 my-2 h-px bg-border" role="separator" title="不计入「全部」" />
+          {SECTIONS.filter((s) => !inAll(s.key)).map((s) => <NavItem key={s.key} active={on(s.key)} icon={SEC_ICON[s.key]} label={s.zh} count={count(s.key)} onClick={() => go({ section: s.key })} />)}
           <SectionLabel>管理</SectionLabel>
           <NavItem active={path === "/sources"} icon={Database} label="数据源" count={active.length} onClick={() => { router.push("/sources"); onNavigate?.(); }} />
           <DocsGroup path={path} onGo={(h) => { router.push(h); onNavigate?.(); }} />
@@ -183,7 +186,11 @@ function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: bool
   const [hits, setHits] = useState<ItemOut[]>([]);
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(async () => setHits(await api<ItemOut[]>(`/api/items?limit=12${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`)), 150);
+    const t = setTimeout(async () => {
+      // "最新" (no query) mirrors 全部 and skips 娱乐; a real search may still hit 娱乐 items (labelled)
+      const r = await api<ItemOut[]>(`/api/items?limit=${q.trim() ? 12 : 40}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`);
+      setHits(q.trim() ? r : r.filter((it) => inAll(sectionOf(it))).slice(0, 12));
+    }, 150);
     return () => clearTimeout(t);
   }, [q, open]);
   const run = (fn: () => void) => { onOpenChange(false); setQ(""); fn(); };
@@ -200,6 +207,7 @@ function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: bool
                 <CommandItem key={it.id} value={`item-${it.id}`} onSelect={() => run(() => setOpen(it))}>
                   <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} className="size-5" />
                   <span className="truncate">{it.is_x ? xText(it) : it.title}</span>
+                  {!inAll(sectionOf(it)) && <span className="shrink-0 rounded-[4px] px-1.5 text-[11px] leading-[18px] text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)]">{secZh(sectionOf(it))}</span>}
                   <CommandShortcut className="whitespace-nowrap tracking-normal">{ago(it.published, true)}</CommandShortcut>
                 </CommandItem>
               ))}

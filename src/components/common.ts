@@ -8,8 +8,10 @@ export const SECTIONS = [
   { key: "cn", zh: "国内媒体", en: "China media" },
   { key: "media", zh: "国外媒体", en: "Global media" },
   { key: "x", zh: "X 快讯", en: "X" },
-  { key: "ent", zh: "娱乐", en: "Entertainment" },
+  { key: "ent", zh: "娱乐", en: "Entertainment", includeInAll: false },
 ] as const;
+// includeInAll: false -> the section only shows in its own view; 全部 (feed, counts, P0 count, "N 条新内容", day headers) excludes it.
+export const inAll = (k: SectionKey) => (SECTIONS.find((s) => s.key === k) as { includeInAll?: boolean } | undefined)?.includeInAll !== false;
 export type SectionKey = (typeof SECTIONS)[number]["key"];
 
 const GRP: Record<string, SectionKey> = {

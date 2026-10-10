@@ -2,7 +2,7 @@
 //   view = "" (全部) | an exclusive section (lab/cn/dev/media/x — every item is in exactly one, all X posts are "x") | a single source.
 // Plus an optional P0-only toggle. State lives in the URL: /?section=cn | /?section=x | /?source=12 [&p0=1].
 import type { ItemOut } from "@/lib/types";
-import { type SectionKey, SECTIONS, sectionOf } from "./common";
+import { type SectionKey, SECTIONS, inAll, sectionOf } from "./common";
 
 export type View = "" | SectionKey;
 export type Filters = { section: View; source: number | null; p0: boolean };
@@ -10,7 +10,7 @@ export const EMPTY: Filters = { section: "", source: null, p0: false };
 
 export function passes(it: ItemOut, f: Filters) {
   if (f.source != null) { if (it.source_id !== f.source) return false; }
-  else if (f.section && sectionOf(it) !== f.section) return false;
+  else if (f.section ? sectionOf(it) !== f.section : !inAll(sectionOf(it))) return false; // 全部 skips includeInAll:false sections
   if (f.p0 && it.priority !== "P0") return false;
   return true;
 }
