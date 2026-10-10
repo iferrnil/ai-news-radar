@@ -59,7 +59,7 @@ export function seed(db: Database.Database) {
     enabled = CASE WHEN instr(overrides, 'enabled') THEN enabled ELSE @enabled END,
     priority = CASE WHEN instr(overrides, 'priority') THEN priority ELSE @priority END,
     poll_interval = CASE WHEN instr(overrides, 'poll_interval') OR instr(overrides, 'priority') THEN poll_interval ELSE @interval END,
-    url=@url, username=@username, grp=@grp
+    url=@url, username=@username, grp = CASE WHEN instr(overrides, 'grp') THEN grp ELSE @grp END
     WHERE id=@id AND origin='seed'`);
   const tx = db.transaction(() => {
     for (const s of data.sources) {

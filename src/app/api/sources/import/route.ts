@@ -17,7 +17,7 @@ const Body = z.object({
   dryRun: z.boolean().default(true),
   test: z.boolean().default(false),
 });
-const OV = "enabled,priority,poll_interval"; // imported settings are user overrides: seed sync must not revert them
+const OV = "enabled,priority,poll_interval,grp"; // imported settings (incl. section) are user overrides: seed sync must not revert them
 
 export async function POST(req: NextRequest) {
   const text = await req.text();
