@@ -21,6 +21,7 @@
 - **悬停预览**：鼠标停留在卡片上显示 Hover Card（全文、时间、原文链接），触屏设备自动关闭
 - **界面**：shadcn/ui 卡片网格、深浅色主题、⌘K 命令面板、J/K 键盘导航、已读变暗、移动端适配
 - **数据源管理**：启用/停用、调整间隔、立即抓取、按 URL / @用户名 / X 列表添加并预览
+- **导入 / 导出订阅**：JSON（完整设置，可再导入）与 OPML 2.0（兼容其他阅读器），导入前预览新增 / 已存在 / 无效
 - **站内文档**：`/docs/rate-limits` 列出各类源的官方限额与当前负载
 
 ## 截图
@@ -30,6 +31,7 @@
 | ![深色信息流](docs/screenshots/feed_dark.png) | ![浅色信息流](docs/screenshots/feed_light.png) |
 | ![详情抽屉](docs/screenshots/drawer.png) | ![数据源管理](docs/screenshots/sources_dark.png) |
 | ![悬停预览](docs/screenshots/hover_card.png) | ![悬停预览（浅色）](docs/screenshots/hover_card_light.png) |
+| ![导出菜单](docs/screenshots/sources_export.png) | ![导入预览](docs/screenshots/sources_import.png) |
 | ![抓取限制文档](docs/screenshots/docs_page.png) | <img src="docs/screenshots/feed_mobile.png" width="260" alt="移动端"> |
 
 ## 架构
@@ -113,6 +115,8 @@ npm run build && npm run start -- -p 3000
 - **取消订阅**：首页侧栏「订阅源」里，鼠标悬停某个来源（触屏常显）点 ⊖ → 确认即可，提示条里可「撤销」。来源只是停用而非删除，可在「数据源 › 停用」重新启用。
 - **删除来源**：「数据源」页每行 ⋯ 菜单 →「删除」，或勾选多行后「删除所选」；会同时删除该来源已保存的内容。内置源删除后会记为墓碑，重启/更新代码也不会再加回来；可在页面右上角「已删除的内置源」中恢复。
 - **更新代码（`git pull` / 重新构建镜像）不会覆盖你的选择**：启动时会用 `sources.json` 同步内置源，但只会新增新的内置源、更新 URL/分组；你在界面上改过的启用状态、频率、优先级会记录为用户覆盖，始终以你的设置为准。
+- **导出**：「数据源」页右上角「导出」→ 选范围（全部 / 仅启用 / 当前筛选 / 已选中）→ JSON 或 OPML。文件名形如 `ai-news-radar-sources-20261011-0030.json`，只含来源设置（名称、类型、URL 或 X 用户名、分区、优先级、频率、启用状态、主页），不含内容和任何密钥。OPML 中 RSS/Atom 是标准 `type="rss"` 条目（按分区分文件夹）；X 账号/列表以自定义 `type="x"` / `type="x_list"` 写入，其他阅读器会忽略，本应用可再导入。
+- **导入**：「导入」→ 拖放或选择文件（≤ 1 MB；本应用 JSON 或任意阅读器的 OPML）→ 预览每一行是 新增 / 已存在（按规范化 URL 或 X 用户名匹配）/ 无效。三种方式：**合并（跳过已存在）**（默认）、**合并并更新已存在的设置**、**覆盖**（删除本地不在文件中的源及其内容，需二次确认）。OPML 的分区按条目 `category` 或所在文件夹名匹配分区名，否则用所选默认分区（默认「国外媒体」）。可勾选「导入后测试抓取新来源」。导入的设置记为用户覆盖，重启/更新不会被还原；文件里有已删除的内置源时会自动恢复。只接受 http(s) URL。
 - **新的源类型**：见 [AGENTS.md](AGENTS.md)「Adding a new source type」。只接受有 RSS/Atom 或 JSON API 的源，不做 HTML 爬取。
 
 ## 数据保留与资源

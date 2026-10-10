@@ -1,13 +1,23 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileUp, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import dynamic from "next/dynamic";
+import { buildJson, buildOpml, exportFileName, type ExportSource } from "@/lib/portable";
+
+const ImportDialog = dynamic(() => import("./import-dialog"), { ssr: false });
+
+function download(name: string, text: string, mime: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: name }); document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -160,6 +170,18 @@ export default function Sources() {
   };
   const toggleSel = (id: number, on: boolean) => setSel((cur) => { const n = new Set(cur); if (on) n.add(id); else n.delete(id); return n; });
   const allSel = view.length > 0 && view.every((s) => sel.has(s.id));
+  const [impOpen, setImpOpen] = useState(false);
+  const [scope, setScope] = useState<"all" | "enabled" | "view" | "sel">("all");
+  const doExport = (fmt: "json" | "opml") => {
+    const base = scope === "enabled" ? rows.filter((r) => r.enabled) : scope === "view" ? view : scope === "sel" ? rows.filter((r) => sel.has(r.id)) : rows;
+    const list: ExportSource[] = base.filter((r) => r.type !== "html").map((r) => ({ ...r, section: sectionOf(r) }));
+    if (!list.length) { toast.error("没有可导出的来源"); return; }
+    const d = new Date();
+    if (fmt === "json") download(exportFileName("json", d), buildJson(list, d), "application/json");
+    else download(exportFileName("opml", d), buildOpml(list, d), "text/x-opml");
+    const nx = list.filter((r) => r.type.startsWith("x")).length;
+    toast.success(`已导出 ${list.length} 个来源`, { description: fmt === "opml" && nx ? `${nx} 个 X 来源以自定义 type="x" 写入，其他阅读器会忽略它们` : undefined });
+  };
   const stats = [["在线来源", nAct], ["报错", nErr], ["48h 条目", nItems], ["目录总数", rows.length]] as const;
 
   return (
@@ -171,6 +193,27 @@ export default function Sources() {
         </div>
         <div className="flex items-center gap-2">
           {deleted.length > 0 && <Button variant="outline" onClick={() => setRestoreOpen(true)}><RotateCcw />已删除的内置源 · {deleted.length}</Button>}
+          <Button variant="outline" onClick={() => setImpOpen(true)}><FileUp />导入</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}><Download />导出</DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>范围</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={scope} onValueChange={(v) => setScope(v as typeof scope)}>
+                  <DropdownMenuRadioItem value="all" closeOnClick={false}>全部来源 · {rows.length}</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="enabled" closeOnClick={false}>仅启用 · {rows.filter((r) => r.enabled).length}</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="view" closeOnClick={false}>当前筛选 · {view.length}</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="sel" closeOnClick={false} disabled={sel.size === 0}>已选中 · {sel.size}</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>格式</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => doExport("json")}>JSON（完整设置，可再导入）</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => doExport("opml")}>OPML 2.0（通用阅读器）</DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button onClick={() => setAddOpen(true)}><Plus />添加数据源</Button>
         </div>
       </div>
@@ -305,6 +348,7 @@ export default function Sources() {
           <DialogFooter><Button variant="outline" disabled={!deleted.length} onClick={() => restore("all")}>全部恢复</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+      {impOpen && <ImportDialog open={impOpen} onOpenChange={setImpOpen} onDone={reloadSources} />}
     </div>
   );
 }
