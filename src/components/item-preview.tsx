@@ -41,29 +41,29 @@ export function ItemPreview({ it: base }: { it: ItemOut }) {
       <div className="flex items-center gap-2.5 border-b border-border/60 px-4 py-3">
         <SourceAvatar name={it!.source} username={h} homepage={it!.homepage} url={it!.url} x={x} className="size-7" />
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="flex items-center gap-1.5 text-[13px] font-medium">
+          <div className="flex items-center gap-1.5 type-body font-medium">
             <span className="truncate">{x ? srcName(it!).replace(/^@/, "") : it!.source}</span>
             {x && <Twitter className="size-2.5 shrink-0 text-faint" />}
-            {it!.priority === "P0" && <span className="rounded-[4px] bg-brand-soft px-1 font-mono text-[10px] font-semibold leading-4 text-brand">P0</span>}
+            {it!.priority === "P0" && <span className="rounded-[4px] bg-brand-soft px-1 font-mono type-2xs font-semibold leading-4 text-brand">P0</span>}
           </div>
-          <div className="mt-0.5 truncate text-[11.5px] tabular-nums text-faint">{x ? `@${h} · ` : ""}{bjFull(it!.published)} · {ago(it!.published)}</div>
+          <div className="mt-0.5 truncate type-meta tabular-nums text-faint">{x ? `@${h} · ` : ""}{bjFull(it!.published)} · {ago(it!.published)}</div>
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        {!x && <h4 className="break-words text-[14.5px] font-semibold leading-[1.5] tracking-[-0.008em] [overflow-wrap:anywhere]">{it!.title}</h4>}
+        {!x && <h4 className="break-words type-ui font-semibold leading-[1.5] tracking-[-0.008em] [overflow-wrap:anywhere]">{it!.title}</h4>}
         {it!.image && <img src={it!.image} alt="" referrerPolicy="no-referrer" className="mt-2 max-h-[300px] w-full rounded-md bg-muted object-contain" />}
-        {body && <p className={x ? "whitespace-pre-wrap break-words text-[13.5px] leading-[1.7] text-foreground/90 [overflow-wrap:anywhere]" : "mt-1.5 whitespace-pre-wrap break-words text-[13px] leading-[1.7] text-muted-foreground [overflow-wrap:anywhere]"}>{body}</p>}
+        {body && <p className={x ? "whitespace-pre-wrap break-words type-body leading-[1.7] text-foreground/90 [overflow-wrap:anywhere]" : "mt-1.5 whitespace-pre-wrap break-words type-body leading-[1.7] text-muted-foreground [overflow-wrap:anywhere]"}>{body}</p>}
         {loading && <div className="mt-2 space-y-1.5"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-11/12" /><Skeleton className="h-3 w-2/3" /></div>}
-        {!body && !loading && !x && <p className="mt-1.5 text-[12.5px] text-faint">该来源未提供摘要</p>}
+        {!body && !loading && !x && <p className="mt-1.5 type-caption text-faint">该来源未提供摘要</p>}
         {it!.orig && <Original o={it!.orig} x={x} />}
         {it!.also_on_x.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted-foreground">
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 type-meta text-muted-foreground">
             <span className="inline-flex items-center gap-1 rounded-[4px] bg-secondary px-1.5 leading-[18px]"><Twitter className="size-2" />也在 X</span>
             {it!.also_on_x.slice(0, 4).map((a) => <span key={a.url}>@{a.author}</span>)}
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2 border-t border-border/60 px-4 py-2.5 text-[11.5px] text-faint">
+      <div className="flex items-center gap-2 border-t border-border/60 px-4 py-2.5 type-meta text-faint">
         <span className="rounded-[4px] px-1.5 leading-[18px] shadow-[inset_0_0_0_1px_var(--border)]">{secZh(sectionOf(it!))}</span>
         <span className="flex items-center gap-1"><MousePointerClick className="size-3" strokeWidth={1.75} />点击查看详情</span>
         <a href={it!.url} target="_blank" rel="noopener" className="ml-auto flex items-center gap-0.5 font-medium text-brand hover:underline">原文<ArrowUpRight className="size-3.5" strokeWidth={1.75} /></a>
@@ -73,16 +73,16 @@ export function ItemPreview({ it: base }: { it: ItemOut }) {
 }
 
 export function TrBadge({ className = "" }: { className?: string }) {
-  return <span title="DeepSeek 机器翻译" className={`shrink-0 rounded-[4px] bg-secondary px-1 text-[10px] font-medium leading-4 text-muted-foreground ${className}`}>译</span>;
+  return <span title="DeepSeek 机器翻译" className={`shrink-0 rounded-[4px] bg-secondary px-1 type-2xs font-medium leading-4 text-muted-foreground ${className}`}>译</span>;
 }
 /** Original (untranslated) text, shown under a translated item in the hover card and drawer. */
 export function Original({ o, x }: { o: { title: string; summary: string }; x: boolean }) {
   const body = x ? o.summary || o.title : dekText(o.summary);
   return (
     <div className="mt-3 border-t border-dashed border-border/70 pt-2.5">
-      <div className="mb-1 text-[11px] font-medium text-faint">原文</div>
-      {!x && <div className="break-words text-[13px] font-medium leading-[1.5] text-foreground/80 [overflow-wrap:anywhere]">{o.title}</div>}
-      {body && <p className="mt-1 whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-muted-foreground [overflow-wrap:anywhere]">{body}</p>}
+      <div className="mb-1 type-meta font-medium text-faint">原文</div>
+      {!x && <div className="break-words type-body font-medium leading-[1.5] text-foreground/80 [overflow-wrap:anywhere]">{o.title}</div>}
+      {body && <p className="mt-1 whitespace-pre-wrap break-words type-caption leading-[1.65] text-muted-foreground [overflow-wrap:anywhere]">{body}</p>}
     </div>
   );
 }

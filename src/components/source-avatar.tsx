@@ -9,7 +9,7 @@ export function SourceAvatar({ name, username, homepage, url, className, x }: { 
   return (
     <Avatar className={cn("size-8 shrink-0", !x && "rounded-md after:rounded-md", className)}>
       <AvatarImage src={avatarUrl({ username, homepage, url })} alt="" className={cn(!x && "rounded-md bg-white p-[3px]")} />
-      <AvatarFallback className={cn("text-[11px] font-semibold text-white", !x && "rounded-md")} style={{ background: `oklch(0.6 0.14 ${hue})` }}>{initial(name)}</AvatarFallback>
+      <AvatarFallback className={cn("type-meta font-semibold text-white", !x && "rounded-md")} style={{ background: `oklch(0.6 0.14 ${hue})` }}>{initial(name)}</AvatarFallback>
     </Avatar>
   );
 }

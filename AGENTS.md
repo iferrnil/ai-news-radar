@@ -156,3 +156,8 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## Offline-friendly build (China mainland)
 - Fonts come from `@fontsource-variable/{inter,jetbrains-mono} + lxgw-wenkai-webfont (Regular + Medium as weight 700; semibold titles resolve to it)` imported in `app/layout.tsx`; CSS vars `--font-latin/--font-cjk/--font-mono-face` are set in `globals.css`. Never reintroduce `next/font/google` — the build must not touch Google.
 - Compose builds `ai-news-radar:local` with `pull_policy: build`; build args `NPM_REGISTRY`, `APT_MIRROR`.
+
+## Type scale (WenKai + Inter)
+- Tokens in `globals.css` `@theme`, used via `@utility type-*` classes: `type-2xs` 10.5 · `type-meta` 11.5 · `type-caption` 12.5 · `type-body` 13.5 · `type-ui` 14.5 · `type-title` 15 · `type-h3` 18 · `type-h1` 22 (each with its own line-height). Use these instead of `text-[Npx]`; shadcn primitives keep Tailwind's `text-xs/sm/base`.
+- They are named `type-*`, not `text-*`, on purpose: `cn()` would treat unknown `text-*` classes as colours and drop them. Leading utilities (`leading-*`) still override the token line-height.
+- Latin uses "Inter Adj" (`@font-face` over the @fontsource files with `size-adjust: 94%`) so it sits level with 霞鹜文楷. `font-synthesis: none` globally — WenKai has only Regular (400) + Medium (registered as 700); `font-medium` renders Regular, `font-semibold` renders the real Medium face, never a faux bold.

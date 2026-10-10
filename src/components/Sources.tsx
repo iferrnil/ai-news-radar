@@ -85,25 +85,25 @@ function AddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChang
             <div className="grid min-w-0 gap-1.5"><Label>分区</Label>{sel("section", SECTIONS.map((x) => [x.key, x.zh]))}</div>
             <div className="grid min-w-0 gap-1.5"><Label>优先级</Label>{sel("priority", [["P0", "P0"], ["P1", "P1"], ["P2", "P2"]])}</div>
           </div>
-          {err && <div className="flex gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[13px] text-red-600 dark:text-red-400"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{err}</div>}
+          {err && <div className="flex gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 type-body text-red-600 dark:text-red-400"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{err}</div>}
           {res && (
             <div className="min-w-0 overflow-hidden rounded-lg border bg-muted/30">
               <div className="flex items-start gap-2 border-b p-3">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" />
-                <div className="min-w-0 flex-1 text-[13px]">
+                <div className="min-w-0 flex-1 type-body">
                   <div className="flex min-w-0 items-center gap-1 font-medium"><span className="truncate">{res.name}</span><Badge variant="secondary" className="ml-1 shrink-0">{TYPE[res.type]}</Badge></div>
                   <div className="break-all text-muted-foreground">{res.url} · {res.count} 条</div>
                 </div>
               </div>
               {res.overlap >= 0.5 && (
-                <div className="flex items-start gap-2 border-b bg-amber-500/10 p-3 text-[13px] text-amber-700 dark:text-amber-300">
+                <div className="flex items-start gap-2 border-b bg-amber-500/10 p-3 type-body text-amber-700 dark:text-amber-300">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   <div className="flex-1">疑似重复：{Math.round(res.overlap * 100)}% 的示例标题已被现有来源收录。
                     <label className="mt-1.5 flex items-center gap-2"><Checkbox checked={form.force} onCheckedChange={(v) => setForm({ ...form, force: !!v })} />仍然添加</label>
                   </div>
                 </div>
               )}
-              <ul className="max-h-48 min-w-0 space-y-1.5 overflow-y-auto overflow-x-hidden p-3 text-[12.5px]">
+              <ul className="max-h-48 min-w-0 space-y-1.5 overflow-y-auto overflow-x-hidden p-3 type-caption">
                 {res.sample.map((s, i) => <li key={i} className="flex min-w-0 gap-2"><span className="shrink-0 font-mono text-muted-foreground">{bj(s.published)}</span><span className="min-w-0 flex-1 truncate" title={s.title}>{s.title}</span></li>)}
               </ul>
             </div>
@@ -166,8 +166,8 @@ export default function Sources() {
     <div className="mx-auto w-full max-w-[1200px] px-3 pb-20 pt-6 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-tight">数据源</h1>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">启用/停用、调整抓取频率、立即抓取，或添加新的 RSS / X 账号 / X 列表。</p>
+          <h1 className="type-h1 font-semibold tracking-tight">数据源</h1>
+          <p className="mt-0.5 type-body text-muted-foreground">启用/停用、调整抓取频率、立即抓取，或添加新的 RSS / X 账号 / X 列表。</p>
         </div>
         <div className="flex items-center gap-2">
           {deleted.length > 0 && <Button variant="outline" onClick={() => setRestoreOpen(true)}><RotateCcw />已删除的内置源 · {deleted.length}</Button>}
@@ -177,8 +177,8 @@ export default function Sources() {
       <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-border shadow-card sm:grid-cols-4">
         {stats.map(([l, v]) => (
           <div key={l} className="bg-card px-4 py-3">
-            <div className="text-[12px] text-faint">{l}</div>
-            <div className={cn("mt-0.5 text-[22px] font-semibold tabular-nums tracking-tight", l === "报错" && v ? "text-red-500" : "")}>{v}</div>
+            <div className="type-caption text-faint">{l}</div>
+            <div className={cn("mt-0.5 type-h1 font-semibold tabular-nums tracking-tight", l === "报错" && v ? "text-red-500" : "")}>{v}</div>
           </div>
         ))}
       </div>
@@ -203,13 +203,13 @@ export default function Sources() {
           <SelectContent><SelectItem value="all">全部类型</SelectItem>{Object.entries(TYPE).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
         </Select>
         {sel.size > 0 && <Button size="sm" variant="destructive" onClick={() => setToDel(rows.filter((r) => sel.has(r.id)))}><Trash2 />删除所选 · {sel.size}</Button>}
-        <span className="ml-auto font-mono text-[12px] text-muted-foreground">{view.length} / {rows.length}</span>
+        <span className="ml-auto font-mono type-caption text-muted-foreground">{view.length} / {rows.length}</span>
       </div>
 
       <div className="mt-3 overflow-hidden rounded-xl bg-card shadow-card">
         <Table>
           <TableHeader>
-            <TableRow className="hover:bg-transparent [&>th]:h-9 [&>th]:text-[12px] [&>th]:font-medium [&>th]:text-faint">
+            <TableRow className="hover:bg-transparent [&>th]:h-9 [&>th]:type-caption [&>th]:font-medium [&>th]:text-faint">
               <TableHead className="w-8 pl-4"><Checkbox aria-label="全选当前列表" checked={allSel} onCheckedChange={(v) => setSel(v ? new Set(view.map((x) => x.id)) : new Set())} /></TableHead>
               <TableHead className="w-12">启用</TableHead>
               <TableHead>来源</TableHead>
@@ -235,22 +235,22 @@ export default function Sources() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate font-medium">{s.name}</span>
-                        {s.priority && <span className={cn("rounded-[5px] px-1.5 py-px font-mono text-[10px] font-medium leading-4", s.priority === "P0" ? "bg-brand-soft text-brand" : "text-faint shadow-[inset_0_0_0_1px_var(--border)]")}>{s.priority}</span>}
-                        {s.origin === "user" && <Badge variant="secondary" className="h-4.5 px-1.5 text-[10px]">手动</Badge>}
+                        {s.priority && <span className={cn("rounded-[5px] px-1.5 py-px font-mono type-2xs font-medium leading-4", s.priority === "P0" ? "bg-brand-soft text-brand" : "text-faint shadow-[inset_0_0_0_1px_var(--border)]")}>{s.priority}</span>}
+                        {s.origin === "user" && <Badge variant="secondary" className="h-4.5 px-1.5 type-2xs">手动</Badge>}
                       </div>
-                      <div className="truncate text-[12px] text-faint">{TYPE[s.type] ?? s.type} · {s.url.replace(/^https?:\/\//, "")}</div>
+                      <div className="truncate type-caption text-faint">{TYPE[s.type] ?? s.type} · {s.url.replace(/^https?:\/\//, "")}</div>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="hidden text-[13px] text-muted-foreground md:table-cell">{secZh(sectionOf({ ...s, is_x: s.type.startsWith("x") }))}</TableCell>
+                <TableCell className="hidden type-body text-muted-foreground md:table-cell">{secZh(sectionOf({ ...s, is_x: s.type.startsWith("x") }))}</TableCell>
                 <TableCell className="hidden sm:table-cell">
                   {s.supported ? (
                     <Select value={String(s.poll_interval)} onValueChange={(v) => patch(s, { poll_interval: Number(v) }, `${s.name} 改为每 ${ivLabel(Number(v))}`)}>
-                      <SelectTrigger size="sm" className="h-7 w-[104px] text-[12.5px]"><SelectValue>{(v: string) => `每 ${ivLabel(Number(v))}`}</SelectValue></SelectTrigger>
+                      <SelectTrigger size="sm" className="h-7 w-[104px] type-caption"><SelectValue>{(v: string) => `每 ${ivLabel(Number(v))}`}</SelectValue></SelectTrigger>
                       <SelectContent>{[...new Set([...IV, s.poll_interval])].sort((a, b) => a - b).map((v) => <SelectItem key={v} value={String(v)}>每 {ivLabel(v)}</SelectItem>)}</SelectContent>
                     </Select>) : <span className="text-muted-foreground">—</span>}
                 </TableCell>
-                <TableCell className="hidden font-mono text-[12px] text-muted-foreground lg:table-cell" title={bj(s.last_fetched)}>{ago(s.last_fetched)}</TableCell>
+                <TableCell className="hidden font-mono type-caption text-muted-foreground lg:table-cell" title={bj(s.last_fetched)}>{ago(s.last_fetched)}</TableCell>
                 <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">{s.item_count}</TableCell>
                 <TableCell><StatusBadge s={s} /></TableCell>
                 <TableCell className="pr-3">
@@ -268,7 +268,7 @@ export default function Sources() {
                 </TableCell>
               </TableRow>
             ))}
-            {rows.length > 0 && view.length === 0 && <TableRow><TableCell colSpan={9} className="py-16 text-center"><div className="text-[13px] font-medium">没有匹配的来源</div><div className="mt-1 text-[12px] text-faint">调整搜索词或筛选条件后重试</div></TableCell></TableRow>}
+            {rows.length > 0 && view.length === 0 && <TableRow><TableCell colSpan={9} className="py-16 text-center"><div className="type-body font-medium">没有匹配的来源</div><div className="mt-1 type-caption text-faint">调整搜索词或筛选条件后重试</div></TableCell></TableRow>}
           </TableBody>
         </Table>
       </div>
@@ -294,13 +294,13 @@ export default function Sources() {
           <DialogHeader><DialogTitle>已删除的内置源</DialogTitle><DialogDescription>恢复后按 sources.json 的默认设置重新加入并开始抓取。</DialogDescription></DialogHeader>
           <ul className="max-h-72 min-w-0 divide-y divide-border/60 overflow-y-auto rounded-lg border">
             {deleted.map((d) => (
-              <li key={d.name} className="flex min-w-0 items-center gap-2 px-3 py-2 text-[13px]">
+              <li key={d.name} className="flex min-w-0 items-center gap-2 px-3 py-2 type-body">
                 <span className="min-w-0 flex-1 truncate">{d.name}</span>
-                <span className="shrink-0 font-mono text-[11px] text-faint">{ago(d.ts, true)}</span>
+                <span className="shrink-0 font-mono type-meta text-faint">{ago(d.ts, true)}</span>
                 <Button size="sm" variant="ghost" onClick={() => restore([d.name])}><RotateCcw />恢复</Button>
               </li>
             ))}
-            {deleted.length === 0 && <li className="px-3 py-6 text-center text-[13px] text-faint">没有已删除的内置源</li>}
+            {deleted.length === 0 && <li className="px-3 py-6 text-center type-body text-faint">没有已删除的内置源</li>}
           </ul>
           <DialogFooter><Button variant="outline" disabled={!deleted.length} onClick={() => restore("all")}>全部恢复</Button></DialogFooter>
         </DialogContent>

@@ -75,8 +75,39 @@
   --glow: radial-gradient(1000px 460px at 35% -200px, oklch(0.55 0.14 282 / 0.16), transparent 70%), radial-gradient(600px 320px at 95% -120px, oklch(0.6 0.08 230 / 0.06), transparent 70%);
 }
 
+/* Inter, size-adjusted so Latin sits optically level with 霞鹜文楷 at the same px (Inter's large x-height
+   otherwise makes mixed CJK+Latin lines look uneven). Files come from @fontsource-variable/inter. */
+@font-face { font-family: "Inter Adj"; font-style: normal; font-weight: 100 900; font-display: swap; size-adjust: 94%;
+  src: url("../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter Adj"; font-style: normal; font-weight: 100 900; font-display: swap; size-adjust: 94%;
+  src: url("../../node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
+/* Type scale utilities: `type-*` (not `text-*`) so the class merger never mistakes them for colours */
+@utility type-2xs { font-size: var(--text-2xs); line-height: var(--tw-leading, var(--text-2xs--line-height)); }
+@utility type-meta { font-size: var(--text-meta); line-height: var(--tw-leading, var(--text-meta--line-height)); }
+@utility type-caption { font-size: var(--text-caption); line-height: var(--tw-leading, var(--text-caption--line-height)); }
+@utility type-body { font-size: var(--text-body); line-height: var(--tw-leading, var(--text-body--line-height)); }
+@utility type-ui { font-size: var(--text-ui); line-height: var(--tw-leading, var(--text-ui--line-height)); }
+@utility type-title { font-size: var(--text-title); line-height: var(--tw-leading, var(--text-title--line-height)); }
+@utility type-h3 { font-size: var(--text-h3); line-height: var(--tw-leading, var(--text-h3--line-height)); }
+@utility type-h1 { font-size: var(--text-h1); line-height: var(--tw-leading, var(--text-h1--line-height)); }
+
+@theme {
+  /* Type scale tuned for 霞鹜文楷 + Inter (kai reads ~0.5px smaller than a grotesque) */
+  --text-2xs: 10.5px;   --text-2xs--line-height: 1.4;   /* badges, kbd, tiny counts */
+  --text-meta: 11.5px;  --text-meta--line-height: 1.45; /* times, footers, section labels */
+  --text-caption: 12.5px; --text-caption--line-height: 1.5; /* source names, sidebar rows, day headers */
+  --text-body: 13.5px;  --text-body--line-height: 1.65; /* summaries, table cells, drawer body */
+  --text-ui: 14.5px;    --text-ui--line-height: 1.55;   /* top-bar title, tweet text, dialog text */
+  --text-title: 15px;   --text-title--line-height: 1.5; /* card titles */
+  --text-h3: 18px;      --text-h3--line-height: 1.45;   /* drawer title, docs h2 */
+  --text-h1: 22px;      --text-h1--line-height: 1.35;   /* page headings */
+}
+
 @theme inline {
-  --font-latin: "Inter Variable";
+  --font-latin: "Inter Adj";
   --font-cjk: "LXGW WenKai";
   --font-mono-face: "JetBrains Mono Variable";
   --font-sans: var(--font-latin), var(--font-cjk), "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -125,7 +156,7 @@
 
 @layer base {
   * { @apply border-border outline-ring/50; }
-  html { @apply font-sans; }
+  html { @apply font-sans; font-synthesis: none; } /* WenKai ships Regular+Medium only; never fake bold/italic */
   body { @apply bg-background text-foreground antialiased; font-feature-settings: "cv11", "ss01", "ss03"; font-optical-sizing: auto; text-rendering: optimizeLegibility; }
   time, .font-mono, kbd { font-variant-numeric: tabular-nums; }
   h1, h2, h3 { text-wrap: balance; }

@@ -62,17 +62,17 @@ function TranslateMenu() {
       <PopoverTrigger render={<Button variant="ghost" size="icon" aria-label="翻译设置" className={zh ? "text-brand" : ""} />}><Languages className="size-4" /></PopoverTrigger>
       <PopoverContent align="end" className="w-[300px] gap-0 p-0">
         <label className="flex cursor-pointer items-start gap-3 p-3.5">
-          <div className="flex-1"><div className="text-[13px] font-medium">翻译成中文</div><div className="mt-0.5 text-[12px] leading-snug text-muted-foreground">显示外文内容的中文译文（标「译」），悬停卡片和详情里可看原文。</div></div>
+          <div className="flex-1"><div className="type-body font-medium">翻译成中文</div><div className="mt-0.5 type-caption leading-snug text-muted-foreground">显示外文内容的中文译文（标「译」），悬停卡片和详情里可看原文。</div></div>
           <Switch checked={zh} onCheckedChange={(v) => setZh(!!v)} aria-label="翻译成中文" />
         </label>
         <div className="border-t border-border/60" />
         <label className="flex cursor-pointer items-start gap-3 p-3.5">
           <div className="flex-1">
-            <div className="text-[13px] font-medium">抓取时翻译（DeepSeek）</div>
-            <div className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+            <div className="type-body font-medium">抓取时翻译（DeepSeek）</div>
+            <div className="mt-0.5 type-caption leading-snug text-muted-foreground">
               {!st ? "读取中…" : !st.available ? "未配置 DEEPSEEK_API_KEY，翻译不可用。" : `新外文条目自动翻译标题与摘要 · 已译 ${st.done}（缓存 ${st.cached}）· 排队 ${st.queued}${st.failed ? ` · 失败 ${st.failed}` : ""}`}
             </div>
-            {st?.lastError && <div className="mt-1 text-[11.5px] text-red-500">{st.lastError}</div>}
+            {st?.lastError && <div className="mt-1 type-meta text-red-500">{st.lastError}</div>}
           </div>
           <Switch checked={!!st?.enabled} disabled={!st?.available} onCheckedChange={(v) => setServer(!!v)} aria-label="抓取时翻译" />
         </label>
@@ -99,10 +99,10 @@ function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo
   return (
     <>
     <div className={cn("group/src relative flex h-7 items-center rounded-md transition-colors duration-150 ease-out", active ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground", confirm && "bg-hover text-foreground")}>
-      <button onClick={onGo} title={s.last_error ?? s.name} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+      <button onClick={onGo} title={s.last_error ?? s.name} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 type-caption outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
         <StatusDot s={s} />
         <span className="flex-1 truncate text-left">{label}</span>
-        <span className={cn("font-mono text-[11px] tabular-nums text-faint transition-opacity duration-150 group-hover/src:opacity-0 group-focus-within/src:opacity-0 [@media(hover:none)]:hidden", confirm && "opacity-0")}>{s.item_count || ""}</span>
+        <span className={cn("font-mono type-meta tabular-nums text-faint transition-opacity duration-150 group-hover/src:opacity-0 group-focus-within/src:opacity-0 [@media(hover:none)]:hidden", confirm && "opacity-0")}>{s.item_count || ""}</span>
       </button>
       <button aria-label={`取消订阅 ${label}`} title="取消订阅" aria-expanded={confirm} onClick={() => setConfirm((v) => !v)}
         className={cn("absolute right-1 grid size-5 place-items-center rounded text-faint opacity-0 outline-none transition-[opacity,color,background-color] duration-150 hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/src:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:mr-1 [@media(hover:none)]:opacity-100", confirm && "text-red-500 opacity-100")}>
@@ -112,7 +112,7 @@ function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo
     {/* inline confirm inside the sidebar, so nothing covers the feed */}
     {confirm && (
       <div role="alertdialog" aria-label={`确认取消订阅 ${label}`} onKeyDown={(e) => e.key === "Escape" && setConfirm(false)}
-        className="mx-0.5 mb-1 mt-0.5 rounded-lg bg-popover p-2.5 text-[12px] leading-snug shadow-card ring-1 ring-border animate-in fade-in-0 slide-in-from-top-1 duration-150">
+        className="mx-0.5 mb-1 mt-0.5 rounded-lg bg-popover p-2.5 type-caption leading-snug shadow-card ring-1 ring-border animate-in fade-in-0 slide-in-from-top-1 duration-150">
         <div className="font-medium text-foreground">取消订阅「{label}」？</div>
         <div className="mt-1 text-muted-foreground">停止抓取并隐藏内容，可在「数据源」页重新启用。</div>
         <div className="mt-2 flex justify-end gap-1.5">
@@ -144,18 +144,18 @@ export function StatusDot({ s }: { s: Pick<SourceRow, "enabled" | "supported" | 
 
 function NavItem({ active, icon: Icon, label, count, onClick }: { active: boolean; icon: React.ElementType; label: string; count?: number; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={cn("group relative flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium tracking-[-0.005em] transition-colors duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+    <button onClick={onClick} className={cn("group relative flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 type-body font-medium tracking-[-0.005em] transition-colors duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
       active ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : "text-muted-foreground hover:bg-hover hover:text-foreground", !active && count === 0 && "opacity-60")}>
       {active && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
       <Icon strokeWidth={1.75} className={cn("size-4 transition-colors duration-150 ease-out", active ? "text-brand" : "text-faint group-hover:text-foreground")} />
       <span className="flex-1 text-left">{label}</span>
-      {count != null && <span className={cn("font-mono text-[11px] tabular-nums", count === 0 ? "text-faint/60" : "text-faint")}>{count}</span>}
+      {count != null && <span className={cn("font-mono type-meta tabular-nums", count === 0 ? "text-faint/60" : "text-faint")}>{count}</span>}
     </button>
   );
 }
 
 function SectionLabel({ children, first }: { children: React.ReactNode; first?: boolean }) {
-  return <div className={cn("flex h-6 items-center px-2 text-[11px] font-medium tracking-[0.04em] text-faint", first ? "mt-1" : "mt-4")}>{children}</div>;
+  return <div className={cn("flex h-6 items-center px-2 type-meta font-medium tracking-[0.04em] text-faint", first ? "mt-1" : "mt-4")}>{children}</div>;
 }
 
 const DOCS_KEY = "sidebar.docs.open";
@@ -166,7 +166,7 @@ function DocsGroup({ path, onGo }: { path: string; onGo: (href: string) => void 
   const toggle = (b: boolean) => { setOpen(b); localStorage.setItem(DOCS_KEY, b ? "1" : "0"); };
   return (
     <Collapsible open={open} onOpenChange={toggle}>
-      <div className={cn("group relative flex h-8 w-full items-center rounded-lg text-[13px] font-medium tracking-[-0.005em] transition-colors duration-150 ease-out",
+      <div className={cn("group relative flex h-8 w-full items-center rounded-lg type-body font-medium tracking-[-0.005em] transition-colors duration-150 ease-out",
         path === "/docs" ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : inDocs ? "text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
         {path === "/docs" && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
         <button onClick={() => { onGo("/docs"); if (!open) toggle(true); }} className="flex h-full flex-1 items-center gap-2.5 rounded-lg pl-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
@@ -183,7 +183,7 @@ function DocsGroup({ path, onGo }: { path: string; onGo: (href: string) => void 
             const on = path === docHref(d);
             return (
               <button key={d.slug} onClick={() => onGo(docHref(d))}
-                className={cn("relative flex h-7 w-full items-center gap-2 rounded-md px-2 text-[12.5px] transition-colors duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                className={cn("relative flex h-7 w-full items-center gap-2 rounded-md px-2 type-caption transition-colors duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   on ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
                 {on && <span className="absolute -left-[9.5px] top-1/2 h-3.5 w-px -translate-y-1/2 bg-brand" />}
                 <span className="truncate">{d.title}</span>
@@ -213,8 +213,8 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
           <Radio className="size-4" />
         </div>
         <div className="leading-tight">
-          <div className="text-[13.5px] font-semibold tracking-tight">AI Radar</div>
-          <div className="text-[11px] text-muted-foreground">国内外 AI 情报</div>
+          <div className="type-body font-semibold tracking-tight">AI Radar</div>
+          <div className="type-meta text-muted-foreground">国内外 AI 情报</div>
         </div>
       </div>
       <ScrollArea className="min-h-0 flex-1">
@@ -229,7 +229,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
           <NavItem active={path === "/sources"} icon={Database} label="数据源" count={active.length} onClick={() => { router.push("/sources"); onNavigate?.(); }} />
           <DocsGroup path={path} onGo={(h) => { router.push(h); onNavigate?.(); }} />
           <Collapsible defaultOpen className="pt-4">
-            <CollapsibleTrigger className="group flex h-6 w-full items-center gap-1 px-2 text-[11px] font-medium tracking-[0.04em] text-faint transition-colors duration-150 ease-out hover:text-foreground">
+            <CollapsibleTrigger className="group flex h-6 w-full items-center gap-1 px-2 type-meta font-medium tracking-[0.04em] text-faint transition-colors duration-150 ease-out hover:text-foreground">
               <ChevronRight strokeWidth={2} className="size-3 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90" />订阅源<span className="ml-auto font-mono tabular-nums">{active.length}</span>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-px">
@@ -238,7 +238,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
                 if (!list.length) return null;
                 return (
                   <div key={sec.key} className="pt-2">
-                    <div className="flex h-6 items-center px-2 text-[11px] text-faint">{sec.zh}</div>
+                    <div className="flex h-6 items-center px-2 type-meta text-faint">{sec.zh}</div>
                     <div className="relative ml-[11px] space-y-px border-l border-border pl-1.5">
                     {list.map((s) => <SourceRowNav key={s.id} s={s} active={f.source === s.id && feed} onGo={() => go({ source: s.id })} />)}
                     </div>
@@ -249,7 +249,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
           </Collapsible>
         </div>
       </ScrollArea>
-      <div className="border-t border-sidebar-border p-3 text-[11.5px] text-faint">
+      <div className="border-t border-sidebar-border p-3 type-meta text-faint">
         <div className="flex h-5 items-center gap-2 tabular-nums"><Activity className="size-3.5" strokeWidth={1.75} />{active.length} 个源在线{errs ? <span className="text-red-500">· {errs} 报错</span> : null}</div>
       </div>
     </div>
@@ -268,11 +268,11 @@ function ItemSheet() {
               <div className="flex items-center gap-2.5">
                 <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} />
                 <div className="min-w-0 leading-tight">
-                  <div className="truncate text-[13px] font-medium">{it.is_x ? `@${handleOf(it)}` : it.source}</div>
-                  <div className="truncate text-[12px] tabular-nums text-muted-foreground">{bjFull(it.published)} · {ago(it.published)}</div>
+                  <div className="truncate type-body font-medium">{it.is_x ? `@${handleOf(it)}` : it.source}</div>
+                  <div className="truncate type-caption tabular-nums text-muted-foreground">{bjFull(it.published)} · {ago(it.published)}</div>
                 </div>
               </div>
-              <SheetTitle className="text-[19px] font-semibold leading-snug tracking-tight">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}</SheetTitle>
+              <SheetTitle className="type-h3 font-semibold leading-snug [text-wrap:pretty] pr-6">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}</SheetTitle>
               <SheetDescription className="sr-only">内容详情</SheetDescription>
               <div className="flex flex-wrap gap-1.5">
                 {it.priority && <Badge variant="outline" className={cn(it.priority === "P0" && "border-brand/40 bg-brand-soft text-brand")}>{it.priority}</Badge>}
@@ -282,19 +282,19 @@ function ItemSheet() {
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-5 p-5">
-                <p className="whitespace-pre-wrap text-[14.5px] leading-7 text-foreground/85">{it.is_x ? it.summary || it.title : dekText(it.summary) || "（该来源未提供摘要）"}</p>
+                <p className="whitespace-pre-wrap type-ui leading-7 text-foreground/85">{it.is_x ? it.summary || it.title : dekText(it.summary) || "（该来源未提供摘要）"}</p>
                 {it.image && <img src={it.image} alt="" referrerPolicy="no-referrer" className="mt-3 max-h-[420px] w-full rounded-lg bg-muted object-contain" />}
                 {it.orig && <Original o={it.orig} x={!!it.is_x} />}
                 {it.also_on_x.length > 0 && (
                   <div className="rounded-lg border bg-muted/40 p-3">
-                    <div className="mb-2 text-[12px] font-medium text-muted-foreground">也在 X 上发布</div>
+                    <div className="mb-2 type-caption font-medium text-muted-foreground">也在 X 上发布</div>
                     {it.also_on_x.map((x) => (
-                      <a key={x.url} href={x.url} target="_blank" className="flex items-center gap-2 py-1 text-[13px] hover:text-brand">
+                      <a key={x.url} href={x.url} target="_blank" className="flex items-center gap-2 py-1 type-body hover:text-brand">
                         <SourceAvatar name={x.author ?? "x"} username={x.author} x className="size-5" />@{x.author}<ExternalLink className="ml-auto size-3.5 opacity-50" />
                       </a>))}
                   </div>
                 )}
-                <div className="text-[12px] text-muted-foreground">来源：{it.source} · 北京时间 {bj(it.published)}</div>
+                <div className="type-caption text-muted-foreground">来源：{it.source} · 北京时间 {bj(it.published)}</div>
               </div>
             </ScrollArea>
             <div className="flex gap-2 border-t p-4">
@@ -390,14 +390,14 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="glow flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border/80 bg-background/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="菜单"><Menu className="size-4" /></Button>
-            <div className="hidden min-w-0 truncate text-[14px] font-semibold tracking-tight sm:block">{title}</div>
+            <div className="hidden min-w-0 truncate type-ui font-semibold tracking-tight sm:block">{title}</div>
             <button onClick={() => setPalette(true)}
-              className="ml-auto flex h-8 w-full max-w-[360px] items-center gap-2 rounded-lg bg-muted px-2.5 text-[13px] text-faint shadow-[inset_0_0_0_1px_var(--border)] transition hover:text-muted-foreground hover:shadow-[inset_0_0_0_1px_var(--input)] sm:ml-6 sm:mr-auto">
+              className="ml-auto flex h-8 w-full max-w-[360px] items-center gap-2 rounded-lg bg-muted px-2.5 type-body text-faint shadow-[inset_0_0_0_1px_var(--border)] transition hover:text-muted-foreground hover:shadow-[inset_0_0_0_1px_var(--input)] sm:ml-6 sm:mr-auto">
               <Search className="size-3.5" /><span className="truncate">搜索新闻、来源、命令…</span>
-              <kbd className="ml-auto hidden items-center gap-0.5 rounded-[4px] bg-background/80 px-1.5 font-mono text-[10.5px] text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] sm:flex"><CommandIcon className="size-2.5" />K</kbd>
+              <kbd className="ml-auto hidden items-center gap-0.5 rounded-[4px] bg-background/80 px-1.5 font-mono type-2xs text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] sm:flex"><CommandIcon className="size-2.5" />K</kbd>
             </button>
             <Tooltip>
-              <TooltipTrigger render={<span className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] sm:flex" />}>
+              <TooltipTrigger render={<span className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 type-meta font-medium text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] sm:flex" />}>
                 <span className="relative flex size-1.5">
                   {live && <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
                   <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-muted-foreground")} />
