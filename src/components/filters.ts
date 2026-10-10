@@ -31,3 +31,13 @@ export function toQuery(f: Filters) {
   const s = p.toString();
   return s ? `/?${s}` : "/";
 }
+
+// 仅 P0 is remembered PER VIEW (全部 / each section / each source) in localStorage; the URL carries the current view's value.
+export const viewKey = (f: Pick<Filters, "section" | "source">) => (f.source != null ? `src:${f.source}` : f.section || "all");
+const P0_KEY = "p0ByView";
+const readP0 = (): Record<string, boolean> => { try { return JSON.parse(localStorage.getItem(P0_KEY) || "{}"); } catch { return {}; } };
+export const p0For = (key: string) => typeof window !== "undefined" && readP0()[key] === true;
+export function setP0For(key: string, on: boolean) {
+  const m = readP0(); if (on) m[key] = true; else delete m[key];
+  try { localStorage.setItem(P0_KEY, JSON.stringify(m)); } catch {}
+}

@@ -49,7 +49,16 @@ export async function fetchApi(src: Src): Promise<FetchedItem[]> {
   } else if (u.includes("api.bilibili.com/x/web-interface/popular")) {
     for (const v of d.data?.list ?? []) {
       const link = `https://www.bilibili.com/video/${v.bvid}`;
-      out.push({ uid: normUrl(link), title: clean(v.title, 200), url: link, summary: clean(`UP主 ${v.owner?.name ?? ""} · ${v.desc ?? ""}`), published: v.pubdate ?? null, isX: false, author: v.owner?.name });
+      out.push({ uid: normUrl(link), title: clean(v.title, 200), url: link, summary: clean(`UP主 ${v.owner?.name ?? ""} · ${v.desc ?? ""}`), published: v.pubdate ?? null, isX: false, author: v.owner?.name, image: v.pic ? String(v.pic).replace(/^http:/, "https:") + "@480w_270h_1c.webp" : null });
+    }
+  } else if (u.includes("api.jandan.net/api/v1/comment/list/")) {
+    // 煎蛋 无聊图 etc.: user posts with images; title = text or "<栏目> · <作者>"
+    for (const c of d.data ?? []) {
+      const link = `https://jandan.net/t/${c.id}`;
+      const text = clean(String(c.content ?? "").replace(/#img#/g, ""), 300);
+      const img = c.images?.[0]?.url as string | undefined;
+      out.push({ uid: `jandan:${c.id}`, title: text.slice(0, 80) || `${c.post_title ?? "煎蛋"} · ${c.author ?? ""}`, url: link,
+        summary: `${text ? text + " · " : ""}OO ${c.vote_positive ?? 0} / XX ${c.vote_negative ?? 0}`, published: parseDate(c.date), isX: false, author: c.author, image: img ?? null });
     }
   } else if (u.includes("hotsearch/billboard/word")) {
     // 抖音热搜: hot words only (no time) -> new entries are dated at fetch time; the first fetch is treated as backlog

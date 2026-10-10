@@ -18,7 +18,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Toaster } from "@/components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DOCS, docHref } from "@/lib/docs-registry";
-import { type Filters, countOf, parseFilters, toQuery } from "./filters";
+import { type Filters, countOf, p0For, parseFilters, setP0For, toQuery, viewKey } from "./filters";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
 import { SECTIONS, inAll, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, xText, localize } from "./common";
@@ -199,7 +199,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter(); const path = usePathname();
   const active = sources.filter((s) => s.enabled && s.supported);
   const feed = path === "/";
-  const count = (section: Filters["section"]) => facet.length ? countOf(facet, { section, source: null, p0: f.p0 })
+  const count = (section: Filters["section"]) => facet.length ? countOf(facet, { section, source: null, p0: p0For(section || "all") })
     : active.filter((s) => { const k = sectionOf({ ...s, is_x: s.type.startsWith("x") }); return section ? k === section : inAll(k); }).reduce((a, s) => a + s.item_count, 0);
   const go = (p: Partial<Filters>) => { navigate({ section: "", source: null, ...p }); onNavigate?.(); };
   const on = (section: Filters["section"]) => feed && f.source == null && f.section === section;
@@ -339,6 +339,7 @@ function ItemSheet() {
             <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-5 p-5">
                 <p className="whitespace-pre-wrap text-[14.5px] leading-7 text-foreground/85">{it.is_x ? it.summary || it.title : dekText(it.summary) || "（该来源未提供摘要）"}</p>
+                {it.image && <img src={it.image} alt="" referrerPolicy="no-referrer" className="mt-3 max-h-[420px] w-full rounded-lg bg-muted object-contain" />}
                 {it.orig && <Original o={it.orig} x={!!it.is_x} />}
                 {it.also_on_x.length > 0 && (
                   <div className="rounded-lg border bg-muted/40 p-3">
@@ -405,8 +406,18 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, []);
   const fRef = useRef(f);
   useEffect(() => { fRef.current = f; }, [f]);
-  const setF = useCallback((p: Partial<Filters>) => router.push(toQuery({ ...fRef.current, ...p }), { scroll: false }), [router]);
-  const navigate = useCallback((p: Partial<Filters>) => router.push(toQuery({ ...fRef.current, ...p }), { scroll: false }), [router]);
+  // switching view restores that view's own 仅 P0; toggling P0 stores it for the current view only
+  const navigate = useCallback((p: Partial<Filters>) => {
+    const next = { ...fRef.current, ...p };
+    if ("p0" in p) setP0For(viewKey(next), !!p.p0); else next.p0 = p0For(viewKey(next));
+    router.push(toQuery(next), { scroll: false });
+  }, [router]);
+  const setF = navigate;
+  // first load without ?p0: apply the stored value for this view
+  useEffect(() => {
+    if (path !== "/" || new URLSearchParams(window.location.search).has("p0")) return;
+    if (p0For(viewKey(fRef.current))) router.replace(toQuery({ ...fRef.current, p0: true }), { scroll: false });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const reloadSources = useCallback(async () => setSources(await api<SourceRow[]>("/api/sources")), []);
   useEffect(() => { let t: ReturnType<typeof setTimeout> | null = null; reloadSourcesRef.current = () => { if (!t) t = setTimeout(() => { t = null; reloadSources(); }, 3000); }; }, [reloadSources]);
   useEffect(() => { reloadNowRef.current = () => { reloadSources(); }; }, [reloadSources]);

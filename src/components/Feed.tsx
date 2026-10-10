@@ -67,8 +67,12 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
           </p>
         ) : (
           <>
-            <h3 className={cn("line-clamp-2 break-words [overflow-wrap:anywhere] [text-wrap:pretty] text-[14.5px] font-semibold leading-[1.5] tracking-[-0.008em]", read ? "font-medium text-muted-foreground" : "text-foreground")}>{it.title}</h3>
-            {dek && dek !== it.title && <p className="mt-1.5 line-clamp-3 break-words [overflow-wrap:anywhere] text-[12.5px] leading-[1.6] text-muted-foreground">{dek}</p>}
+            <h3 className={cn(it.image ? "line-clamp-1" : "line-clamp-2", "break-words [overflow-wrap:anywhere] [text-wrap:pretty] text-[14.5px] font-semibold leading-[1.5] tracking-[-0.008em]", read ? "font-medium text-muted-foreground" : "text-foreground")}>{it.title}</h3>
+            {it.image ? (
+              // thumbnail (memes / video covers): fixed height so cards stay equal; lazy + no-referrer for hotlink-protected CDNs
+              <img src={it.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+                className="mt-2 h-[92px] w-full rounded-md bg-muted object-cover ring-1 ring-border/60" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+            ) : dek && dek !== it.title && <p className="mt-1.5 line-clamp-3 break-words [overflow-wrap:anywhere] text-[12.5px] leading-[1.6] text-muted-foreground">{dek}</p>}
           </>
         )}
       </div>

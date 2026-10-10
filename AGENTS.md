@@ -3,7 +3,7 @@
 Guide for coding agents working in this repo. 中文 UI，代码与注释以英文为主。
 
 ## Purpose / 项目目的
-Real-time aggregator of domestic + international AI news for an AI content creator: ~57 curated sources (lab blogs & API changelogs, scoop/benchmark X accounts, key people, Chinese media, global media/newsletters, entertainment), polled by priority, pushed live to the browser via SSE. Only the last 48 h of items are kept.
+Real-time aggregator of domestic + international AI news for an AI content creator: ~22 curated sources (lean P0 list) (lab blogs & API changelogs, scoop/benchmark X accounts, key people, Chinese media, global media/newsletters, entertainment), polled by priority, pushed live to the browser via SSE. Only the last 48 h of items are kept.
 
 ## Stack
 - Next.js 16 (App Router) · TypeScript · React 19
@@ -137,3 +137,9 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - UI: ⋯ → 删除 (AlertDialog), row checkboxes + 删除所选, 「已删除的内置源」 dialog. Sidebar unsubscribe confirm is inline (inside the sidebar) so it never covers the feed.
 - Feed grid: max 3 columns (1/2/3 at base/md/xl), content capped at 1480px.
 - `/api/sources` is gzip'd and null-stripped (polled by every tab).
+
+## Lean source list & per-view P0 (2026-10-10)
+
+- `sources/sources.json` now ships only P0 AI sources + 4 Chinese 娱乐 feeds (网易娱乐, 抖音热搜, B站热门, 煎蛋无聊图); the old catalog lives only in docs/sources.md (history). Funny/meme feeds go to 娱乐 (outside 全部) rather than a new section: same audience/mood, and keeps the AI sections clean.
+- 仅 P0 is per view: `p0For/setP0For/viewKey` in `filters.ts` (localStorage `p0ByView`); `navigate` restores the target view's value; sidebar counts use each section's own value.
+- Items may carry `image` (jandan images, bilibili covers); cards show a fixed-height lazy thumbnail (`referrerPolicy=no-referrer`), hover card/drawer show it larger. `@next/next/no-img-element` is off on purpose.

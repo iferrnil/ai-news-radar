@@ -10,7 +10,7 @@ export interface SourceRow {
 
 export interface FetchedItem {
   uid: string; title: string; url: string; summary: string; published: number | null;
-  isX: boolean; author?: string | null; links?: string[];
+  isX: boolean; author?: string | null; links?: string[]; image?: string | null;
 }
 
 export interface ItemOut {
@@ -18,6 +18,7 @@ export interface ItemOut {
   author: string | null; also_on_x: { url: string; author: string | null }[];
   source_id: number; source: string; category: string | null; region: string | null; source_type: SourceType;
   priority: Priority | null; homepage: string | null; username: string | null; grp: string | null;
+  image?: string; // thumbnail (meme/video cover), only some API sources
   title_zh?: string; summary_zh?: string;
   tr?: boolean; orig?: { title: string; summary: string }; // client-side: set by localize() when showing the translation // only when requested with zh=1 and a translation exists
 }

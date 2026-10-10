@@ -4,7 +4,6 @@ import fs from "node:fs";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const OUT = new URL("../docs/screenshots/", import.meta.url).pathname;
 fs.mkdirSync(OUT, { recursive: true });
-for (const f of fs.readdirSync(OUT)) if (f.endsWith(".png") && !f.includes("/")) fs.unlinkSync(OUT + f);
 const b = await chromium.launch();
 async function shot(name, path, { theme = "dark", mobile = false, act, w = 1280, h = 800 } = {}) {
   const ctx = await b.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: w, height: h }, deviceScaleFactor: mobile ? 2 : 1, locale: "zh-CN" });
@@ -25,6 +24,11 @@ await shot("feed_1920.png", "/", { w: 1920, h: 1080 });
 await shot("section_cn.png", "/?section=cn");
 await shot("section_x.png", "/?section=x");
 await shot("section_ent.png", "/?section=ent");
+await shot("p0_per_section.png", "/", { act: async (pg) => {
+  await pg.click("button[aria-pressed]"); await pg.waitForTimeout(500);          // 全部: 仅 P0 on
+  await pg.click("nav >> text=娱乐").catch(() => pg.click("text=娱乐")); await pg.waitForTimeout(600); // 娱乐 keeps its own (off)
+  await pg.click("text=全部"); await pg.waitForTimeout(800);                       // back: restored on
+} });
 await shot("section_ent_light.png", "/?section=ent", { theme: "light" });
 const hover = async (pg) => { const c = pg.locator("[data-slot=card]").nth(2); await c.hover(); await pg.waitForSelector("[data-slot=hover-card-content]"); await pg.waitForTimeout(900); };
 await shot("hover_card.png", "/", { act: hover });

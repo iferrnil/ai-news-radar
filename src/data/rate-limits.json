@@ -235,13 +235,27 @@
    "riskNote": "仅在设置 DEEPSEEK_API_KEY 时启用；每批 10 条、并发 2，远低于并发上限；不计入下方「轮询用量」（按新条目触发）。"
   },
   {
+   "id": "jandan",
+   "name": "煎蛋 comment API（无聊图）",
+   "match": {
+    "host": "api.jandan.net"
+   },
+   "endpoint": "https://api.jandan.net/api/v1/comment/list/26402",
+   "documented": "未找到官方文档：煎蛋 app 使用的非公开接口（jandan.net 网页与 RSS 对机房 IP 返回 403）。",
+   "official": false,
+   "sources": [],
+   "observed": "2026-10-10 实测 HTTP 200，每页 30 条，含图片 URL（img.wangmoyu.com，需 no-referrer 外链）；无限额响应头。",
+   "risk": "medium",
+   "riskNote": "非公开接口，可能变更；30 分钟 1 次。"
+  },
+  {
    "id": "rss",
    "name": "其他通用 RSS / Atom（官方博客与媒体）",
    "match": {
     "type": "rss",
     "rest": true
    },
-   "endpoint": "OpenAI、Google/DeepMind、Claude 发布说明、量子位、极客公园、TechCrunch、The Verge 等；娱乐：TMZ、Page Six、E! News、Variety、Deadline 等",
+   "endpoint": "OpenAI、Google/DeepMind、Claude 发布说明、量子位、极客公园、TechCrunch、The Verge 等",
    "documented": "各站点均未公布 feed 限额。RSS 2.0 规范仅提供可选的 <ttl>（建议缓存分钟数）作为礼仪约定。",
    "official": false,
    "sources": [

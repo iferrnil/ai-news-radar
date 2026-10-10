@@ -99,6 +99,7 @@ export function getDb(): Database.Database {
     const cols = new Set((db.prepare("PRAGMA table_info(items)").all() as { name: string }[]).map((c) => c.name));
     const scols = new Set((db.prepare("PRAGMA table_info(sources)").all() as { name: string }[]).map((c) => c.name));
     if (!scols.has("overrides")) db.exec("ALTER TABLE sources ADD COLUMN overrides TEXT NOT NULL DEFAULT ''");
+    if (!cols.has("image")) db.exec("ALTER TABLE items ADD COLUMN image TEXT");
     if (!cols.has("title_zh")) db.exec("ALTER TABLE items ADD COLUMN title_zh TEXT; ALTER TABLE items ADD COLUMN summary_zh TEXT;");
     seed(db);
     // one-off repair: entities double-escaped in older rows (e.g. "&mdash;")

@@ -4,18 +4,20 @@
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fiferrnil%2Fai--news--radar-blue)](https://github.com/iferrnil/ai-news-radar/pkgs/container/ai-news-radar)
 
-> A self-hosted, near-real-time radar for domestic + international AI news: 57 curated sources (lab blogs, API changelogs, X accounts, Chinese & global media, entertainment), polled by priority and pushed live to the browser.
+> A self-hosted, near-real-time radar for domestic + international AI news: 22 curated sources (P0 lab blogs & API notes, scoop X accounts, Chinese AI media, Techmeme, plus a few Chinese entertainment/funny feeds), polled by priority and pushed live to the browser.
 
-为 AI 内容创作者打造的**自托管实时 AI 资讯聚合器**：精选 57 个国内外信息源（官方实验室博客与 API 发布说明、X 账号、国内外科技媒体、娱乐八卦与热榜），按优先级轮询，通过 SSE 实时推送到网页。只保留 48 小时内的内容，单进程 + SQLite，几百 MB 内存即可运行。
+为 AI 内容创作者打造的**自托管实时 AI 资讯聚合器**：精选 22 个信息源：只保留最快的 P0 AI 源（官方博客与 API 发布说明、爆料 X 账号、国内 AI 媒体、Techmeme），外加少量国内娱乐/搞笑源，按优先级轮询，通过 SSE 实时推送到网页。只保留 48 小时内的内容，单进程 + SQLite，几百 MB 内存即可运行。
 
 仓库：<https://github.com/iferrnil/ai-news-radar>
 
 ## 功能
 
-- **57 个精选源**：RSS/Atom、JSON API（机器之心、网易娱乐、B 站热门、抖音热搜）、X 账号（经 FxEmbed，无需 X API Token）
+- **22 个精选源（精简版）**：RSS/Atom、JSON API（机器之心、网易娱乐、抖音热搜、B 站热门、煎蛋无聊图）、X 账号（经 FxEmbed，无需 X API Token）
 - **优先级轮询**：P0 X 2 分钟 / 网站 5 分钟，P1 5/10 分钟，P2 30 分钟；条件请求（ETag / If-Modified-Since）节省带宽
 - **实时推送**：SSE，新内容出现“N 条新内容”提示
 - **去重与合并**：按规范化 URL / 推文 ID 去重；推文链接到已有文章时合并为“也在 X”
+- **仅 P0 按分区记忆**：每个分区/来源各自记住「仅 P0」开关
+- **图片缩略图**：带图的条目（梗图、视频封面）在卡片上显示缩略图
 - **中文翻译（可选）**：配置 DeepSeek Key 后自动翻译外文标题与摘要，可一键切换原文/译文
 - **互斥分区**：实验室 / 国内媒体 / 国外媒体 / X 快讯 / 娱乐，每个来源只属于一个分区（娱乐类 X 账号归「娱乐」）；「娱乐」不计入「全部」，只在自己的分区显示
 - **悬停预览**：鼠标停留在卡片上显示 Hover Card（全文、时间、原文链接），触屏设备自动关闭
@@ -64,7 +66,7 @@ flowchart LR
 
 ## 信息源
 
-当前启用 57 个源（实验室、国内媒体、国外媒体、X 快讯、娱乐 14 个；原「开发」分区 7 个源已停用），完整目录（含停用参考源）与核验记录见 [docs/sources.md](docs/sources.md)；各类源的官方限额、实测与我们的请求量见 [docs/rate-limits.md](docs/rate-limits.md)（站内 `/docs/rate-limits`）。选源思路见 [docs/recommendations.md](docs/recommendations.md)。
+默认 22 个源：实验室 4、国内媒体 2、国外媒体 1（Techmeme）、X 快讯 11（均为 P0），娱乐 4（网易娱乐、抖音热搜、B站热门、煎蛋无聊图，带图片缩略图）；其余来源已从默认列表删除，需要时在站内添加。完整目录（含停用参考源）与核验记录见 [docs/sources.md](docs/sources.md)；各类源的官方限额、实测与我们的请求量见 [docs/rate-limits.md](docs/rate-limits.md)（站内 `/docs/rate-limits`）。选源思路见 [docs/recommendations.md](docs/recommendations.md)。
 
 ## 快速开始
 

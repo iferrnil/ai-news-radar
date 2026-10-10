@@ -4,7 +4,7 @@ import { decode, normUrl } from "./util";
 import { enqueueTranslation } from "./translate";
 import type { FetchedItem, ItemOut, SourceRow } from "./types";
 
-const ITEM_SQL = `SELECT i.id,i.title,i.url,i.summary,i.published,i.fetched,i.is_x,i.author,i.also_on_x,i.title_zh,i.summary_zh,
+const ITEM_SQL = `SELECT i.id,i.title,i.url,i.summary,i.published,i.fetched,i.is_x,i.author,i.also_on_x,i.image,i.title_zh,i.summary_zh,
   s.id AS source_id, s.name AS source, s.category, s.region, s.type AS source_type, s.priority, s.homepage, s.username, s.grp
   FROM items i JOIN sources s ON s.id=i.source_id WHERE i.merged_into IS NULL AND s.enabled=1`;
 
@@ -40,8 +40,8 @@ export function storeItems(src: SourceRow, items: FetchedItem[]) {
   const markSeen = db.prepare("INSERT OR IGNORE INTO seen VALUES(?,?)");
   const firstFetch = src.last_fetched == null;
   const findArt = db.prepare("SELECT id, also_on_x FROM items WHERE uid=? AND is_x=0");
-  const insItem = db.prepare(`INSERT OR IGNORE INTO items(uid,source_id,title,url,summary,published,fetched,is_x,author,merged_into)
-    VALUES(?,?,?,?,?,?,?,?,?,?)`);
+  const insItem = db.prepare(`INSERT OR IGNORE INTO items(uid,source_id,title,url,summary,published,fetched,is_x,author,merged_into,image)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
   const insLink = db.prepare("INSERT OR IGNORE INTO post_links VALUES(?,?)");
   const setAlso = db.prepare("UPDATE items SET also_on_x=? WHERE id=?");
   const xsFor = db.prepare(`SELECT i.id, i.url, i.author FROM post_links p JOIN items i ON i.id=p.item_id WHERE p.norm_url=? AND i.merged_into IS NULL`);
@@ -58,7 +58,7 @@ export function storeItems(src: SourceRow, items: FetchedItem[]) {
         const links = [...new Set((it.links ?? []).map(normUrl))].filter((l) => !X_HOST.test(l));
         let art: { id: number; also_on_x: string } | undefined;
         for (const l of links) { art = findArt.get(l) as typeof art; if (art) break; }
-        const res = insItem.run(it.uid, src.id, it.title, it.url, it.summary, pub, now, 1, it.author ?? null, art?.id ?? null);
+        const res = insItem.run(it.uid, src.id, it.title, it.url, it.summary, pub, now, 1, it.author ?? null, art?.id ?? null, it.image ?? null);
         if (!res.changes) continue;
         const xid = Number(res.lastInsertRowid);
         for (const l of links) insLink.run(l, xid);
@@ -69,7 +69,7 @@ export function storeItems(src: SourceRow, items: FetchedItem[]) {
           updated.add(art.id);
         } else newIds.push(xid);
       } else {
-        const res = insItem.run(it.uid, src.id, it.title, it.url, it.summary, pub, now, 0, it.author ?? null, null);
+        const res = insItem.run(it.uid, src.id, it.title, it.url, it.summary, pub, now, 0, it.author ?? null, null, it.image ?? null);
         if (!res.changes) continue;
         const aid = Number(res.lastInsertRowid);
         const xs = xsFor.all(it.uid) as { id: number; url: string; author: string | null }[];
