@@ -42,7 +42,7 @@ const GRID = "grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3 xl:g
 // content side padding (mirrored by the sticky day header's negative margin): 16 · 24 (sm) · 32 (xl) · 40 (2xl)
 const PAD = "px-4 sm:px-6 xl:px-8 2xl:px-10";
 const BLEED = "-mx-4 px-4 sm:-mx-6 sm:px-6 xl:-mx-8 xl:px-8 2xl:-mx-10 2xl:px-10";
-const CARD_H = "h-[204px]";
+const CARD_H = "h-[216px]";
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
 const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; hover: boolean }) {
