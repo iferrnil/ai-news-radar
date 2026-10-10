@@ -37,6 +37,7 @@ CREATE INDEX IF NOT EXISTS seen_ts ON seen(ts);
 CREATE INDEX IF NOT EXISTS items_src_pub ON items(source_id, published DESC);
 DROP INDEX IF EXISTS items_src;
 CREATE TABLE IF NOT EXISTS tcache(h TEXT PRIMARY KEY, t TEXT, s TEXT, ts REAL NOT NULL) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS deleted_seeds(name TEXT PRIMARY KEY, ts REAL NOT NULL) WITHOUT ROWID; -- tombstones: built-ins the user deleted
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT) WITHOUT ROWID;
 `;
 
@@ -45,9 +46,10 @@ interface SeedSource {
   enabled?: boolean; priority?: string; pollInterval?: number; group?: string; status?: string; note?: string;
 }
 
-function seed(db: Database.Database) {
+export function seed(db: Database.Database) {
   if (!fs.existsSync(/*turbopackIgnore: true*/ SEED_PATH)) return;
   const data = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ SEED_PATH, "utf8")) as { sources: SeedSource[] };
+  const tomb = new Set((db.prepare("SELECT name FROM deleted_seeds").all() as { name: string }[]).map((r) => r.name));
   const have = new Map((db.prepare("SELECT id, name FROM sources").all() as { id: number; name: string }[]).map((r) => [r.name, r.id]));
   const sync = process.env.SYNC_SEED !== "0";
   const ins = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,unsupported_reason,priority,poll_interval,origin,grp,note,created)
@@ -61,6 +63,7 @@ function seed(db: Database.Database) {
     WHERE id=@id AND origin='seed'`);
   const tx = db.transaction(() => {
     for (const s of data.sources) {
+      if (tomb.has(s.name)) continue; // deleted by the user: never re-add
       const supported = SUPPORTED.includes(s.type) && (s.status ?? "works") === "works";
       const row = {
         name: s.name, region: s.region ?? null, category: s.category ?? null, type: s.type, url: s.url, homepage: s.homepage ?? null,

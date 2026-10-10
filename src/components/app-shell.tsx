@@ -95,27 +95,31 @@ function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo
     } catch (e) { toast.error(`操作失败：${(e as Error).message}`); }
   };
   return (
+    <>
     <div className={cn("group/src relative flex h-7 items-center rounded-md transition-colors duration-150 ease-out", active ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground", confirm && "bg-hover text-foreground")}>
       <button onClick={onGo} title={s.last_error ?? s.name} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
         <StatusDot s={s} />
         <span className="flex-1 truncate text-left">{label}</span>
         <span className={cn("font-mono text-[11px] tabular-nums text-faint transition-opacity duration-150 group-hover/src:opacity-0 group-focus-within/src:opacity-0 [@media(hover:none)]:hidden", confirm && "opacity-0")}>{s.item_count || ""}</span>
       </button>
-      <Popover open={confirm} onOpenChange={setConfirm}>
-        <PopoverTrigger render={<button aria-label={`取消订阅 ${label}`} title="取消订阅"
-          className={cn("absolute right-1 grid size-5 place-items-center rounded text-faint opacity-0 outline-none transition-[opacity,color,background-color] duration-150 hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/src:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:mr-1 [@media(hover:none)]:opacity-100", confirm && "opacity-100 text-red-500")} />}>
-          <MinusCircle className="size-3.5" strokeWidth={1.75} />
-        </PopoverTrigger>
-        <PopoverContent side="right" align="center" sideOffset={10} className="w-60 gap-2.5 p-3">
-          <div className="text-[13px] font-medium leading-snug">取消订阅「{label}」？</div>
-          <div className="text-[12px] leading-snug text-muted-foreground">停止抓取并从首页隐藏它的内容。来源不会被删除，可在「数据源」页重新启用。</div>
-          <div className="flex justify-end gap-1.5 pt-0.5">
-            <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>保留</Button>
-            <Button size="sm" variant="destructive" autoFocus onClick={unsubscribe}>取消订阅</Button>
-          </div>
-        </PopoverContent>
-      </Popover>
+      <button aria-label={`取消订阅 ${label}`} title="取消订阅" aria-expanded={confirm} onClick={() => setConfirm((v) => !v)}
+        className={cn("absolute right-1 grid size-5 place-items-center rounded text-faint opacity-0 outline-none transition-[opacity,color,background-color] duration-150 hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/src:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:mr-1 [@media(hover:none)]:opacity-100", confirm && "text-red-500 opacity-100")}>
+        <MinusCircle className="size-3.5" strokeWidth={1.75} />
+      </button>
     </div>
+    {/* inline confirm inside the sidebar, so nothing covers the feed */}
+    {confirm && (
+      <div role="alertdialog" aria-label={`确认取消订阅 ${label}`} onKeyDown={(e) => e.key === "Escape" && setConfirm(false)}
+        className="mx-0.5 mb-1 mt-0.5 rounded-lg bg-popover p-2.5 text-[12px] leading-snug shadow-card ring-1 ring-border animate-in fade-in-0 slide-in-from-top-1 duration-150">
+        <div className="font-medium text-foreground">取消订阅「{label}」？</div>
+        <div className="mt-1 text-muted-foreground">停止抓取并隐藏内容，可在「数据源」页重新启用。</div>
+        <div className="mt-2 flex justify-end gap-1.5">
+          <Button size="xs" variant="ghost" onClick={() => setConfirm(false)}>保留</Button>
+          <Button size="xs" variant="destructive" autoFocus onClick={unsubscribe}>取消订阅</Button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 

@@ -130,3 +130,10 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## Sidebar unsubscribe
 
 - `SourceRowNav` in `app-shell.tsx`: hover/focus (always on touch) shows a MinusCircle button → popover confirm → `PATCH enabled:false` → Sonner toast with 撤销. Disabled sources vanish from the sidebar and the feed hides their items immediately (Feed filters by enabled source ids; re-enabling triggers a reload). Sources are never deleted here; they stay on the sources page under 停用.
+
+## Deleting sources
+
+- Any source can be deleted (`DELETE /api/sources/:id`, `POST /api/sources/bulk {action:'delete', ids}` → `deleteSources` in `store.ts`): removes items, post_links and their `seen` uids, then `incremental_vacuum`, publishes SSE `sources`. Built-ins (`origin='seed'`) get a tombstone in `deleted_seeds(name)`; `seed()` skips tombstoned names. Restore: `GET/POST /api/sources/deleted {names: [...] | 'all'}` removes tombstones and re-runs `seed()`.
+- UI: ⋯ → 删除 (AlertDialog), row checkboxes + 删除所选, 「已删除的内置源」 dialog. Sidebar unsubscribe confirm is inline (inside the sidebar) so it never covers the feed.
+- Feed grid: max 3 columns (1/2/3 at base/md/xl), content capped at 1480px.
+- `/api/sources` is gzip'd and null-stripped (polled by every tab).

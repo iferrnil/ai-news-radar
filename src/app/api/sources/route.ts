@@ -1,3 +1,4 @@
+import { gzipSync } from "node:zlib";
 import { NextRequest } from "next/server";
 import { getDb, intervalFor } from "@/lib/db";
 import { detect } from "@/lib/fetchers";
@@ -8,11 +9,15 @@ import type { SourceRow } from "@/lib/types";
 export const dynamic = "force-dynamic";
 const SECTION_GRP: Record<string, string> = { lab: "官方实验室", cn: "国内", media: "媒体与聚合", x: "X 快讯", ent: "娱乐" };
 
-export function GET() {
+// Polled by every tab (sidebar every 20 s): gzip + drop nulls, 161 KB -> ~20 KB on the wire.
+export function GET(req: NextRequest) {
   const rows = getDb().prepare(`SELECT s.*, (SELECT COUNT(*) FROM items i WHERE i.source_id=s.id) item_count,
     (SELECT MAX(published) FROM items i WHERE i.source_id=s.id) latest FROM sources s
     ORDER BY s.enabled DESC, s.supported DESC, COALESCE(s.priority,'P9'), s.category, s.name`).all();
-  return Response.json(rows);
+  const body = JSON.stringify(rows, (_k, v) => (v === null ? undefined : v));
+  const headers: Record<string, string> = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", Vary: "Accept-Encoding" };
+  if (/\bgzip\b/.test(req.headers.get("accept-encoding") ?? "")) return new Response(gzipSync(body, { level: 6 }), { headers: { ...headers, "Content-Encoding": "gzip" } });
+  return new Response(body, { headers });
 }
 
 export async function POST(req: NextRequest) {

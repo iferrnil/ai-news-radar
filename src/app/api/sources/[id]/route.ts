@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { publish } from "@/lib/bus";
+import { deleteSources } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -20,14 +21,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const id = Number((await ctx.params).id);
-  const db = getDb();
-  const s = db.prepare("SELECT origin FROM sources WHERE id=?").get(id) as { origin: string } | undefined;
-  if (!s) return Response.json({ detail: "not found" }, { status: 404 });
-  if (s.origin !== "user") return Response.json({ detail: "内置来源只能停用，不能删除" }, { status: 400 });
-  db.transaction(() => {
-    db.prepare("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE source_id=?)").run(id);
-    db.prepare("DELETE FROM items WHERE source_id=?").run(id);
-    db.prepare("DELETE FROM sources WHERE id=?").run(id);
-  })();
-  return Response.json({ ok: true });
+  const r = deleteSources([id]);
+  if (!r.deleted) return Response.json({ detail: "not found" }, { status: 404 });
+  return Response.json(r);
 }

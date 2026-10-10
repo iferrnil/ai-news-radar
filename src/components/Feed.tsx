@@ -36,7 +36,7 @@ function groupByDay(list: ItemOut[]) {
   return out;
 }
 
-const GRID = "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 2xl:gap-4";
+const GRID = "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:gap-4"; // max 3 per row
 const CARD_H = "h-[204px]";
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
@@ -180,7 +180,7 @@ export default function Feed() {
   const lastFetch = Math.max(0, ...sources.filter((s) => s.enabled).map((s) => s.last_fetched ?? 0));
 
   return (
-    <div className="mx-auto w-full max-w-[1840px] px-4 pb-24 pt-4 sm:px-6">
+    <div className="mx-auto w-full max-w-[1480px] px-4 pb-24 pt-4 sm:px-6">
       <AnimatePresence>
         {pend.length > 0 && (
           <motion.div initial={{ y: -16, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: -16, opacity: 0 }} transition={{ type: "spring", stiffness: 420, damping: 32 }}

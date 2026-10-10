@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -139,10 +140,26 @@ export default function Sources() {
     toast.promise(p, { loading: `正在抓取 ${s.name}…`, success: (r: any) => `${s.name}：获取 ${r.fetched} 条，新增 ${r.new} 条`, error: (e: Error) => `${s.name} 抓取失败：${e.message}` });
     await p.catch(() => {}); setBusy((b) => ({ ...b, [s.id]: false })); reloadSources();
   };
-  const del = async (s: SourceRow) => {
-    if (!confirm(`删除「${s.name}」及其条目？`)) return;
-    await api(`/api/sources/${s.id}`, { method: "DELETE" }); toast.success(`已删除「${s.name}」`); reloadSources();
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [toDel, setToDel] = useState<SourceRow[] | null>(null);
+  const [deleted, setDeleted] = useState<{ name: string; ts: number }[]>([]);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const loadDeleted = useCallback(() => api<{ name: string; ts: number }[]>("/api/sources/deleted").then(setDeleted).catch(() => {}), []);
+  useEffect(() => { loadDeleted(); }, [loadDeleted, rows.length]);
+  const confirmDelete = async () => {
+    const list = toDel ?? []; setToDel(null);
+    try {
+      const r = await api<{ deleted: number; items: number }>("/api/sources/bulk", { method: "POST", body: JSON.stringify({ action: "delete", ids: list.map((x) => x.id) }) });
+      toast.success(list.length === 1 ? `已删除「${list[0].name}」` : `已删除 ${r.deleted} 个来源`, { description: `同时删除 ${r.items} 条已存内容${list.some((x) => x.origin !== "user") ? "；内置源可在「已删除的内置源」中恢复" : ""}` });
+      setSel(new Set()); await reloadSources(); loadDeleted();
+    } catch (e) { toast.error(`删除失败：${(e as Error).message}`); }
   };
+  const restore = async (names: string[] | "all") => {
+    const r = await api<{ restored: number }>("/api/sources/deleted", { method: "POST", body: JSON.stringify({ names }) });
+    toast.success(`已恢复 ${r.restored} 个内置源`); await reloadSources(); loadDeleted();
+  };
+  const toggleSel = (id: number, on: boolean) => setSel((cur) => { const n = new Set(cur); if (on) n.add(id); else n.delete(id); return n; });
+  const allSel = view.length > 0 && view.every((s) => sel.has(s.id));
   const stats = [["在线来源", nAct], ["报错", nErr], ["48h 条目", nItems], ["目录总数", rows.length]] as const;
 
   return (
@@ -152,7 +169,10 @@ export default function Sources() {
           <h1 className="text-[22px] font-semibold tracking-tight">数据源</h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">启用/停用、调整抓取频率、立即抓取，或添加新的 RSS / X 账号 / X 列表。</p>
         </div>
-        <Button onClick={() => setAddOpen(true)}><Plus />添加数据源</Button>
+        <div className="flex items-center gap-2">
+          {deleted.length > 0 && <Button variant="outline" onClick={() => setRestoreOpen(true)}><RotateCcw />已删除的内置源 · {deleted.length}</Button>}
+          <Button onClick={() => setAddOpen(true)}><Plus />添加数据源</Button>
+        </div>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-border shadow-card sm:grid-cols-4">
         {stats.map(([l, v]) => (
@@ -182,6 +202,7 @@ export default function Sources() {
           <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部类型" : TYPE[v])}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="all">全部类型</SelectItem>{Object.entries(TYPE).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
         </Select>
+        {sel.size > 0 && <Button size="sm" variant="destructive" onClick={() => setToDel(rows.filter((r) => sel.has(r.id)))}><Trash2 />删除所选 · {sel.size}</Button>}
         <span className="ml-auto font-mono text-[12px] text-muted-foreground">{view.length} / {rows.length}</span>
       </div>
 
@@ -189,7 +210,8 @@ export default function Sources() {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent [&>th]:h-9 [&>th]:text-[12px] [&>th]:font-medium [&>th]:text-faint">
-              <TableHead className="w-12 pl-4">启用</TableHead>
+              <TableHead className="w-8 pl-4"><Checkbox aria-label="全选当前列表" checked={allSel} onCheckedChange={(v) => setSel(v ? new Set(view.map((x) => x.id)) : new Set())} /></TableHead>
+              <TableHead className="w-12">启用</TableHead>
               <TableHead>来源</TableHead>
               <TableHead className="hidden md:table-cell">分区</TableHead>
               <TableHead className="hidden sm:table-cell">频率</TableHead>
@@ -201,11 +223,12 @@ export default function Sources() {
           </TableHeader>
           <TableBody>
             {rows.length === 0 && Array.from({ length: 8 }, (_, i) => (
-              <TableRow key={i}><TableCell colSpan={8}><Skeleton className="h-7 w-full" /></TableCell></TableRow>
+              <TableRow key={i}><TableCell colSpan={9}><Skeleton className="h-7 w-full" /></TableCell></TableRow>
             ))}
             {view.map((s) => (
               <TableRow key={s.id} className={cn(!s.enabled && "opacity-60")}>
-                <TableCell className="pl-4"><Switch size="sm" checked={!!s.enabled} onCheckedChange={(v) => patch(s, { enabled: v }, `${v ? "已启用" : "已停用"}「${s.name}」`)} /></TableCell>
+                <TableCell className="pl-4"><Checkbox aria-label={`选择 ${s.name}`} checked={sel.has(s.id)} onCheckedChange={(v) => toggleSel(s.id, !!v)} /></TableCell>
+                <TableCell><Switch size="sm" checked={!!s.enabled} onCheckedChange={(v) => patch(s, { enabled: v }, `${v ? "已启用" : "已停用"}「${s.name}」`)} /></TableCell>
                 <TableCell className="max-w-[320px]">
                   <div className="flex items-center gap-2.5">
                     <SourceAvatar name={s.name} username={s.username} homepage={s.homepage} url={s.url} x={s.type.startsWith("x")} className="size-7" />
@@ -239,17 +262,49 @@ export default function Sources() {
                       <DropdownMenuItem disabled={!s.supported} onClick={() => fetchNow(s)}><RefreshCw />立即抓取</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => window.open(s.homepage || s.url, "_blank")}><ExternalLink />打开主页</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(s.url); toast.success("已复制 URL"); }}><Link2 />复制 URL</DropdownMenuItem>
-                      {s.origin === "user" && <><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => del(s)}><Trash2 />删除</DropdownMenuItem></>}
+                      <DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => setToDel([s])}><Trash2 />删除</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
-            {rows.length > 0 && view.length === 0 && <TableRow><TableCell colSpan={8} className="py-16 text-center"><div className="text-[13px] font-medium">没有匹配的来源</div><div className="mt-1 text-[12px] text-faint">调整搜索词或筛选条件后重试</div></TableCell></TableRow>}
+            {rows.length > 0 && view.length === 0 && <TableRow><TableCell colSpan={9} className="py-16 text-center"><div className="text-[13px] font-medium">没有匹配的来源</div><div className="mt-1 text-[12px] text-faint">调整搜索词或筛选条件后重试</div></TableCell></TableRow>}
           </TableBody>
         </Table>
       </div>
       <AddDialog open={addOpen} onOpenChange={setAddOpen} onAdded={reloadSources} />
+      <AlertDialog open={!!toDel} onOpenChange={(o) => !o && setToDel(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{toDel?.length === 1 ? `删除「${toDel[0].name}」？` : `删除 ${toDel?.length ?? 0} 个来源？`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              将移除来源本身以及它已保存的全部内容（共 {toDel?.reduce((a, x) => a + x.item_count, 0) ?? 0} 条），此操作不能撤销。
+              {toDel?.some((x) => x.origin !== "user") ? " 内置源删除后不会因更新代码或重启而回来，可随时在「已删除的内置源」中恢复。" : ""}
+              {" "}只想暂停抓取？用左侧开关停用即可。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmDelete}><Trash2 />删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <Dialog open={restoreOpen} onOpenChange={setRestoreOpen}>
+        <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-md">
+          <DialogHeader><DialogTitle>已删除的内置源</DialogTitle><DialogDescription>恢复后按 sources.json 的默认设置重新加入并开始抓取。</DialogDescription></DialogHeader>
+          <ul className="max-h-72 min-w-0 divide-y divide-border/60 overflow-y-auto rounded-lg border">
+            {deleted.map((d) => (
+              <li key={d.name} className="flex min-w-0 items-center gap-2 px-3 py-2 text-[13px]">
+                <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                <span className="shrink-0 font-mono text-[11px] text-faint">{ago(d.ts, true)}</span>
+                <Button size="sm" variant="ghost" onClick={() => restore([d.name])}><RotateCcw />恢复</Button>
+              </li>
+            ))}
+            {deleted.length === 0 && <li className="px-3 py-6 text-center text-[13px] text-faint">没有已删除的内置源</li>}
+          </ul>
+          <DialogFooter><Button variant="outline" disabled={!deleted.length} onClick={() => restore("all")}>全部恢复</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

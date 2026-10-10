@@ -102,3 +102,23 @@ export function prune() {
   db.pragma("wal_checkpoint(TRUNCATE)");
   return n;
 }
+
+/** Delete sources (any origin) with their items, links and seen-ids. Built-ins get a tombstone so seed sync won't re-add them. */
+export function deleteSources(ids: number[]) {
+  const db = getDb();
+  let deleted = 0, items = 0;
+  db.transaction(() => {
+    for (const id of ids) {
+      const s = db.prepare("SELECT name, origin FROM sources WHERE id=?").get(id) as { name: string; origin: string } | undefined;
+      if (!s) continue;
+      db.prepare("DELETE FROM seen WHERE uid IN (SELECT uid FROM items WHERE source_id=?)").run(id);
+      db.prepare("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE source_id=?)").run(id);
+      items += db.prepare("DELETE FROM items WHERE source_id=?").run(id).changes;
+      db.prepare("DELETE FROM sources WHERE id=?").run(id);
+      if (s.origin === "seed") db.prepare("INSERT OR REPLACE INTO deleted_seeds VALUES(?,?)").run(s.name, Date.now() / 1000);
+      deleted++;
+    }
+  })();
+  if (deleted) { db.pragma("incremental_vacuum"); publish({ event: "sources" }); }
+  return { deleted, items };
+}
