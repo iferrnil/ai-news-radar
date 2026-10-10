@@ -285,7 +285,7 @@ export default function Sources() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate font-medium">{s.name}</span>
-                        {s.priority && <span className={cn("rounded-[5px] px-1.5 py-px font-mono type-2xs font-medium leading-4", s.priority === "P0" ? "bg-brand-soft text-brand" : "text-faint shadow-[inset_0_0_0_1px_var(--border)]")}>{s.priority}</span>}
+                        {s.priority && <span className={cn("rounded-xs px-1.5 py-px font-mono type-2xs font-medium leading-4", s.priority === "P0" ? "bg-brand-soft text-brand" : "text-faint shadow-hair")}>{s.priority}</span>}
                         {s.origin === "user" && <Badge variant="secondary" className="h-4.5 px-1.5 type-2xs">手动</Badge>}
                       </div>
                       <div className="truncate type-caption text-faint">{TYPE[s.type] ?? s.type} · {s.url.replace(/^https?:\/\//, "")}</div>

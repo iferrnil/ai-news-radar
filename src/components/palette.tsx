@@ -40,7 +40,7 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
                 <CommandItem key={it.id} value={`item-${it.id}`} onSelect={() => run(() => setOpen(it))}>
                   <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} className="size-5" />
                   <span className="truncate">{it.is_x ? xText(it) : it.title}</span>
-                  {!inAll(sectionOf(it)) && <span className="shrink-0 rounded-[4px] px-1.5 type-meta leading-[18px] text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)]">{secZh(sectionOf(it))}</span>}
+                  {!inAll(sectionOf(it)) && <span className="shrink-0 rounded-xs px-1.5 type-meta leading-[18px] text-muted-foreground shadow-hair">{secZh(sectionOf(it))}</span>}
                   <CommandShortcut className="whitespace-nowrap tracking-normal">{ago(it.published, true)}</CommandShortcut>
                 </CommandItem>
               ))}

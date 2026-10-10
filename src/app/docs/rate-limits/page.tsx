@@ -46,7 +46,7 @@ export default function DocsPage() {
       <div className="mt-6 overflow-x-auto rounded-xl bg-card shadow-card">
         <table className="w-full type-body">
           <thead>
-            <tr className="border-b border-border/70 bg-muted/30 text-left type-meta text-faint [&>th]:h-9 [&>th]:px-4 [&>th]:font-medium">
+            <tr className="border-b border-border bg-muted/30 text-left type-meta text-faint [&>th]:h-9 [&>th]:px-4 [&>th]:font-medium">
               <th>类型</th><th>文档限额</th><th className="text-right">我们的用量</th><th>风险</th>
             </tr>
           </thead>
@@ -60,7 +60,7 @@ export default function DocsPage() {
                     {e.official ? <span className="line-clamp-2">{e.documented}</span> : <span className="text-amber-700 dark:text-amber-300">未找到官方限额文档</span>}
                   </td>
                   <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono tabular-nums">{u.perMin} <span className="text-faint">次/分 · {u.count} 源</span></td>
-                  <td className="px-4 py-2.5"><span className={cn("rounded-[5px] px-1.5 py-0.5 type-meta font-medium", RISK_CLS[e.risk])}>{RISK_ZH[e.risk]}</span></td>
+                  <td className="px-4 py-2.5"><span className={cn("rounded-xs px-1.5 py-0.5 type-meta font-medium", RISK_CLS[e.risk])}>{RISK_ZH[e.risk]}</span></td>
                 </tr>
               );
             })}
@@ -75,8 +75,8 @@ export default function DocsPage() {
             <section key={e.id} id={e.id} className="scroll-mt-20 rounded-xl bg-card px-6 py-5 shadow-card">
               <div className="flex flex-wrap items-start gap-2">
                 <h2 className="group/h relative type-title font-semibold leading-6 tracking-[-0.01em]"><a href={`#${e.id}`} aria-label="链接到本节" className="absolute -left-5 top-0 hidden h-6 items-center text-faint opacity-0 transition-opacity duration-150 ease-out hover:text-brand group-hover/h:opacity-100 sm:flex"><Hash className="size-3.5" strokeWidth={2} /></a>{e.name}</h2>
-                <span className={cn("rounded-[5px] px-1.5 py-0.5 type-meta font-medium", RISK_CLS[e.risk])}>风险 {RISK_ZH[e.risk]}</span>
-                {!e.official && <span className="rounded-[5px] px-1.5 py-0.5 type-meta text-amber-700 shadow-[inset_0_0_0_1px_var(--border)] dark:text-amber-300">无官方限额文档</span>}
+                <span className={cn("rounded-xs px-1.5 py-0.5 type-meta font-medium", RISK_CLS[e.risk])}>风险 {RISK_ZH[e.risk]}</span>
+                {!e.official && <span className="rounded-xs px-1.5 py-0.5 type-meta text-amber-700 shadow-hair dark:text-amber-300">无官方限额文档</span>}
               </div>
               <code className="mt-1.5 block break-all font-mono type-caption text-faint">{e.endpoint}</code>
               <dl className="mt-4 grid gap-x-8 gap-y-5 type-body leading-[1.7] md:grid-cols-2 [&_dd]:max-w-[60ch]">

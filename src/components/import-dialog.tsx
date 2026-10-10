@@ -23,11 +23,11 @@ const ST: Record<RowStatus | "remove", { label: string; cls: string }> = {
   new: { label: "新增", cls: ok },
   restore: { label: "恢复", cls: ok },
   update: { label: "更新", cls: "bg-brand-soft text-brand shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--brand)_22%,transparent)]" },
-  dup: { label: "已存在", cls: "text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)]" },
+  dup: { label: "已存在", cls: "text-muted-foreground shadow-hair" },
   invalid: { label: "无效", cls: "bg-red-500/10 text-red-600 dark:text-red-400 shadow-[inset_0_0_0_1px_color-mix(in_oklch,currentColor_22%,transparent)]" },
   remove: { label: "删除", cls: "bg-red-500/10 text-red-600 dark:text-red-400 shadow-[inset_0_0_0_1px_color-mix(in_oklch,currentColor_22%,transparent)]" },
 };
-const Pill = ({ k }: { k: keyof typeof ST }) => <span className={cn("inline-flex h-5 items-center rounded-[5px] px-1.5 type-2xs font-medium whitespace-nowrap", ST[k].cls)}>{ST[k].label}</span>;
+const Pill = ({ k }: { k: keyof typeof ST }) => <span className={cn("inline-flex h-5 items-center rounded-xs px-1.5 type-2xs font-medium whitespace-nowrap", ST[k].cls)}>{ST[k].label}</span>;
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
 
 export default function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (b: boolean) => void; onDone: () => void }) {
@@ -161,7 +161,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
                       const e = parsed?.rows[r.i]?.entry;
                       const note = r.reason ?? (e ? `${SECTION_ZH[e.section]} · ${e.priority}` : "");
                       return (
-                        <tr key={r.i} className="border-t border-border/40 first:border-t-0">
+                        <tr key={r.i} className="border-t border-border/50 first:border-t-0">
                           <td className="px-3 py-1.5"><Pill k={r.status} /></td>
                           <td className="px-3 py-1.5"><div className="truncate" title={r.name}>{r.name}</div><div className="truncate type-meta text-faint sm:hidden">{note}</div></td>
                           <td className="hidden truncate px-3 py-1.5 type-caption text-muted-foreground sm:table-cell" title={note}>{note}</td>
@@ -169,7 +169,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
                       );
                     })}
                     {mode === "replace" && plan.remove.map((r) => (
-                      <tr key={`rm-${r.id}`} className="border-t border-border/40">
+                      <tr key={`rm-${r.id}`} className="border-t border-border/50">
                         <td className="px-3 py-1.5"><Pill k="remove" /></td>
                         <td className="truncate px-3 py-1.5" title={r.name}>{r.name}</td>
                         <td className="hidden truncate px-3 py-1.5 type-caption text-muted-foreground sm:table-cell">不在文件中，连同内容删除</td>

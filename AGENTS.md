@@ -168,3 +168,10 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - UI: export DropdownMenu + `components/import-dialog.tsx` (next/dynamic, mounted on open) on the sources page.
 - Manual test recipe (destructive, back up `data/news.db` first): export JSON → bulk-delete all → import (expect 22 restore, identical set) → OPML sample → replace with the original JSON.
 - Bundle rule: the sources page imports only `lib/portable-export.ts` (dependency-free export builders). zod + fast-xml-parser live in `lib/portable.ts`, which only the lazily-loaded import dialog and the API route import. Don't import `@/lib/portable` from always-loaded client code.
+
+## UI tokens (consistency rules)
+- Radii: `rounded-xs` (0.3rem) chips/kbd/tiny badges · `rounded-md` small controls/rows · `rounded-lg` inputs, menus, nav items · `rounded-xl` cards/panels · `rounded-full` pills/avatars. No `rounded-[Npx]`.
+- Elevation: `shadow-card` resting → `shadow-raised` hover → `shadow-pop` popovers/menus/hover card; `shadow-hair` = inset 1px border for chips. Sheets keep `shadow-lg`.
+- Borders: `border-border` for structure, `border-border/50` for in-panel hairline dividers only.
+- Focus: `focus-visible:ring-3 focus-visible:ring-ring/50` everywhere (same as shadcn primitives).
+- Type: `type-*` scale only (no `text-[Npx]`).

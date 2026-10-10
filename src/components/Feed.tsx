@@ -53,14 +53,14 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
   const card = (
     <Card ref={ref} size="sm" onClick={() => onOpen(it)} data-active={active} data-read={read} role="button" tabIndex={-1}
       className={cn(CARD_H, "group/item cursor-pointer gap-0 py-0 shadow-card ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
-        "hover:-translate-y-px hover:ring-foreground/[0.16] hover:shadow-[var(--shadow-card),0_8px_24px_-12px_rgb(0_0_0/0.35)]",
+        "hover:-translate-y-px hover:ring-foreground/[0.16] hover:shadow-raised",
         "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/60", fresh && "fresh-row")}>
       <div className="flex h-11 shrink-0 items-center gap-2 px-4 pt-1 type-caption leading-4">
         <SourceAvatar name={it.source} username={h} homepage={it.homepage} url={it.url} x={x} className="size-5" />
         <span className={cn("min-w-0 truncate font-medium", x ? "text-foreground/85" : "text-muted-foreground")}>{x ? srcName(it).replace(/^@/, "") : it.source}</span>
         {x && <span className="hidden min-w-0 shrink truncate text-faint sm:inline">@{h}</span>}
         {x && <Twitter className="size-2.5 shrink-0 text-faint" />}
-        {it.priority === "P0" && <span className="shrink-0 rounded-[4px] bg-brand-soft px-1 font-mono type-2xs font-semibold leading-4 tracking-[0.02em] text-brand shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--brand)_22%,transparent)]">P0</span>}
+        {it.priority === "P0" && <span className="shrink-0 rounded-xs bg-brand-soft px-1 font-mono type-2xs font-semibold leading-4 tracking-[0.02em] text-brand shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--brand)_22%,transparent)]">P0</span>}
         {it.tr && <TrBadge />}
         <time className="ml-auto shrink-0 font-mono type-meta tabular-nums text-faint" title={`北京时间 ${bj(it.published)}`}>{ago(it.published, true)}</time>
       </div>
@@ -75,14 +75,14 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
             {it.image ? (
               // thumbnail (memes / video covers): fixed height so cards stay equal; lazy + no-referrer for hotlink-protected CDNs
               <img src={it.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
-                className="mt-2 h-[92px] w-full rounded-md bg-muted object-cover ring-1 ring-border/60" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                className="mt-2 h-[92px] w-full rounded-md bg-muted object-cover ring-1 ring-border/50" onError={(e) => { e.currentTarget.style.display = "none"; }} />
             ) : dek && dek !== it.title && <p className="mt-1.5 line-clamp-3 break-words [overflow-wrap:anywhere] type-body leading-[1.6] text-muted-foreground">{dek}</p>}
           </>
         )}
       </div>
-      <div className="flex h-10 shrink-0 items-center gap-1.5 border-t border-border/40 px-4 type-meta text-faint">
-        <span className="rounded-[4px] px-1.5 leading-[18px] shadow-[inset_0_0_0_1px_var(--border)]">{secZh(sectionOf(it))}</span>
-        {it.also_on_x.length > 0 && <span className="inline-flex min-w-0 items-center gap-1 truncate rounded-[4px] bg-secondary px-1.5 leading-[18px] text-muted-foreground"><Twitter className="size-2 shrink-0" />也在 X</span>}
+      <div className="flex h-10 shrink-0 items-center gap-1.5 border-t border-border/50 px-4 type-meta text-faint">
+        <span className="rounded-xs px-1.5 leading-[18px] shadow-hair">{secZh(sectionOf(it))}</span>
+        {it.also_on_x.length > 0 && <span className="inline-flex min-w-0 items-center gap-1 truncate rounded-xs bg-secondary px-1.5 leading-[18px] text-muted-foreground"><Twitter className="size-2 shrink-0" />也在 X</span>}
         <a href={it.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} aria-label="打开原文"
           className="-mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded-md opacity-60 transition-[opacity,background-color,color] duration-150 ease-out group-hover/item:opacity-100 hover:bg-secondary hover:text-foreground">
           <ArrowUpRight className="size-3.5" strokeWidth={1.75} />
@@ -94,7 +94,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
   return (
     <HoverCard>
       <HoverCardTrigger delay={450} closeDelay={150} render={<div className="min-w-0" />}>{card}</HoverCardTrigger>
-      <HoverCardContent side="right" align="start" sideOffset={8} className="w-[min(420px,calc(100vw-24px))] overflow-hidden p-0 shadow-[var(--shadow-card),0_16px_40px_-12px_rgb(0_0_0/0.45)] ring-border">
+      <HoverCardContent side="right" align="start" sideOffset={8} className="w-[min(420px,calc(100vw-24px))] overflow-hidden p-0 shadow-pop ring-border">
         <ItemPreview it={it} />
       </HoverCardContent>
     </HoverCard>
@@ -195,7 +195,7 @@ export default function Feed() {
           <motion.div initial={{ y: -16, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: -16, opacity: 0 }} transition={{ type: "spring", stiffness: 420, damping: 32 }}
             className="pointer-events-none sticky top-[68px] z-20 -mb-8 flex justify-center">
             <button onClick={showPending} className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-[oklch(0.52_0.2_282)] px-3.5 py-1.5 type-body font-medium text-white shadow-[0_10px_30px_-8px_oklch(0.52_0.2_282/0.7)] ring-1 ring-white/15 transition duration-150 ease-out hover:brightness-110">
-              <ArrowUp className="size-3.5" />{pend.length} 条新内容<kbd className="ml-1 rounded bg-white/15 px-1 font-mono type-2xs">N</kbd>
+              <ArrowUp className="size-3.5" />{pend.length} 条新内容<kbd className="ml-1 rounded-xs bg-white/15 px-1 font-mono type-2xs">N</kbd>
             </button>
           </motion.div>
         )}
@@ -203,14 +203,14 @@ export default function Feed() {
 
       <div className="flex h-8 items-center gap-2">
         <button onClick={() => setF({ p0: !f.p0 })} aria-pressed={f.p0}
-          className={cn("flex h-8 items-center gap-1.5 rounded-lg px-2.5 type-caption font-medium shadow-[inset_0_0_0_1px_var(--border)] transition-colors duration-150 ease-out",
+          className={cn("flex h-8 items-center gap-1.5 rounded-lg px-2.5 type-caption font-medium shadow-hair transition-colors duration-150 ease-out",
             f.p0 ? "bg-brand-soft text-brand" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
           仅 P0<span className="font-mono type-2xs tabular-nums text-faint">{p0n}</span>
         </button>
         <div className="ml-auto flex items-center gap-3 type-meta text-faint">
           <span className="hidden items-center gap-1 xl:flex">
             {[["J", "K", "移动"], ["↵", "", "打开"], ["N", "", "新内容"], ["G", "", "顶部"]].map(([a, b, l]) => (
-              <span key={l} className="flex items-center gap-0.5"><kbd className="rounded-[4px] bg-secondary px-1 font-mono type-2xs leading-4 text-muted-foreground">{a}</kbd>{b && <kbd className="rounded-[4px] bg-secondary px-1 font-mono type-2xs leading-4 text-muted-foreground">{b}</kbd>}<span className="ml-0.5 mr-1.5">{l}</span></span>))}
+              <span key={l} className="flex items-center gap-0.5"><kbd className="rounded-xs bg-secondary px-1 font-mono type-2xs leading-4 text-muted-foreground">{a}</kbd>{b && <kbd className="rounded-xs bg-secondary px-1 font-mono type-2xs leading-4 text-muted-foreground">{b}</kbd>}<span className="ml-0.5 mr-1.5">{l}</span></span>))}
           </span>
           <Tooltip>
             <TooltipTrigger render={<button onClick={refresh} className="flex h-7 items-center gap-1.5 rounded-md px-1.5 tabular-nums transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground" aria-label="刷新" />}>
@@ -237,7 +237,7 @@ export default function Feed() {
         groups.map((g, gi) => (
           <section key={g.day}>
             <div className={cn("sticky top-14 z-10 flex items-center gap-2 bg-background/85 pb-3 type-caption font-medium text-muted-foreground backdrop-blur-xl backdrop-saturate-150", gi === 0 ? "pt-4" : "pt-7", BLEED)}>
-              {g.day}<span className="rounded-[4px] bg-secondary px-1.5 font-mono type-2xs leading-4 tabular-nums text-faint">{dayCount.get(g.day) ?? g.items.length}</span><span className="h-px flex-1 bg-border/60" />
+              {g.day}<span className="rounded-xs bg-secondary px-1.5 font-mono type-2xs leading-4 tabular-nums text-faint">{dayCount.get(g.day) ?? g.items.length}</span><span className="h-px flex-1 bg-border/60" />
             </div>
             <div className={GRID}>
               {g.items.map((it) => {

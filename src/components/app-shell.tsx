@@ -65,7 +65,7 @@ function TranslateMenu() {
           <div className="flex-1"><div className="type-body font-medium">翻译成中文</div><div className="mt-0.5 type-caption leading-snug text-muted-foreground">显示外文内容的中文译文（标「译」），悬停卡片和详情里可看原文。</div></div>
           <Switch checked={zh} onCheckedChange={(v) => setZh(!!v)} aria-label="翻译成中文" />
         </label>
-        <div className="border-t border-border/60" />
+        <div className="border-t border-border/50" />
         <label className="flex cursor-pointer items-start gap-3 p-3.5">
           <div className="flex-1">
             <div className="type-body font-medium">抓取时翻译（DeepSeek）</div>
@@ -99,13 +99,13 @@ function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo
   return (
     <>
     <div className={cn("group/src relative flex h-7 items-center rounded-md transition-colors duration-150 ease-out", active ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground", confirm && "bg-hover text-foreground")}>
-      <button onClick={onGo} title={s.last_error ?? s.name} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 type-caption outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+      <button onClick={onGo} title={s.last_error ?? s.name} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 type-caption outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
         <StatusDot s={s} />
         <span className="flex-1 truncate text-left">{label}</span>
         <span className={cn("font-mono type-meta tabular-nums text-faint transition-opacity duration-150 group-hover/src:opacity-0 group-focus-within/src:opacity-0 [@media(hover:none)]:hidden", confirm && "opacity-0")}>{s.item_count || ""}</span>
       </button>
       <button aria-label={`取消订阅 ${label}`} title="取消订阅" aria-expanded={confirm} onClick={() => setConfirm((v) => !v)}
-        className={cn("absolute right-1 grid size-5 place-items-center rounded text-faint opacity-0 outline-none transition-[opacity,color,background-color] duration-150 hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/src:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:mr-1 [@media(hover:none)]:opacity-100", confirm && "text-red-500 opacity-100")}>
+        className={cn("absolute right-1 grid size-5 place-items-center rounded-xs text-faint opacity-0 outline-none transition-[opacity,color,background-color] duration-150 hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 group-hover/src:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:mr-1 [@media(hover:none)]:opacity-100", confirm && "text-red-500 opacity-100")}>
         <MinusCircle className="size-3.5" strokeWidth={1.75} />
       </button>
     </div>
@@ -144,7 +144,7 @@ export function StatusDot({ s }: { s: Pick<SourceRow, "enabled" | "supported" | 
 
 function NavItem({ active, icon: Icon, label, count, onClick }: { active: boolean; icon: React.ElementType; label: string; count?: number; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={cn("group relative flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 type-body font-medium tracking-[-0.005em] transition-colors duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+    <button onClick={onClick} className={cn("group relative flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 type-body font-medium tracking-[-0.005em] transition-colors duration-150 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
       active ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : "text-muted-foreground hover:bg-hover hover:text-foreground", !active && count === 0 && "opacity-60")}>
       {active && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
       <Icon strokeWidth={1.75} className={cn("size-4 transition-colors duration-150 ease-out", active ? "text-brand" : "text-faint group-hover:text-foreground")} />
@@ -169,11 +169,11 @@ function DocsGroup({ path, onGo }: { path: string; onGo: (href: string) => void 
       <div className={cn("group relative flex h-8 w-full items-center rounded-lg type-body font-medium tracking-[-0.005em] transition-colors duration-150 ease-out",
         path === "/docs" ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : inDocs ? "text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
         {path === "/docs" && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
-        <button onClick={() => { onGo("/docs"); if (!open) toggle(true); }} className="flex h-full flex-1 items-center gap-2.5 rounded-lg pl-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+        <button onClick={() => { onGo("/docs"); if (!open) toggle(true); }} className="flex h-full flex-1 items-center gap-2.5 rounded-lg pl-2.5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
           <BookOpen strokeWidth={1.75} className={cn("size-4 transition-colors duration-150 ease-out", inDocs ? "text-brand" : "text-faint group-hover:text-foreground")} />
           <span className="flex-1 text-left">文档</span>
         </button>
-        <CollapsibleTrigger aria-label={open ? "收起文档" : "展开文档"} className="mr-1 grid size-6 place-items-center rounded-md text-faint outline-none transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+        <CollapsibleTrigger aria-label={open ? "收起文档" : "展开文档"} className="mr-1 grid size-6 place-items-center rounded-md text-faint outline-none transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
           <ChevronRight strokeWidth={2} className={cn("size-3.5 transition-transform duration-200 ease-out", open && "rotate-90")} />
         </CollapsibleTrigger>
       </div>
@@ -183,7 +183,7 @@ function DocsGroup({ path, onGo }: { path: string; onGo: (href: string) => void 
             const on = path === docHref(d);
             return (
               <button key={d.slug} onClick={() => onGo(docHref(d))}
-                className={cn("relative flex h-7 w-full items-center gap-2 rounded-md px-2 type-caption transition-colors duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                className={cn("relative flex h-7 w-full items-center gap-2 rounded-md px-2 type-caption transition-colors duration-150 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                   on ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
                 {on && <span className="absolute -left-[9.5px] top-1/2 h-3.5 w-px -translate-y-1/2 bg-brand" />}
                 <span className="truncate">{d.title}</span>
@@ -388,16 +388,16 @@ function Shell({ children }: { children: React.ReactNode }) {
           </SheetContent>
         </Sheet>
         <div className="glow flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border/80 bg-background/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
+          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="菜单"><Menu className="size-4" /></Button>
             <div className="hidden min-w-0 truncate type-ui font-semibold tracking-tight sm:block">{title}</div>
             <button onClick={() => setPalette(true)}
-              className="ml-auto flex h-8 w-full max-w-[360px] items-center gap-2 rounded-lg bg-muted px-2.5 type-body text-faint shadow-[inset_0_0_0_1px_var(--border)] transition hover:text-muted-foreground hover:shadow-[inset_0_0_0_1px_var(--input)] sm:ml-6 sm:mr-auto">
+              className="ml-auto flex h-8 w-full max-w-[360px] items-center gap-2 rounded-lg bg-muted px-2.5 type-body text-faint shadow-hair transition hover:text-muted-foreground hover:shadow-[inset_0_0_0_1px_var(--input)] sm:ml-6 sm:mr-auto">
               <Search className="size-3.5" /><span className="truncate">搜索新闻、来源、命令…</span>
-              <kbd className="ml-auto hidden items-center gap-0.5 rounded-[4px] bg-background/80 px-1.5 font-mono type-2xs text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] sm:flex"><CommandIcon className="size-2.5" />K</kbd>
+              <kbd className="ml-auto hidden items-center gap-0.5 rounded-xs bg-background/80 px-1.5 font-mono type-2xs text-muted-foreground shadow-hair sm:flex"><CommandIcon className="size-2.5" />K</kbd>
             </button>
             <Tooltip>
-              <TooltipTrigger render={<span className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 type-meta font-medium text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] sm:flex" />}>
+              <TooltipTrigger render={<span className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 type-meta font-medium text-muted-foreground shadow-hair sm:flex" />}>
                 <span className="relative flex size-1.5">
                   {live && <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
                   <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-muted-foreground")} />
