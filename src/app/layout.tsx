@@ -6,7 +6,7 @@ import "./globals.css";
 // Latin: Inter (OFL) — Chinese: Noto Sans SC (OFL, redistributable), self-hosted by next/font and
 // sliced by unicode-range so browsers only download the CJK chunks a page actually uses.
 const inter = Inter({ subsets: ["latin"], variable: "--font-latin", display: "swap" });
-const notoSC = Noto_Sans_SC({ weight: ["400", "500", "600"], variable: "--font-cjk", display: "swap", preload: false });
+const notoSC = Noto_Sans_SC({ variable: "--font-cjk", display: "swap", preload: false });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono-face", display: "swap" });
 const latin = inter;
 

@@ -122,7 +122,7 @@ export default function Sources() {
   const { sources: rows, reloadSources, addOpen, setAddOpen } = useApp();
   const [q, setQ] = useState(""); const [ft, setFt] = useState("all"); const [fsec, setFsec] = useState("all"); const [fs, setFs] = useState("active");
   const [busy, setBusy] = useState<Record<number, boolean>>({});
-  useEffect(() => { const t = setInterval(reloadSources, 10000); return () => clearInterval(t); }, [reloadSources]);
+  useEffect(() => { const t = setInterval(() => { if (!document.hidden) reloadSources(); }, 15000); return () => clearInterval(t); }, [reloadSources]);
 
   const view = useMemo(() => rows.filter((s) =>
     (!q || (s.name + s.url).toLowerCase().includes(q.toLowerCase())) && (ft === "all" || s.type === ft) && (fsec === "all" || sectionOf({ ...s, is_x: s.type.startsWith("x") }) === fsec) &&

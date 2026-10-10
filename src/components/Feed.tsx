@@ -6,7 +6,7 @@ const HOVER_Q = "(hover: hover) and (pointer: fine)";
 function useCanHover() {
   return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
 }
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, LazyMotion, domAnimation, m as motion } from "framer-motion";
 import { ArrowUp, ArrowUpRight, Inbox, RefreshCw } from "lucide-react";
 import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
@@ -188,6 +188,7 @@ export default function Feed() {
   const lastFetch = Math.max(0, ...sources.filter((s) => s.enabled).map((s) => s.last_fetched ?? 0));
 
   return (
+    <LazyMotion features={domAnimation}>
     <div className={cn("mx-auto w-full max-w-[1480px] pb-24 pt-4", PAD)}>
       <AnimatePresence>
         {pend.length > 0 && (
@@ -259,5 +260,6 @@ export default function Feed() {
         )}
       </AnimatePresence>
     </div>
+    </LazyMotion>
   );
 }

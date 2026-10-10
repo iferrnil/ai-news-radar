@@ -4,15 +4,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BookOpen, ChevronRight, Clapperboard, FileText, Command as CommandIcon, Database, ExternalLink, FlaskConical, Globe2, Inbox, Menu, Moon, Newspaper,
-  Plus, Radio, Search, Sun,
+  Activity, BookOpen, ChevronRight, Clapperboard, Command as CommandIcon, Database, ExternalLink, FlaskConical, Globe2, Inbox, Menu, Moon, Newspaper,
+  Radio, Search, Sun,
 } from "lucide-react";
 import { toast } from "sonner";
 import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { CommandDialog, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from "@/components/ui/command";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
@@ -21,12 +20,15 @@ import { DOCS, docHref } from "@/lib/docs-registry";
 import { type Filters, countOf, p0For, parseFilters, setP0For, toQuery, viewKey } from "./filters";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
-import { SECTIONS, inAll, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, xText, localize } from "./common";
+import { SECTIONS, inAll, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, } from "./common";
 import { SourceAvatar } from "./source-avatar";
 import { Original, useFullItem } from "./item-preview";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Languages, MinusCircle } from "lucide-react";
+import dynamic from "next/dynamic";
+// ⌘K palette (cmdk) is code-split and only mounted after first open
+const Palette = dynamic(() => import("./palette"), { ssr: false });
 
 export const SEC_ICON: Record<SectionKey | "all", React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
 
@@ -254,64 +256,6 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
-  const { navigate, sources, setOpen, setAddOpen, zh } = useApp();
-  const { resolvedTheme, setTheme } = useTheme();
-  const router = useRouter();
-  const [q, setQ] = useState("");
-  const [hits, setHits] = useState<ItemOut[]>([]);
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(async () => {
-      // "最新" (no query) mirrors 全部 and skips 娱乐; a real search may still hit 娱乐 items (labelled)
-      const r = (await api<ItemOut[]>(`/api/items?limit=${q.trim() ? 12 : 40}${zh ? "&zh=1" : ""}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`)).map((it) => (zh ? localize(it) : it));
-      setHits(q.trim() ? r : r.filter((it) => inAll(sectionOf(it))).slice(0, 12));
-    }, 150);
-    return () => clearTimeout(t);
-  }, [q, open, zh]);
-  const run = (fn: () => void) => { onOpenChange(false); setQ(""); fn(); };
-  const goFeed = (p: Partial<Filters>) => run(() => navigate({ section: "", source: null, ...p }));
-  return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} title="命令面板" description="搜索内容、来源与操作" className="sm:max-w-xl">
-      <Command shouldFilter={false} className="rounded-xl">
-        <CommandInput placeholder="搜索新闻、来源、操作…" value={q} onValueChange={setQ} />
-        <CommandList className="max-h-[420px]">
-          <CommandEmpty>没有结果</CommandEmpty>
-          {hits.length > 0 && (
-            <CommandGroup heading={q ? "内容" : "最新"}>
-              {hits.map((it) => (
-                <CommandItem key={it.id} value={`item-${it.id}`} onSelect={() => run(() => setOpen(it))}>
-                  <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} className="size-5" />
-                  <span className="truncate">{it.is_x ? xText(it) : it.title}</span>
-                  {!inAll(sectionOf(it)) && <span className="shrink-0 rounded-[4px] px-1.5 text-[11px] leading-[18px] text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)]">{secZh(sectionOf(it))}</span>}
-                  <CommandShortcut className="whitespace-nowrap tracking-normal">{ago(it.published, true)}</CommandShortcut>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-          <CommandSeparator />
-          <CommandGroup heading="跳转">
-            {SECTIONS.filter((s) => !q || s.zh.includes(q)).map((s) => { const I = SEC_ICON[s.key]; return (
-              <CommandItem key={s.key} value={`sec-${s.key}`} onSelect={() => goFeed({ section: s.key })}><I />{s.zh}</CommandItem>); })}
-            {sources.filter((s) => s.enabled && q && s.name.toLowerCase().includes(q.toLowerCase())).slice(0, 6).map((s) => (
-              <CommandItem key={s.id} value={`src-${s.id}`} onSelect={() => goFeed({ source: s.id })}>
-                <SourceAvatar name={s.name} username={s.username} homepage={s.homepage} url={s.url} x={s.type.startsWith("x")} className="size-5" />{s.name}
-              </CommandItem>))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="操作">
-            <CommandItem value="add" onSelect={() => run(() => { router.push("/sources"); setAddOpen(true); })}><Plus />添加数据源</CommandItem>
-            <CommandItem value="sources" onSelect={() => run(() => router.push("/sources"))}><Database />管理数据源</CommandItem>
-            <CommandItem value="docs 文档" onSelect={() => run(() => router.push("/docs"))}><BookOpen />文档</CommandItem>
-            {DOCS.map((d) => <CommandItem key={d.slug} value={`docs ${d.slug} 文档 ${d.title}`} onSelect={() => run(() => router.push(docHref(d)))}><FileText />文档 / {d.title}</CommandItem>)}
-            <CommandItem value="theme" onSelect={() => run(() => setTheme(resolvedTheme === "dark" ? "light" : "dark"))}><Moon />切换深色/浅色</CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </Command>
-    </CommandDialog>
-  );
-}
-
 function ItemSheet() {
   const { open, setOpen } = useApp();
   const { item: it } = useFullItem(open); // shared cache with the hover preview
@@ -387,6 +331,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpenState] = useState<ItemOut | null>(null);
   const setOpen = useCallback((i: ItemOut | null) => { setOpenState(i); if (i) markRead(i.id); }, [markRead]);
   const [palette, setPalette] = useState(false);
+  const [paletteUsed, setPaletteUsed] = useState(false);
+  useEffect(() => { if (palette) setPaletteUsed(true); }, [palette]);
   const [mobileNav, setMobileNav] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const reloadSourcesRef = useRef<(() => void) | null>(null);
@@ -421,7 +367,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   const reloadSources = useCallback(async () => setSources(await api<SourceRow[]>("/api/sources")), []);
   useEffect(() => { let t: ReturnType<typeof setTimeout> | null = null; reloadSourcesRef.current = () => { if (!t) t = setTimeout(() => { t = null; reloadSources(); }, 3000); }; }, [reloadSources]);
   useEffect(() => { reloadNowRef.current = () => { reloadSources(); }; }, [reloadSources]);
-  useEffect(() => { reloadSources(); const t = setInterval(reloadSources, 20000); return () => clearInterval(t); }, [reloadSources]);
+  // structural changes arrive via the SSE "sources" event; this slow poll only refreshes fetch status dots, and pauses in hidden tabs
+  useEffect(() => { reloadSources(); const t = setInterval(() => { if (!document.hidden) reloadSources(); }, 60000); return () => clearInterval(t); }, [reloadSources]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((p) => !p); } };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
@@ -465,7 +412,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <main className="min-w-0 flex-1">{children}</main>
         </div>
       </div>
-      <Palette open={palette} onOpenChange={setPalette} />
+      {paletteUsed && <Palette open={palette} onOpenChange={setPalette} />}
       <ItemSheet />
       <Toaster position="bottom-right" />
     </AppCtx.Provider>

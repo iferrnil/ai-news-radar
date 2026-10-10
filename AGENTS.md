@@ -143,3 +143,12 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - `sources/sources.json` now ships only P0 AI sources + 4 Chinese 娱乐 feeds (网易娱乐, 抖音热搜, B站热门, 煎蛋无聊图); the old catalog lives only in docs/sources.md (history). Funny/meme feeds go to 娱乐 (outside 全部) rather than a new section: same audience/mood, and keeps the AI sections clean.
 - 仅 P0 is per view: `p0For/setP0For/viewKey` in `filters.ts` (localStorage `p0ByView`); `navigate` restores the target view's value; sidebar counts use each section's own value.
 - Items may carry `image` (jandan images, bilibili covers); cards show a fixed-height lazy thumbnail (`referrerPolicy=no-referrer`), hover card/drawer show it larger. `@next/next/no-img-element` is off on purpose.
+
+## Performance notes (Oct 2026 pass)
+- `/api/items` and `/api/sources` go through `src/lib/http.ts#jsonResponse`: weak content ETag + `Cache-Control: private, no-cache` (polls revalidate → 304), gzip > 1 KB, nulls dropped.
+- ⌘K palette (`components/palette.tsx`, cmdk) is `next/dynamic` and mounted only after first open. Don't import `ui/command` from `app-shell.tsx` or it lands back in the main chunk.
+- framer-motion is used via `LazyMotion` + `m` (domAnimation features) in `Feed.tsx`; use `m.*`, not `motion.*`.
+- Source list refresh: structural changes arrive via the SSE `sources` event; the sidebar polls only every 60 s (sources page 15 s) for status dots, skipped while the tab is hidden.
+- Fonts: Noto Sans SC is a variable font sliced by unicode-range (~1.3 MB on a cold CJK-heavy feed, then cached immutably). It is the biggest cold-load cost; the remaining option would be falling back to system CJK fonts (visual change, not done).
+- Thumbnails: fixed-height box + `loading=lazy decoding=async` → CLS 0.
+- `npm ci` needs `make`/`g++` if the better-sqlite3 prebuild download fails.

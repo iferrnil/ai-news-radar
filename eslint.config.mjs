@@ -6,7 +6,8 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   { rules: { "@typescript-eslint/no-explicit-any": "off",
-      "@next/next/no-img-element": "off", // third-party thumbnails (hotlinked, no-referrer); next/image optimizer not wanted "react-hooks/set-state-in-effect": "off" } },
+      "@next/next/no-img-element": "off", // third-party thumbnails (hotlinked, no-referrer); next/image optimizer not wanted
+      "react-hooks/set-state-in-effect": "off" } },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
