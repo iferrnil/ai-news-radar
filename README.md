@@ -8,8 +8,6 @@
 
 为 AI 内容创作者打造的**自托管实时 AI 资讯聚合器**：精选 22 个信息源：只保留最快的 P0 AI 源（官方博客与 API 发布说明、爆料 X 账号、国内 AI 媒体、Techmeme），外加少量国内娱乐/搞笑源，按优先级轮询，通过 SSE 实时推送到网页。只保留 48 小时内的内容，单进程 + SQLite，几百 MB 内存即可运行。
 
-仓库：<https://github.com/iferrnil/ai-news-radar>
-
 ## 功能
 
 - **22 个精选源（精简版）**：RSS/Atom、JSON API（机器之心、网易娱乐、抖音热搜、B 站热门、煎蛋无聊图）、X 账号（经 FxEmbed，无需 X API Token）

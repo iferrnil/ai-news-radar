@@ -5,7 +5,7 @@ import type { ItemOut } from "@/lib/types";
 // X accounts default to "x" (X 快讯) unless their group says otherwise (e.g. entertainment X accounts -> 娱乐).
 export const SECTIONS = [
   { key: "lab", zh: "实验室", en: "Labs" },
-  { key: "cn", zh: "国内媒体", en: "China media" },
+  { key: "cn", zh: "国内媒体", en: "Domestic media" },
   { key: "media", zh: "国外媒体", en: "Global media" },
   { key: "x", zh: "X 快讯", en: "X" },
   { key: "ent", zh: "娱乐", en: "Entertainment", includeInAll: false },

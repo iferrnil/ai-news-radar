@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # AI News Radar — production image (multi-arch: amd64 / arm64, e.g. Oracle Ampere A1)
 #   docker build -t ai-news-radar:local .
-#   China mainland: --build-arg NPM_REGISTRY=https://registry.npmmirror.com --build-arg APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+#   If network access is restricted, use mirrors: --build-arg NPM_REGISTRY=https://registry.npmmirror.com --build-arg APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
 # The build needs only the npm registry (+ Debian apt); fonts are vendored via npm, nothing is fetched from Google.
 FROM node:22-bookworm-slim AS deps
 ARG NPM_REGISTRY=https://registry.npmjs.org
