@@ -20,7 +20,7 @@ import { DOCS, docHref } from "@/lib/docs-registry";
 import { type Filters, countOf, p0For, parseFilters, setP0For, toQuery, viewKey } from "./filters";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
-import { type CustomSectionRow, type Section, type SourceRow, allSections, api, inAll, secZh, sectionOf, setCustomSections } from "./common";
+import { type SectionApiRow, type Section, type SourceRow, allSections, api, inAll, secZh, sectionOf, setSections } from "./common";
 import { Languages, MinusCircle } from "lucide-react";
 import dynamic from "next/dynamic";
 // ⌘K palette (cmdk) is code-split and only mounted after first open
@@ -35,10 +35,12 @@ function TrButton({ onClick }: { onClick?: () => void }) {
   return <Button variant="ghost" size="icon" aria-label="翻译设置" className={zh ? "text-brand" : ""} onClick={onClick}><Languages className="size-4" /></Button>;
 }
 
-export const SEC_ICON: Record<string, React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
-/** Section icon: lucide for built-ins, the user's emoji for custom sections (Folder when none). */
+/** the seeded default sections keep their original lucide icons as `lucide:<name>` until the user picks an emoji */
+const LUCIDE: Record<string, React.ElementType> = { lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
+export const SEC_ICON: Record<string, React.ElementType> = { all: Inbox };
+/** Section icon: `lucide:*` token, the user's emoji, or Folder when none. */
 export function secIcon(s: Pick<Section, "key" | "icon">): React.ElementType {
-  if (SEC_ICON[s.key]) return SEC_ICON[s.key];
+  if (s.icon?.startsWith("lucide:")) return LUCIDE[s.icon.slice(7)] ?? Folder;
   if (!s.icon) return Folder;
   let C = EMOJI.get(s.icon); // stable component per emoji (no remounts)
   if (!C) { const e = s.icon; const Emoji = ({ className }: { className?: string }) => <span aria-hidden className={cn("grid place-items-center text-[14px] leading-none", className)}>{e}</span>; C = Emoji; EMOJI.set(e, C); }
@@ -133,48 +135,45 @@ function NavItem({ active, icon: Icon, label, count, onClick, className }: { act
   );
 }
 
-/** Sidebar section row = filter button + (when it has sources) a chevron that expands its subscriptions as a tree.
- *  User-created sections also get a hover/focus ⚙ that opens 管理分区 (rename / icon / delete) on /sources. */
-function SecNav({ s, active, count, onClick, onManage, list, open, onToggle, renderSource }: {
-  s: Section; active: boolean; count: number; onClick: () => void; onManage: () => void;
-  list: SourceRow[]; open: boolean; onToggle: () => void; renderSource: (src: SourceRow) => React.ReactNode;
-}) {
+/** Sidebar section row: a plain filter row; every section gets a hover/focus ⚙ that opens 管理分区 on /sources. */
+function SecNav({ s, active, count, onClick, onManage }: { s: Section; active: boolean; count: number; onClick: () => void; onManage: () => void }) {
   return (
-    <div>
-      <div className="group/sec relative">
-        <NavItem active={active} icon={secIcon(s)} label={s.zh} count={count} onClick={onClick} className="pr-8" />
-        {s.custom && (
-          <Button variant="ghost" size="icon-xs" aria-label={`管理分区「${s.zh}」`} onClick={onManage}
-            className="absolute right-8 top-1 z-10 bg-sidebar text-faint opacity-0 transition-opacity duration-150 group-hover/sec:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100">
-            <Settings2 />
-          </Button>
-        )}
-        {list.length > 0 && (
-          <Button variant="ghost" size="icon-xs" aria-label={`${open ? "收起" : "展开"}「${s.zh}」的订阅源`} aria-expanded={open} onClick={onToggle}
-            className="absolute right-1 top-1 z-10 text-faint hover:text-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground">
-            <ChevronRight className={cn("transition-transform duration-200 ease-out", open && "rotate-90")} />
-          </Button>
-        )}
-      </div>
-      {open && list.length > 0 && (
-        <div role="group" aria-label={`${s.zh} 的订阅源`} className="relative mb-1 ml-[17px] mt-px space-y-px border-l border-border pl-1.5 animate-in fade-in-0 slide-in-from-top-1 duration-150">
-          {list.map(renderSource)}
-        </div>
-      )}
+    <div className="group/sec relative">
+      <NavItem active={active} icon={secIcon(s)} label={s.zh} count={count} onClick={onClick} />
+      <Button variant="ghost" size="icon-xs" aria-label={`管理分区「${s.zh}」`} onClick={onManage}
+        className="absolute right-1.5 top-1 z-10 bg-sidebar text-faint opacity-0 transition-opacity duration-150 hover:text-foreground group-hover/sec:opacity-100 focus-visible:opacity-100">
+        <Settings2 />
+      </Button>
     </div>
   );
 }
 
-const TREE_KEY = "sidebar.tree.open";
-function useTreeOpen() {
-  const [open, setOpen] = useState<Set<string>>(new Set()); // collapsed by default
-  useEffect(() => { try { setOpen(new Set(JSON.parse(localStorage.getItem(TREE_KEY) || "[]"))); } catch {} }, []);
-  const toggle = useCallback((k: string) => setOpen((cur) => {
+/** 订阅源 › one collapsible folder per section listing its sources. Open by default; collapsed folders persist. */
+const FOLDERS_KEY = "sidebar.folders.closed";
+function useClosedFolders() {
+  const [closed, setClosed] = useState<Set<string>>(new Set());
+  useEffect(() => { try { setClosed(new Set(JSON.parse(localStorage.getItem(FOLDERS_KEY) || "[]"))); } catch {} }, []);
+  const toggle = useCallback((k: string) => setClosed((cur) => {
     const n = new Set(cur); if (n.has(k)) n.delete(k); else n.add(k);
-    try { localStorage.setItem(TREE_KEY, JSON.stringify([...n])); } catch {}
+    try { localStorage.setItem(FOLDERS_KEY, JSON.stringify([...n])); } catch {}
     return n;
   }), []);
-  return [open, toggle] as const;
+  return [closed, toggle] as const;
+}
+function SourceFolder({ s, icon: Icon, list, open, onToggle, children }: { s: Section; icon: React.ElementType; list: SourceRow[]; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  return (
+    <Collapsible open={open} onOpenChange={onToggle} className="pt-1">
+      <CollapsibleTrigger aria-label={`文件夹：${s.zh}`} className="group flex h-7 w-full items-center gap-1.5 rounded-md px-2 type-meta text-faint outline-none transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+        <ChevronRight className="size-3.5 shrink-0 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90" />
+        <Icon className="size-3.5 shrink-0 opacity-80" />
+        <span className="min-w-0 flex-1 truncate text-left">{s.zh}</span>
+        <span className="font-mono tabular-nums" title={`${list.length} 个来源`}>{list.length}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div role="group" aria-label={`${s.zh} 的订阅源`} className="relative ml-[13px] space-y-px border-l border-border pl-1.5">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 function SectionLabel({ children, first }: { children: React.ReactNode; first?: boolean }) {
@@ -230,11 +229,10 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const on = (section: Filters["section"]) => feed && f.source == null && f.section === section;
   const errs = active.filter((s) => s.last_error).length;
   const manage = () => { router.push("/sources?sections=1"); onNavigate?.(); };
-  const [tree, toggleTree] = useTreeOpen();
+  const [closed, toggleFolder] = useClosedFolders();
   const listOf = (k: string) => active.filter((s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }) === k);
-  const sec = (s: Section) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} onClick={() => go({ section: s.key })} onManage={manage}
-    list={listOf(s.key)} open={tree.has(s.key)} onToggle={() => toggleTree(s.key)}
-    renderSource={(src) => <SourceRowNav key={src.id} s={src} active={f.source === src.id && feed} onGo={() => go({ source: src.id })} />} />;
+  const sec = (s: Section) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} onClick={() => go({ section: s.key })} onManage={manage} />;
+  const outside = sections.filter((s) => !inAll(s.key));
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2.5 px-4">
@@ -252,11 +250,27 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
           <NavItem active={on("")} icon={Inbox} label="全部" count={count("")} onClick={() => go({})} />
           {sections.filter((s) => inAll(s.key)).map(sec)}
           {/* sections outside 全部 (e.g. 娱乐) sit below a divider */}
-          <div className="mx-2 my-2 h-px bg-border" role="separator" title="不计入「全部」" />
-          {sections.filter((s) => !inAll(s.key)).map(sec)}
+          {outside.length > 0 && <div className="mx-2 my-2 h-px bg-border" role="separator" title="不计入「全部」" />}
+          {outside.map(sec)}
           <SectionLabel>管理</SectionLabel>
           <NavItem active={path === "/sources"} icon={Database} label="数据源" count={active.length} onClick={() => { router.push("/sources"); onNavigate?.(); }} />
           <DocsGroup path={path} onGo={(h) => { router.push(h); onNavigate?.(); }} />
+          <Collapsible defaultOpen className="pt-4">
+            <CollapsibleTrigger className="group flex h-6 w-full items-center gap-1 px-2 type-meta font-medium tracking-[0.04em] text-faint transition-colors duration-150 ease-out hover:text-foreground">
+              <ChevronRight className="size-3.5 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90" />订阅源<span className="ml-auto font-mono tabular-nums">{active.length}</span>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-px">
+              {sections.map((sec) => {
+                const list = listOf(sec.key);
+                if (!list.length) return null;
+                return (
+                  <SourceFolder key={sec.key} s={sec} icon={secIcon(sec)} list={list} open={!closed.has(sec.key)} onToggle={() => toggleFolder(sec.key)}>
+                    {list.map((s) => <SourceRowNav key={s.id} s={s} active={f.source === s.id && feed} onGo={() => go({ source: s.id })} />)}
+                  </SourceFolder>
+                );
+              })}
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border p-3 type-meta text-faint">
@@ -333,10 +347,10 @@ function Shell({ children }: { children: React.ReactNode }) {
     if (path !== "/" || new URLSearchParams(window.location.search).has("p0")) return;
     if (p0For(viewKey(fRef.current))) router.replace(toQuery({ ...fRef.current, p0: true }), { scroll: false });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [sections, setSections] = useState<Section[]>(() => allSections());
+  const [sections, setSectionList] = useState<Section[]>(() => allSections());
   const reloadSources = useCallback(async () => {
-    const [src, secs] = await Promise.all([api<SourceRow[]>("/api/sources"), api<CustomSectionRow[]>("/api/sections").catch(() => null)]);
-    if (secs) { setCustomSections(secs); setSections(allSections()); }
+    const [src, secs] = await Promise.all([api<SourceRow[]>("/api/sources"), api<SectionApiRow[]>("/api/sections").catch(() => null)]);
+    if (secs) { setSections(secs); setSectionList(allSections()); }
     setSources(src);
   }, []);
   useEffect(() => { let t: ReturnType<typeof setTimeout> | null = null; reloadSourcesRef.current = () => { if (!t) t = setTimeout(() => { t = null; reloadSources(); }, 3000); }; }, [reloadSources]);

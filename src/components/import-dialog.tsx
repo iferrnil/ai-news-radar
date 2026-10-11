@@ -14,8 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { MAX_BYTES, SECTION_KEYS, SECTION_ZH, parseImport, type Entry, type ImportMode, type ImportPlan, type ParsedRow, type RowStatus } from "@/lib/portable";
-import { api } from "./common";
+import { MAX_BYTES, SECTION_ZH, parseImport, type Entry, type ImportMode, type ImportPlan, type ParsedRow, type RowStatus } from "@/lib/portable";
+import { allSections, api, secZh } from "./common";
 
 const MODES: { v: ImportMode; label: string; hint: string }[] = [
   { v: "merge", label: "合并", hint: "只添加新来源，已存在的保持不变（推荐）" },
@@ -35,7 +35,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
   const [err, setErr] = useState<string | null>(null);
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [mode, setMode] = useState<ImportMode>("merge");
-  const [osec, setOsec] = useState<Entry["section"]>("media");
+  const [osec, setOsec] = useState<Entry["section"]>(() => allSections().find((x) => x.key === "media")?.key ?? allSections()[0]?.key ?? "media");
   const [test, setTest] = useState(true);
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -49,7 +49,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
     if (!f) return;
     setErr(null); setPlan(null); setLoading(true);
     try {
-      const p = parseImport(f.text, f.name, s); setParsed(p);
+      const p = parseImport(f.text, f.name, s, allSections().map((x) => ({ key: x.key, name: x.zh }))); setParsed(p);
       setPlan(await api<ImportPlan>("/api/sources/import", { method: "POST", body: JSON.stringify({ entries: entries(p), mode: m, dryRun: true }) }));
     } catch (e) { setParsed(null); setErr(e instanceof Error ? e.message : String(e)); }
     setLoading(false);
@@ -129,8 +129,8 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
                   <Label className="type-caption text-muted-foreground">OPML 默认分区</Label>
                   <Select value={osec} onValueChange={(v) => { setOsec(v as Entry["section"]); preview(file, mode, v as Entry["section"]); }}>
-                    <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => SECTION_ZH[v as keyof typeof SECTION_ZH]}</SelectValue></SelectTrigger>
-                    <SelectContent>{SECTION_KEYS.map((k) => <SelectItem key={k} value={k}>{SECTION_ZH[k]}</SelectItem>)}</SelectContent>
+                    <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => secZh(v)}</SelectValue></SelectTrigger>
+                    <SelectContent>{allSections().map((x) => <SelectItem key={x.key} value={x.key}>{x.zh}</SelectItem>)}</SelectContent>
                   </Select>
                   <span className="type-meta text-faint">条目的 category 或文件夹名与分区同名时按其归类</span>
                 </div>
@@ -154,7 +154,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
                   <TableBody>
                     {plan.rows.map((r) => {
                       const e = parsed?.rows[r.i]?.entry;
-                      const note = r.reason ?? (e ? `${e.sectionName ?? SECTION_ZH[e.section as keyof typeof SECTION_ZH] ?? "国外媒体"} · ${e.priority}${e.filter ? " · 过滤规则" : ""}` : "");
+                      const note = r.reason ?? (e ? `${e.sectionName ?? (allSections().some((x) => x.key === e.section) ? secZh(e.section) : SECTION_ZH[e.section as keyof typeof SECTION_ZH] ?? "未分类")} · ${e.priority}${e.filter ? " · 过滤规则" : ""}` : "");
                       return (
                         <TableRow key={r.i} className="border-border/50">
                           <TableCell className="px-3 py-1.5"><Pill k={r.status} /></TableCell>

@@ -1,39 +1,21 @@
 import type { ItemOut } from "@/lib/types";
 
-// Exclusive sections: each SOURCE maps to exactly one section (seed `group`), so every item is in exactly one.
-// X accounts default to "x" (X 快讯) unless their group says otherwise (e.g. entertainment X accounts -> 娱乐).
-export type Section = { key: string; zh: string; en?: string; includeInAll?: boolean; icon?: string | null; custom?: boolean };
-export const SECTIONS: readonly Section[] = [
-  { key: "lab", zh: "实验室", en: "Labs" },
-  { key: "cn", zh: "国内媒体", en: "Domestic media" },
-  { key: "media", zh: "国外媒体", en: "Global media" },
-  { key: "x", zh: "X 快讯", en: "X" },
-  { key: "ent", zh: "娱乐", en: "Entertainment", includeInAll: false },
-];
-// includeInAll: false -> the section only shows in its own view; 全部 (feed, counts, P0 count, "N 条新内容", day headers) excludes it.
-// User-created sections (/api/sections, keys c1, c2, …) are registered at runtime by app-shell via setCustomSections().
+// Exclusive sections: each SOURCE belongs to exactly one section (sources.section = section key), so every item is in exactly one.
+// ALL sections are user-manageable rows from /api/sections (the former built-ins lab/cn/media/x/ent were seeded once);
+// only 全部 is fixed. app-shell registers them at runtime via setSections(); `sectionsReady()` gates 全部 filtering.
+export type Section = { key: string; zh: string; includeInAll?: boolean; icon?: string | null; pos?: number };
 export type SectionKey = string;
-export type CustomSectionRow = { key: string; name: string; icon: string | null; in_all: number; pos: number };
-let CUSTOM: Section[] = [];
-export function setCustomSections(rows: CustomSectionRow[]) { CUSTOM = rows.map((r) => ({ key: r.key, zh: r.name, icon: r.icon, includeInAll: !!r.in_all, custom: true })); }
-export const allSections = (): Section[] => [...SECTIONS, ...CUSTOM];
-export const customSections = () => CUSTOM;
-export const isCustomKey = (k: string) => /^c\d+$/.test(k);
-export const inAll = (k: SectionKey) => allSections().find((s) => s.key === k)?.includeInAll !== false;
-
-const GRP: Record<string, SectionKey> = {
-  官方实验室: "lab", 国内: "cn", 开发与工具: "media", 媒体与聚合: "media", 娱乐: "ent", Newsletter: "media", "X 快讯": "x", 爆料与榜单X: "x", 人物与产品X: "x",
-};
-export function sectionOf(it: { grp?: string | null; region?: string | null; category?: string | null; is_x?: number | boolean }): SectionKey {
-  if (it.grp?.startsWith("sec:")) return it.grp.slice(4); // user-created section
-  if (it.grp && GRP[it.grp]) return GRP[it.grp];
-  if (it.is_x) return "x";
-  if (it.region === "cn") return "cn";
-  if (it.category === "official") return "lab";
-  return "media";
-}
-export const secZh = (k: SectionKey) => allSections().find((s) => s.key === k)?.zh ?? (isCustomKey(k) ? "…" : k);
-export const sourceSection = (s: { grp?: string | null; region?: string | null; category?: string | null; type: string }) => sectionOf({ ...s, is_x: s.type.startsWith("x") });
+export type SectionApiRow = { key: string; name: string; icon: string | null; in_all: number; pos: number };
+let LIST: Section[] = []; let READY = false;
+export function setSections(rows: SectionApiRow[]) { LIST = rows.map((r) => ({ key: r.key, zh: r.name, icon: r.icon, includeInAll: !!r.in_all, pos: r.pos })); READY = true; }
+export const allSections = (): Section[] => LIST;
+export const sectionsReady = () => READY;
+export const isSectionKeyLike = (k: string) => /^[a-z][a-z0-9]{0,15}$/.test(k);
+// includeInAll: false -> the section only shows in its own view; 全部 (feed, counts, P0 count, "N 条新内容", day headers) excludes it.
+export const inAll = (k: SectionKey) => LIST.find((s) => s.key === k)?.includeInAll !== false;
+export function sectionOf(it: { section?: string | null; is_x?: number | boolean }): SectionKey { return it.section ?? (it.is_x ? "x" : "media"); }
+export const secZh = (k: SectionKey) => LIST.find((s) => s.key === k)?.zh ?? "未分类";
+export const sourceSection = (s: { section?: string | null; type: string }) => sectionOf({ ...s, is_x: s.type.startsWith("x") });
 export const CAT: Record<string, string> = { official: "官方", media: "媒体", research: "论文", community: "社区", infra: "开发者" };
 export const REG: Record<string, string> = { global: "国际", cn: "国内" };
 export const TYPE: Record<string, string> = { rss: "RSS", api: "API", x: "X 账号", x_list: "X 列表", html: "HTML" };
@@ -67,7 +49,7 @@ export async function api<T = any>(path: string, init?: RequestInit): Promise<T>
 }
 export type SourceRow = {
   id: number; name: string; type: string; username: string | null; category: string | null; region: string | null; url: string; homepage: string | null;
-  enabled: number; supported: number; unsupported_reason: string | null; priority: string | null; poll_interval: number; grp: string | null;
+  enabled: number; supported: number; unsupported_reason: string | null; priority: string | null; poll_interval: number; grp: string | null; section: string | null;
   last_fetched: number | null; last_error: string | null; last_new: number; origin: string; item_count: number; latest: number | null;
   hidden_count?: number; f_include?: string | null; f_exclude?: string | null; f_scope?: "title" | "all" | null; f_cs?: number;
 };

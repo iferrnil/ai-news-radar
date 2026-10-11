@@ -7,7 +7,7 @@ import { enqueueTranslation } from "./translate";
 import type { FetchedItem, ItemOut, SourceRow } from "./types";
 
 const ITEM_SQL = `SELECT i.id,i.title,i.url,i.summary,i.published,i.fetched,i.is_x,i.author,i.also_on_x,i.image,i.title_zh,i.summary_zh,
-  s.id AS source_id, s.name AS source, s.category, s.region, s.type AS source_type, s.priority, s.homepage, s.username, s.grp
+  s.id AS source_id, s.name AS source, s.category, s.region, s.type AS source_type, s.priority, s.homepage, s.username, s.grp, s.section
   FROM items i JOIN sources s ON s.id=i.source_id WHERE i.merged_into IS NULL AND i.hidden=0 AND s.enabled=1`;
 
 export const PREVIEW_CHARS = 280; // cards clamp to 3 lines; hover card / drawer fetch the full text via ?id=

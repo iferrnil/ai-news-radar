@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { publish } from "@/lib/bus";
 import { deleteSources, reapplyRule } from "@/lib/store";
-import { createSection, grpFor, isSectionKey } from "@/lib/sections";
+import { createSection, isSectionKey } from "@/lib/sections";
 import { validateRule } from "@/lib/rule-guard";
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (b.poll_interval != null) { db.prepare("UPDATE sources SET poll_interval=? WHERE id=?").run(Math.max(30, Number(b.poll_interval)), id); mark.run("poll_interval", "poll_interval", id); }
     if (["P0", "P1", "P2"].includes(b.priority)) { db.prepare("UPDATE sources SET priority=? WHERE id=?").run(b.priority, id); mark.run("priority", "priority", id); }
     if (name) { db.prepare("UPDATE sources SET seed_name = CASE WHEN origin='seed' THEN COALESCE(seed_name, name) END, name=? WHERE id=?").run(name, id); mark.run("name", "name", id); }
-    if (sec) { db.prepare("UPDATE sources SET grp=? WHERE id=?").run(grpFor(sec), id); mark.run("grp", "grp", id); }
+    if (sec) { db.prepare("UPDATE sources SET section=? WHERE id=?").run(sec, id); mark.run("section", "section", id); }
     if (rule) db.prepare("UPDATE sources SET f_include=?, f_exclude=?, f_scope=?, f_cs=? WHERE id=?").run(rule.include, rule.exclude, rule.scope, rule.cs ? 1 : 0, id);
   })();
   const hidden = rule ? reapplyRule(id) : undefined; // retroactive: hide/unhide stored items under the new rule

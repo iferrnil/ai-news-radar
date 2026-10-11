@@ -5,9 +5,9 @@ import { publish } from "@/lib/bus";
 import { deleteSources } from "@/lib/store";
 import { pollOne } from "@/lib/scheduler";
 import { normUrl } from "@/lib/util";
-import { EntrySchema, MAX_BYTES, MAX_ENTRIES, SECTION_GRP, xProfileUrl, type Entry, type ImportPlan, type PlanRow } from "@/lib/portable";
+import { EntrySchema, MAX_BYTES, MAX_ENTRIES, xProfileUrl, type Entry, type ImportPlan, type PlanRow } from "@/lib/portable";
 import type { SourceRow } from "@/lib/types";
-import { createSection, grpFor, metaFor } from "@/lib/sections";
+import { LEGACY_ZH, createSection, isSectionKey, metaFor, seedTarget } from "@/lib/sections";
 import { validateRule } from "@/lib/rule-guard";
 import { reapplyRule } from "@/lib/store";
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ const Body = z.object({
   dryRun: z.boolean().default(true),
   test: z.boolean().default(false),
 });
-const OV = "enabled,priority,poll_interval,grp"; // imported settings (incl. section) are user overrides: seed sync must not revert them
+const OV = "enabled,priority,poll_interval,section"; // imported settings (incl. section) are user overrides: seed sync must not revert them
 
 export async function POST(req: NextRequest) {
   const text = await req.text();
@@ -59,20 +59,24 @@ export async function POST(req: NextRequest) {
   if (body.dryRun) return Response.json(plan);
 
   const now = Date.now() / 1000; const added: number[] = [];
-  const ins = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,grp,overrides,f_include,f_exclude,f_scope,f_cs)
-    VALUES(@name,@region,@category,@type,@url,@homepage,@username,@enabled,1,@priority,@interval,'user',@now,@grp,@ov,@fi,@fe,@fs,@fc)`);
-  const upd = db.prepare(`UPDATE sources SET enabled=@enabled, priority=@priority, poll_interval=@interval, grp=@grp,
+  const ins = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,section,overrides,f_include,f_exclude,f_scope,f_cs)
+    VALUES(@name,@region,@category,@type,@url,@homepage,@username,@enabled,1,@priority,@interval,'user',@now,@section,@ov,@fi,@fe,@fs,@fc)`);
+  const upd = db.prepare(`UPDATE sources SET enabled=@enabled, priority=@priority, poll_interval=@interval, section=@section,
     region=@region, category=@category, overrides=@ov, f_include=@fi, f_exclude=@fe, f_scope=@fs, f_cs=@fc WHERE id=@id`);
-  // custom sections are matched by NAME (keys differ between installs) and created on demand
+  // sections are matched by NAME first (keys differ between installs); the 5 default keys (lab/cn/…) also match by key
+  // (covers renamed defaults and v1 files); otherwise the section is created on demand; last resort 未分类
   const secKey = (e: Entry) => {
-    if (e.section in SECTION_GRP) return e.section;
-    if (e.sectionName) { const c = createSection(db, { name: e.sectionName, icon: e.sectionIcon, inAll: e.sectionInAll }); if ("key" in c) return c.key; }
-    return "media";
+    const byName = (n?: string) => n ? (db.prepare("SELECT key FROM sections WHERE name=?").get(n) as { key: string } | undefined)?.key : undefined;
+    const hit = byName(e.sectionName) ?? (e.section in LEGACY_ZH && isSectionKey(db, e.section) ? e.section : undefined) ?? (isSectionKey(db, e.section) && !e.sectionName ? e.section : undefined);
+    if (hit) return hit;
+    const name = e.sectionName ?? LEGACY_ZH[e.section];
+    if (name) { const c = createSection(db, { name, icon: e.sectionIcon, inAll: e.sectionInAll ?? e.section !== "ent" }); if ("key" in c) return c.key; }
+    return seedTarget(db, "media");
   };
   const vals = (e: Entry) => {
     const k = secKey(e);
     return {
-      enabled: e.enabled ? 1 : 0, priority: e.priority, interval: e.interval ?? intervalFor(e.type, e.priority), grp: grpFor(k), ...metaFor(k, e.type !== "rss" && e.type !== "api"), ov: OV,
+      enabled: e.enabled ? 1 : 0, priority: e.priority, interval: e.interval ?? intervalFor(e.type, e.priority), section: k, ...metaFor(k), ov: OV,
       fi: e.filter?.include || null, fe: e.filter?.exclude || null, fs: e.filter?.scope ?? "title", fc: e.filter?.caseSensitive ? 1 : 0,
     };
   };

@@ -5,7 +5,7 @@ export interface SourceRow {
   id: number; name: string; region: string | null; category: string | null; type: SourceType; url: string;
   homepage: string | null; username: string | null; enabled: number; supported: number; unsupported_reason: string | null;
   priority: Priority | null; poll_interval: number; last_fetched: number | null; last_error: string | null; last_new: number;
-  origin: "seed" | "user"; grp: string | null; note: string | null; created: number;
+  origin: "seed" | "user"; grp: string | null; section: string | null; note: string | null; created: number;
   f_include?: string | null; f_exclude?: string | null; f_scope?: "title" | "all" | null; f_cs?: number;
 }
 
@@ -18,7 +18,7 @@ export interface ItemOut {
   id: number; title: string; url: string; summary: string; published: number; fetched?: number; is_x: number; truncated?: boolean;
   author: string | null; also_on_x: { url: string; author: string | null }[];
   source_id: number; source: string; category: string | null; region: string | null; source_type: SourceType;
-  priority: Priority | null; homepage: string | null; username: string | null; grp: string | null;
+  priority: Priority | null; homepage: string | null; username: string | null; grp: string | null; section: string | null;
   image?: string; // thumbnail (meme/video cover), only some API sources
   title_zh?: string; summary_zh?: string;
   tr?: boolean; orig?: { title: string; summary: string }; // client-side: set by localize() when showing the translation // only when requested with zh=1 and a translation exists

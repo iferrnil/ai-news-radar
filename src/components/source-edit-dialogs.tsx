@@ -1,18 +1,17 @@
 "use client";
 // Sources page: edit one source (section + filter rule) and manage user-created sections. Code-split, loaded on first use.
 import { useEffect, useState } from "react";
-import { ChevronRight, Download, Loader2, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Loader2, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { buildJson, exportFileName } from "@/lib/portable-export";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { SECTIONS, type Section, type SourceRow, api, customSections, sourceSection } from "./common";
+import { type Section, type SourceRow, allSections, api, sourceSection } from "./common";
 import { IconPicker, EMPTY_NEW, NEW_SECTION, NewSectionFields, RuleFields, SectionSelect, ruleOf, type NewSection, type RuleForm } from "./source-form-parts";
 
 export function EditSourceDialog({ src, onClose, onSaved }: { src: SourceRow | null; onClose: () => void; onSaved: () => void }) {
@@ -37,7 +36,7 @@ export function EditSourceDialog({ src, onClose, onSaved }: { src: SourceRow | n
   return (
     <Dialog open={!!src} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[92dvh] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader><DialogTitle className="truncate pr-6">编辑数据源</DialogTitle><DialogDescription>名称、分区与过滤规则。规则修改后立即对已抓取的内容生效（隐藏 / 恢复），之后的抓取不再保存被过滤的条目。</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle className="truncate pr-6">编辑「{src?.name}」</DialogTitle><DialogDescription>名称、分区与过滤规则。规则修改后立即对已抓取的内容生效（隐藏 / 恢复），之后的抓取不再保存被过滤的条目。</DialogDescription></DialogHeader>
         <div className="grid min-w-0 gap-4">
           <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <div className="grid min-w-0 gap-1.5"><Label htmlFor="edit-name">名称</Label><Input id="edit-name" maxLength={80} aria-invalid={!name.trim() || undefined} value={name} onChange={(e) => setName(e.target.value)} /></div>
@@ -56,7 +55,7 @@ export function EditSourceDialog({ src, onClose, onSaved }: { src: SourceRow | n
   );
 }
 
-function SectionRow({ s, count, onChanged, onDelete }: { s: Section; count: number; onChanged: () => void; onDelete: () => void }) {
+function SectionRow({ s, count, first, last, onChanged, onDelete }: { s: Section; count: number; first: boolean; last: boolean; onChanged: () => void; onDelete: () => void }) {
   const [name, setName] = useState(s.zh); const [icon, setIcon] = useState(s.icon ?? "");
   useEffect(() => { setName(s.zh); setIcon(s.icon ?? ""); }, [s.zh, s.icon]);
   const patch = async (b: Record<string, unknown>) => {
@@ -64,7 +63,11 @@ function SectionRow({ s, count, onChanged, onDelete }: { s: Section; count: numb
     catch (e) { toast.error((e as Error).message); setName(s.zh); setIcon(s.icon ?? ""); }
   };
   return (
-    <li className="flex min-w-0 items-center gap-2 px-3 py-2" data-testid={`section-${s.key}`}>
+    <li className="flex min-w-0 items-center gap-2 py-2 pl-1.5 pr-3" data-testid={`section-${s.key}`}>
+      <div className="grid shrink-0">
+        <Button variant="ghost" size="icon-xs" className="h-4 text-faint" aria-label={`上移「${s.zh}」`} disabled={first} onClick={() => patch({ move: -1 })}><ChevronUp /></Button>
+        <Button variant="ghost" size="icon-xs" className="h-4 text-faint" aria-label={`下移「${s.zh}」`} disabled={last} onClick={() => patch({ move: 1 })}><ChevronDown /></Button>
+      </div>
       <IconPicker value={icon} onChange={(v) => { setIcon(v); patch({ icon: v }); }} label={`「${s.zh}」的图标`} className="w-9 shrink-0" />
       <Input aria-label="分区名称" maxLength={24} className="min-w-0 flex-1" value={name} onChange={(e) => setName(e.target.value)}
         onBlur={() => name.trim() && name.trim() !== s.zh && patch({ name })} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
@@ -79,7 +82,7 @@ function SectionRow({ s, count, onChanged, onDelete }: { s: Section; count: numb
 export function exportBackup(sources: SourceRow[]) {
   const d = new Date();
   const list = sources.filter((r) => r.type !== "html").map((r) => ({ ...r, section: sourceSection(r) }));
-  const custom = customSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false }));
+  const custom = allSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false }));
   const url = URL.createObjectURL(new Blob([buildJson(list, d, custom)], { type: "application/json" }));
   const a = Object.assign(document.createElement("a"), { href: url, download: exportFileName("json", d) }); document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -88,7 +91,7 @@ export function exportBackup(sources: SourceRow[]) {
 
 /** Manage user-created sections: create, rename, icon, 全部 toggle, delete (empty, or move its sources to another section first). */
 export function SectionsDialog({ open, onOpenChange, sources, onChanged }: { open: boolean; onOpenChange: (b: boolean) => void; sources: SourceRow[]; onChanged: () => void }) {
-  const list = customSections();
+  const list = allSections();
   const countOf = (k: string) => sources.filter((s) => sourceSection(s) === k).length;
   const [adding, setAdding] = useState<NewSection>(EMPTY_NEW);
   const [del, setDel] = useState<Section | null>(null); const [moveTo, setMoveTo] = useState("media"); const [backedUp, setBackedUp] = useState(false);
@@ -107,18 +110,12 @@ export function SectionsDialog({ open, onOpenChange, sources, onChanged }: { ope
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[92dvh] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-lg">
-          <DialogHeader><DialogTitle>管理分区</DialogTitle><DialogDescription>自建分区会出现在侧栏；内置分区（实验室、国内媒体…）不可修改。</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>管理分区</DialogTitle><DialogDescription>所有分区都可重命名、换图标、调整顺序、设置是否计入「全部」或删除（「全部」固定）。</DialogDescription></DialogHeader>
           <ul className="min-w-0 divide-y divide-border/60 rounded-lg border">
-            {list.map((s) => <SectionRow key={s.key} s={s} count={countOf(s.key)} onChanged={onChanged} onDelete={() => { setMoveTo("media"); setBackedUp(false); setDel(s); }} />)}
-            {!list.length && <li className="px-3 py-6 text-center type-body text-faint">还没有自建分区</li>}
+            {list.map((s, i) => <SectionRow key={s.key} s={s} count={countOf(s.key)} first={i === 0} last={i === list.length - 1} onChanged={onChanged}
+              onDelete={() => { setMoveTo((s.key !== "media" && list.find((x) => x.key === "media")?.key) || list.find((x) => x.key !== s.key)?.key || ""); setBackedUp(false); setDel(s); }} />)}
+            {!list.length && <li className="px-3 py-6 text-center type-body text-faint">还没有分区，新建一个吧</li>}
           </ul>
-          <Collapsible className="min-w-0 rounded-lg border px-3 py-2 type-caption text-muted-foreground">
-            <CollapsibleTrigger className="group flex w-full items-center gap-1 text-left outline-none hover:text-foreground"><ChevronRight className="size-3.5 transition-transform duration-200 group-data-[panel-open]:rotate-90" />内置分区（{SECTIONS.length}）不可删除或重命名</CollapsibleTrigger>
-            <CollapsibleContent>
-            <p className="mt-1.5 text-faint">内置分区与 sources.json 的内置源绑定。不想看某个分区，可以把其中的来源移到别的分区或停用；「娱乐」默认不计入「全部」。</p>
-            <ul className="mt-2 flex flex-wrap gap-1.5">{SECTIONS.map((s) => <li key={s.key} className="flex h-6 items-center gap-1 rounded-md bg-muted px-2 text-muted-foreground"><Lock className="size-3" />{s.zh}<span className="font-mono text-faint">{countOf(s.key)}</span></li>)}</ul>
-            </CollapsibleContent>
-          </Collapsible>
           <div className="grid min-w-0 gap-2">
             <NewSectionFields v={adding} set={setAdding} />
             <Button variant="outline" className="justify-self-end" disabled={!adding.name.trim()} onClick={create}><Plus />新建分区</Button>
@@ -135,10 +132,11 @@ export function SectionsDialog({ open, onOpenChange, sources, onChanged }: { ope
             <div className="flex items-start gap-2"><TriangleAlert className="mt-0.5 size-4 shrink-0" /><span>此操作<b>无法撤销</b>：分区名称、图标和设置会被删除{delCount ? `，影响 ${delCount} 个来源` : ""}。建议先导出一份备份，需要时可通过「导入」恢复。</span></div>
             <Button variant="outline" className="justify-self-start bg-background" onClick={() => { exportBackup(sources); setBackedUp(true); }}><Download />{backedUp ? "已导出，可再次导出" : "先导出备份（JSON）"}</Button>
           </div>
-          {delCount > 0 && <div className="grid gap-1.5"><Label>移入分区</Label><SectionSelect value={moveTo} onChange={setMoveTo} allowNew={false} exclude={del?.key} /></div>}
+          {delCount > 0 && !moveTo && <Alert variant="destructive" className="p-3"><AlertDescription className="type-body">没有其他分区可移入，请先新建一个分区。</AlertDescription></Alert>}
+          {delCount > 0 && !!moveTo && <div className="grid gap-1.5"><Label>移入分区</Label><SectionSelect value={moveTo} onChange={setMoveTo} allowNew={false} exclude={del?.key} /></div>}
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={doDelete}><Trash2 />删除</AlertDialogAction>
+            <AlertDialogAction variant="destructive" disabled={delCount > 0 && !moveTo} onClick={doDelete}><Trash2 />删除</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

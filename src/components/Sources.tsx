@@ -56,7 +56,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
 import { useApp } from "./app-shell";
-import { type SectionKey, TYPE, type SourceRow, ago, api, bj, customSections, secZh, sourceSection } from "./common";
+import { type SectionKey, TYPE, type SourceRow, ago, api, bj, allSections, secZh, sourceSection } from "./common";
 import { SourceAvatar } from "./source-avatar";
 
 type StatusKey = "active" | "err" | "off" | "paused" | "all";
@@ -142,7 +142,7 @@ export default function Sources() {
   const doExport = (fmt: "json" | "opml") => {
     const base = scope === "enabled" ? rows.filter((r) => r.enabled) : scope === "view" ? view : scope === "sel" ? rows.filter((r) => sel.has(r.id)) : rows;
     const list: ExportSource[] = base.filter((r) => r.type !== "html").map((r) => ({ ...r, section: sourceSection(r) }));
-    const custom = customSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false }));
+    const custom = allSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false }));
     if (!list.length) { toast.error("没有可导出的来源"); return; }
     const d = new Date();
     if (fmt === "json") download(exportFileName("json", d), buildJson(list, d, custom), "application/json");
@@ -284,7 +284,7 @@ export default function Sources() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
                       <DropdownMenuItem onClick={() => setTimeout(() => setRenaming(s.id), 120)}><TextCursorInput />重命名</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setEditSrc(s)}><Pencil />编辑分区与过滤…</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setEditSrc(s)}><Pencil />编辑</DropdownMenuItem>
                       <DropdownMenuItem disabled={!s.supported} onClick={() => fetchNow(s)}><RefreshCw />立即抓取</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => window.open(s.homepage || s.url, "_blank")}><ExternalLink />打开主页</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(s.url); toast.success("已复制链接"); }}><Link2 />复制 URL</DropdownMenuItem>

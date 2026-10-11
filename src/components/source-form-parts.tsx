@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { allSections } from "./common";
+import { secIcon } from "./app-shell";
 
 export const NEW_SECTION = "__new";
 export type NewSection = { name: string; icon: string; inAll: boolean };
@@ -26,7 +27,7 @@ export function IconPicker({ value, onChange, label = "选择图标", className 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button type="button" variant="outline" aria-label={label} className={cn("w-full px-0 text-[16px]", className)} />}>
-        {value ? <span className="leading-none">{value}</span> : <SmilePlus className="text-faint" />}
+        {value.startsWith("lucide:") ? (() => { const I = secIcon({ key: "", icon: value }); return <I className="size-4" />; })() : value ? <span className="leading-none">{value}</span> : <SmilePlus className="text-faint" />}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-3">
         {open && <IconPickerPanel value={value} onPick={(v) => { onChange(v); setOpen(false); }} />}

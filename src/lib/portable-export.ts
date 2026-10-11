@@ -4,6 +4,7 @@ export const APP = "ai-news-radar";
 export const SCHEMA_VERSION = 2; // v2: custom sections + per-source filter rules (v1 files still import)
 export const MAX_BYTES = 1024 * 1024; // 1 MB
 export const MAX_ENTRIES = 2000;
+/** legacy default section keys/names (v1 files, OPML folders from older exports) */
 export const SECTION_KEYS = ["lab", "cn", "media", "x", "ent"] as const;
 export const SECTION_ZH: Record<(typeof SECTION_KEYS)[number], string> = { lab: "实验室", cn: "国内媒体", media: "国外媒体", x: "X 快讯", ent: "娱乐" };
 export type ImportMode = "merge" | "update" | "replace";
@@ -20,7 +21,6 @@ export interface ExportSource {
 }
 /** user-created section metadata (key -> name/icon/inAll); built-ins are implied by their keys */
 export interface ExportSection { key: string; name: string; icon?: string | null; inAll: boolean }
-const isBuiltin = (k: string) => (SECTION_KEYS as readonly string[]).includes(k);
 const filterOf = (s: ExportSource) => (s.f_include || s.f_exclude ? { filter: { ...(s.f_include ? { include: s.f_include } : {}), ...(s.f_exclude ? { exclude: s.f_exclude } : {}), scope: s.f_scope === "all" ? "all" : "title", caseSensitive: !!s.f_cs } } : {});
 
 export function toEntry(s: ExportSource) {
@@ -42,11 +42,12 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
  *  `type="x"`/`type="x_list"` outlines (other readers ignore them; this app re-imports them). */
 export function buildOpml(list: ExportSource[], d = new Date(), custom: ExportSection[] = []): string {
   const out: string[] = [`<?xml version="1.0" encoding="UTF-8"?>`, `<opml version="2.0">`, `  <head>`, `    <title>AI News Radar subscriptions</title>`, `    <dateCreated>${d.toUTCString()}</dateCreated>`, `    <docs>http://opml.org/spec2.opml</docs>`, `  </head>`, `  <body>`];
-  // built-ins first, then user sections (folder + category = section name; sectionIcon/sectionInAll mark them as this app's custom sections)
-  const groups = [...SECTION_KEYS.map((k) => ({ key: k as string, name: SECTION_ZH[k], extra: "" })),
-    ...custom.map((c) => ({ key: c.key, name: c.name, extra: ` sectionCustom="1" sectionInAll="${c.inAll ? "true" : "false"}"${c.icon ? ` sectionIcon="${esc(c.icon)}"` : ""}` }))];
+  // one folder per section in sidebar order (folder + category = section name; sectionCustom/sectionKey/sectionIcon/sectionInAll let this app restore it)
+  const groups = custom.map((c) => ({ key: c.key, name: c.name, extra: ` sectionCustom="1" sectionKey="${esc(c.key)}" sectionInAll="${c.inAll ? "true" : "false"}"${c.icon ? ` sectionIcon="${esc(c.icon)}"` : ""}` }));
+  const orphan = list.filter((s) => !custom.some((c) => c.key === s.section));
+  if (orphan.length) groups.push({ key: "__orphan", name: "未分类", extra: ` sectionCustom="1"` });
   for (const g of groups) {
-    const rows = list.filter((s) => s.section === g.key || (!isBuiltin(s.section) && !custom.some((c) => c.key === s.section) && g.key === "media")); if (!rows.length) continue;
+    const rows = g.key === "__orphan" ? orphan : list.filter((s) => s.section === g.key); if (!rows.length) continue;
     out.push(`    <outline text="${esc(g.name)}" title="${esc(g.name)}"${g.extra}>`);
     for (const s of rows) {
       const f = filterOf(s).filter;

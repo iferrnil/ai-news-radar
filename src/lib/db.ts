@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SourceType } from "./types";
 import { decode } from "./util";
+import { legacyKey, migrateSections, seedTarget } from "./sections";
 
 const DB_PATH = process.env.NEWS_DB ?? path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "news.db");
 const SEED_PATH = process.env.SOURCES_JSON ?? path.join(/*turbopackIgnore: true*/ process.cwd(), "sources", "sources.json");
@@ -53,8 +54,9 @@ export function seed(db: Database.Database) {
   const tomb = new Set((db.prepare("SELECT name FROM deleted_seeds").all() as { name: string }[]).map((r) => r.name));
   const have = new Map((db.prepare("SELECT id, COALESCE(seed_name, name) name FROM sources").all() as { id: number; name: string }[]).map((r) => [r.name, r.id]));
   const sync = process.env.SYNC_SEED !== "0";
-  const ins = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,unsupported_reason,priority,poll_interval,origin,grp,note,created)
-    VALUES(@name,@region,@category,@type,@url,@homepage,@username,@enabled,@supported,@reason,@priority,@interval,'seed',@grp,@note,@now)`);
+  // new seed sources go to their default section if it still exists, else 未分类; existing rows never get their section touched
+  const ins = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,unsupported_reason,priority,poll_interval,origin,grp,note,created,section)
+    VALUES(@name,@region,@category,@type,@url,@homepage,@username,@enabled,@supported,@reason,@priority,@interval,'seed',@grp,@note,@now,@section)`);
   // user overrides win: fields changed in the UI (listed in `overrides`) are never reset by the seed
   const upd = db.prepare(`UPDATE sources SET
     enabled = CASE WHEN instr(overrides, 'enabled') THEN enabled ELSE @enabled END,
@@ -74,7 +76,7 @@ export function seed(db: Database.Database) {
         note: s.note ?? null, now: Date.now() / 1000,
       };
       const id = have.get(s.name);
-      if (id == null) ins.run(row);
+      if (id == null) ins.run({ ...row, section: seedTarget(db, legacyKey({ grp: row.grp, region: row.region, category: row.category, type: row.type })) });
       else if (sync) upd.run({ ...row, id });
     }
     if (process.env.SYNC_DISABLE_USER === "1") db.prepare("UPDATE sources SET enabled=0 WHERE origin='user'").run();
@@ -105,8 +107,10 @@ export function getDb(): Database.Database {
     if (!scols.has("f_include")) db.exec("ALTER TABLE sources ADD COLUMN f_include TEXT; ALTER TABLE sources ADD COLUMN f_exclude TEXT; ALTER TABLE sources ADD COLUMN f_scope TEXT; ALTER TABLE sources ADD COLUMN f_cs INTEGER NOT NULL DEFAULT 0;");
     // renamed built-ins remember their sources.json name, so seed sync still matches them (and never reverts the rename)
     if (!scols.has("seed_name")) db.exec("ALTER TABLE sources ADD COLUMN seed_name TEXT");
+    if (!scols.has("section")) db.exec("ALTER TABLE sources ADD COLUMN section TEXT"); // section key (sections table)
     if (!cols.has("hidden")) db.exec("ALTER TABLE items ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
     if (!cols.has("title_zh")) db.exec("ALTER TABLE items ADD COLUMN title_zh TEXT; ALTER TABLE items ADD COLUMN summary_zh TEXT;");
+    migrateSections(db);
     seed(db);
     // one-off repair: entities double-escaped in older rows (e.g. "&mdash;")
     const bad = db.prepare("SELECT id,title,summary FROM items WHERE title LIKE '%&%;%' OR summary LIKE '%&%;%'").all() as { id: number; title: string; summary: string }[];

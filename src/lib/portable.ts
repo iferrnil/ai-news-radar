@@ -39,9 +39,13 @@ export const ExportSchema = z.object({
 
 export interface ParsedRow { raw: unknown; entry?: Entry; error?: string }
 
+export type KnownSection = { key: string; name: string };
+let KNOWN: KnownSection[] = [];
+/** folder / category name -> current section key (by the user's current names, then the legacy default names) */
 const zhToKey = (s?: string): Entry["section"] | undefined => {
-  if (!s) return undefined; const t = s.trim();
-  for (const k of SECTION_KEYS) if (t === k || t === SECTION_ZH[k] || t.split(/[,/]/).map((x) => x.trim()).includes(SECTION_ZH[k])) return k;
+  if (!s) return undefined; const t = s.trim(); const parts = t.split(/[,/]/).map((x) => x.trim());
+  for (const k of KNOWN) if (t === k.key || parts.includes(k.name)) return k.key;
+  for (const k of SECTION_KEYS) if (t === k || parts.includes(SECTION_ZH[k])) return k;
   return undefined;
 };
 
@@ -54,7 +58,7 @@ function opmlRows(xml: string, fallback: Entry["section"]): unknown[] {
       const a = o as Record<string, string> & { outline?: Record<string, unknown>[] };
       const name = a.title || a.text || "";
       // this app's own custom sections carry sectionCustom="1"; other readers' folders fall back to the chosen default
-      const custom = a.sectionCustom === "1" && a.category ? { section: "custom", sectionName: a.category, sectionIcon: a.sectionIcon, sectionInAll: a.sectionInAll ? a.sectionInAll !== "false" : undefined } : null;
+      const custom = a.sectionCustom === "1" && a.category ? { section: a.sectionKey || "custom", sectionName: a.category, sectionIcon: a.sectionIcon, sectionInAll: a.sectionInAll ? a.sectionInAll !== "false" : undefined } : null;
       const sec = custom ? custom.section : zhToKey(a.category) ?? zhToKey(folder) ?? fallback;
       const filter = a.filterInclude || a.filterExclude ? { include: a.filterInclude, exclude: a.filterExclude, scope: a.filterScope, caseSensitive: a.filterCase === "true" } : undefined;
       const extra = { ...custom, section: sec, priority: a.priority, interval: a.interval ? Number(a.interval) : undefined, enabled: a.enabled ? a.enabled !== "false" : undefined, filter };
@@ -68,8 +72,9 @@ function opmlRows(xml: string, fallback: Entry["section"]): unknown[] {
 }
 
 /** Parse a user-chosen file (JSON from this app, or OPML from any reader) into validated rows. */
-export function parseImport(text: string, fileName: string, opmlSection: Entry["section"] = "media"): { format: "json" | "opml"; rows: ParsedRow[] } {
+export function parseImport(text: string, fileName: string, opmlSection: Entry["section"] = "media", known: KnownSection[] = []): { format: "json" | "opml"; rows: ParsedRow[] } {
   if (text.length > MAX_BYTES) throw new Error("文件超过 1 MB");
+  KNOWN = known;
   const t = text.replace(/^\uFEFF/, "").trim();
   const isJson = /\.json$/i.test(fileName) || t.startsWith("{");
   let raws: unknown[];

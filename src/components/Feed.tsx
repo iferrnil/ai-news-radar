@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
 import type { ItemOut } from "@/lib/types";
 import { useApp } from "./app-shell";
-import { ago, api, bj, dekText, handleOf, localize, secZh, sectionOf, srcName, xText } from "./common";
+import { sectionsReady, ago, api, bj, dekText, handleOf, localize, secZh, sectionOf, srcName, xText } from "./common";
 import { countOf, passes } from "./filters";
 import { SourceAvatar } from "./source-avatar";
 
@@ -106,7 +106,8 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
 });
 
 export default function Feed() {
-  const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, zh } = useApp();
+  const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, zh, sections } = useApp();
+  const secReady = sections.length > 0 || sectionsReady(); // 全部 must know which sections are excluded before rendering
   const [raw, setItems] = useState<ItemOut[]>([]);
   // hide items of sources that were unsubscribed (sidebar / sources page / another tab) without a refetch
   const enabledIds = useMemo(() => (sources.length ? new Set(sources.filter((s) => s.enabled).map((s) => s.id)) : null), [sources]);
@@ -227,7 +228,7 @@ export default function Feed() {
         <EmptyState icon={WifiOff} tone="error" className="mt-6 rounded-xl border border-dashed py-14" title="加载失败" hint={`无法获取内容：${loadErr}`}>
           <Button variant="outline" size="sm" onClick={() => { setLoading(true); load(); }}><RefreshCw />重试</Button>
         </EmptyState>
-      ) : loading ? (
+      ) : loading || !secReady ? (
         <div className={cn(GRID, "mt-4")}>{Array.from({ length: 12 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>
       ) : view.length === 0 ? (
         <EmptyState icon={Inbox} className="mt-6 rounded-xl border border-dashed py-14"

@@ -6,7 +6,7 @@ import { pollOne } from "@/lib/scheduler";
 import { errMsg } from "@/lib/util";
 import { overlap } from "@/lib/overlap";
 import type { SourceRow } from "@/lib/types";
-import { createSection, grpFor, isSectionKey, metaFor } from "@/lib/sections";
+import { createSection, isSectionKey, listSections, metaFor } from "@/lib/sections";
 import { validateRule } from "@/lib/rule-guard";
 export const dynamic = "force-dynamic";
 
@@ -33,12 +33,14 @@ export async function POST(req: NextRequest) {
   const v = validateRule(b.rule ?? {}, d.sample.map((x) => x.title));
   if ("error" in v) return Response.json({ detail: v.error }, { status: 400 });
   // section: a built-in/custom key, or {newSection:{name,icon,inAll}} to create one on the fly
-  let sec = isSectionKey(db, b.section) ? (b.section as string) : d.type.startsWith("x") ? "x" : "media";
+  const fallback = isSectionKey(db, d.type.startsWith("x") ? "x" : "media") ? (d.type.startsWith("x") ? "x" : "media") : listSections(db)[0]?.key;
+  let sec = isSectionKey(db, b.section) ? (b.section as string) : fallback;
+  if (!sec && !b.newSection) return Response.json({ detail: "请先选择或新建一个分区" }, { status: 400 });
   if (b.newSection) { const c = createSection(db, b.newSection); if ("error" in c) return Response.json({ detail: c.error }, { status: 400 }); sec = c.key; }
-  const { region, category } = metaFor(sec, d.type.startsWith("x"));
-  const res = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,grp,f_include,f_exclude,f_scope,f_cs)
+  const { region, category } = metaFor(sec!);
+  const res = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,section,f_include,f_exclude,f_scope,f_cs)
     VALUES(?,?,?,?,?,?,?,1,1,?,?,'user',?,?,?,?,?,?)`).run(name, region, category, d.type, d.url, d.homepage, d.username,
-    priority, intervalFor(d.type, priority), Date.now() / 1000, grpFor(sec), v.rule.include, v.rule.exclude, v.rule.scope, v.rule.cs ? 1 : 0);
+    priority, intervalFor(d.type, priority), Date.now() / 1000, sec, v.rule.include, v.rule.exclude, v.rule.scope, v.rule.cs ? 1 : 0);
   const src = db.prepare("SELECT * FROM sources WHERE id=?").get(res.lastInsertRowid) as SourceRow;
   return Response.json({ source: src, fetch: await pollOne(src) });
 }
