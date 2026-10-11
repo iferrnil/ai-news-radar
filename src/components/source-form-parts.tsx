@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { allSections } from "./common";
-import { secIcon } from "./app-shell";
+import { SectionIcon, SectionName } from "./section-icon";
 
 export const NEW_SECTION = "__new";
 export type NewSection = { name: string; icon: string; inAll: boolean };
@@ -27,7 +27,7 @@ export function IconPicker({ value, onChange, label = "选择图标", className 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button type="button" variant="outline" aria-label={label} className={cn("w-full px-0 text-[16px]", className)} />}>
-        {value.startsWith("lucide:") ? (() => { const I = secIcon({ key: "", icon: value }); return <I className="size-4" />; })() : value ? <span className="leading-none">{value}</span> : <SmilePlus className="text-faint" />}
+        {value ? <SectionIcon icon={value} /> : <SmilePlus className="text-faint" />}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-3">
         {open && <IconPickerPanel value={value} onPick={(v) => { onChange(v); setOpen(false); }} />}
@@ -41,10 +41,10 @@ export function SectionSelect({ value, onChange, allowNew = true, exclude, class
   return (
     <Select value={value} onValueChange={(v) => onChange(v as string)}>
       <SelectTrigger className={cn("w-full", className)} aria-label="分区">
-        <SelectValue>{(v: string) => (v === NEW_SECTION ? "＋ 新建分区…" : (() => { const s = opts.find((o) => o.key === v); return s ? `${s.icon ? s.icon + " " : ""}${s.zh}` : "选择分区"; })())}</SelectValue>
+        <SelectValue>{(v: string) => (v === NEW_SECTION ? "＋ 新建分区…" : (() => { const s = opts.find((o) => o.key === v); return s ? <SectionName s={s} /> : "选择分区"; })())}</SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {opts.map((s) => <SelectItem key={s.key} value={s.key}>{s.icon ? `${s.icon} ` : ""}{s.zh}</SelectItem>)}
+        {opts.map((s) => <SelectItem key={s.key} value={s.key}><SectionName s={s} /></SelectItem>)}
         {allowNew && <><SelectSeparator /><SelectItem value={NEW_SECTION}>＋ 新建分区…</SelectItem></>}
       </SelectContent>
     </Select>

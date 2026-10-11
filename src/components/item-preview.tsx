@@ -5,7 +5,8 @@ import { ArrowUpRight, MousePointerClick } from "lucide-react";
 import { XLogo as Twitter } from "./x-logo";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ItemOut } from "@/lib/types";
-import { ago, api, bjFull, dekText, handleOf, localize, secZh, sectionOf, srcName } from "./common";
+import { ago, api, bjFull, dekText, handleOf, localize, sectionOf, srcName } from "./common";
+import { SectionName } from "./section-icon";
 import { SourceAvatar } from "./source-avatar";
 
 // One shared cache for full item bodies (list payload only carries a 420-char preview).
@@ -65,7 +66,7 @@ export function ItemPreview({ it: base }: { it: ItemOut }) {
         )}
       </div>
       <div className="flex items-center gap-2 border-t border-border/50 px-4 py-3 type-meta text-faint">
-        <Badge size="sm" variant="outline" className="text-muted-foreground">{secZh(sectionOf(it!))}</Badge>
+        <Badge size="sm" variant="outline" className="text-muted-foreground"><SectionName k={sectionOf(it!)} iconClassName="size-3" className="gap-1" /></Badge>
         <span className="flex items-center gap-1"><MousePointerClick className="size-3.5" />点击查看详情</span>
         <a href={it!.url} target="_blank" rel="noopener" className="ml-auto flex items-center gap-0.5 font-medium text-brand hover:underline">原文<ArrowUpRight className="size-3.5" /></a>
       </div>

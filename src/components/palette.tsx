@@ -9,9 +9,11 @@ import { CommandDialog, Command, CommandEmpty, CommandGroup, CommandInput, Comma
 import { DOCS, docHref } from "@/lib/docs-registry";
 import type { ItemOut } from "@/lib/types";
 import type { Filters } from "./filters";
-import { inAll, ago, api, handleOf, secZh, sectionOf, xText, localize } from "./common";
+import { inAll, ago, api, handleOf, sectionOf, xText, localize } from "./common";
+import { SectionName } from "./section-icon";
 import { SourceAvatar } from "./source-avatar";
-import { secIcon, useApp } from "./app-shell";
+import { useApp } from "./app-shell";
+import { secIcon } from "./section-icon";
 
 export default function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
   const { navigate, sources, sections, setOpen, setAddOpen, zh } = useApp();
@@ -52,7 +54,7 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
                 <CommandItem key={it.id} value={`item-${it.id}`} onSelect={() => run(() => setOpen(it))}>
                   <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} className="size-5" />
                   <span className="truncate">{it.is_x ? xText(it) : it.title}</span>
-                  {!inAll(sectionOf(it)) && <Badge size="sm" variant="outline" className="text-muted-foreground">{secZh(sectionOf(it))}</Badge>}
+                  {!inAll(sectionOf(it)) && <Badge size="sm" variant="outline" className="text-muted-foreground"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>}
                   <CommandShortcut className="whitespace-nowrap tracking-normal">{ago(it.published, true)}</CommandShortcut>
                 </CommandItem>
               ))}

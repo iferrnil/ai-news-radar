@@ -4,11 +4,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BookOpen, ChevronRight, Clapperboard, Command as CommandIcon, Database, FlaskConical, Globe2, Inbox, Menu, Moon, Newspaper,
-  Folder, Radio, Search, Settings2, Sun,
+  Activity, BookOpen, ChevronRight, Command as CommandIcon, Database, Inbox, Menu, Moon,
+  Radio, Search, Settings2, Sun,
 } from "lucide-react";
 import { toast } from "sonner";
-import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Kbd } from "@/components/ui/kbd";
@@ -20,6 +19,7 @@ import { DOCS, docHref } from "@/lib/docs-registry";
 import { type Filters, countOf, p0For, parseFilters, setP0For, toQuery, viewKey } from "./filters";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
+import { secIcon } from "./section-icon";
 import { type SectionApiRow, type Section, type SourceRow, allSections, api, inAll, secZh, sectionOf, setSections } from "./common";
 import { Languages, MinusCircle } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -35,18 +35,8 @@ function TrButton({ onClick }: { onClick?: () => void }) {
   return <Button variant="ghost" size="icon" aria-label="翻译设置" className={zh ? "text-brand" : ""} onClick={onClick}><Languages className="size-4" /></Button>;
 }
 
-/** the seeded default sections keep their original lucide icons as `lucide:<name>` until the user picks an emoji */
-const LUCIDE: Record<string, React.ElementType> = { lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
 export const SEC_ICON: Record<string, React.ElementType> = { all: Inbox };
-/** Section icon: `lucide:*` token, the user's emoji, or Folder when none. */
-export function secIcon(s: Pick<Section, "key" | "icon">): React.ElementType {
-  if (s.icon?.startsWith("lucide:")) return LUCIDE[s.icon.slice(7)] ?? Folder;
-  if (!s.icon) return Folder;
-  let C = EMOJI.get(s.icon); // stable component per emoji (no remounts)
-  if (!C) { const e = s.icon; const Emoji = ({ className }: { className?: string }) => <span aria-hidden className={cn("grid place-items-center text-[14px] leading-none", className)}>{e}</span>; C = Emoji; EMOJI.set(e, C); }
-  return C;
-}
-const EMOJI = new Map<string, React.ElementType>();
+export { secIcon };
 
 type Ctx = {
   f: Filters; setF: (p: Partial<Filters>) => void;

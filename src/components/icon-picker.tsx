@@ -3,6 +3,7 @@
 // trigger lives in the dialogs, this panel loads on first open. (Lucide icons were skipped on purpose: shipping a
 // searchable icon set costs ~10x the bytes of this list.)
 import { useState } from "react";
+import { SectionIcon } from "./section-icon";
 import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,7 +56,7 @@ export default function IconPickerPanel({ value, onPick }: { value: string; onPi
         {!list.length && <div className="col-span-8 py-4 text-center type-caption text-faint">没有匹配的图标</div>}
       </div>
       <div className="flex items-center justify-between border-t pt-2">
-        <span className="flex items-center gap-2 type-caption text-muted-foreground">预览 <span className="grid size-7 place-items-center rounded-md border text-[16px]">{value && !value.startsWith("lucide:") ? value : value ? "默认" : "—"}</span></span>
+        <span className="flex items-center gap-2 type-caption text-muted-foreground">预览 <span className="grid size-7 place-items-center rounded-md border text-[16px]">{value ? <SectionIcon icon={value} /> : "—"}</span></span>
         <Button type="button" variant="ghost" size="sm" disabled={!value} onClick={() => onPick("")}><X />清除图标</Button>
       </div>
     </div>

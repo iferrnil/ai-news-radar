@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useApp } from "./app-shell";
-import { ago, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName } from "./common";
+import { ago, bj, bjFull, dekText, handleOf, sectionOf, srcName } from "./common";
+import { SectionName } from "./section-icon";
 import { Original, useFullItem } from "./item-preview";
 import { SourceAvatar } from "./source-avatar";
 
@@ -31,7 +32,7 @@ export default function ItemSheet() {
               <SheetDescription className="sr-only">内容详情</SheetDescription>
               <div className="flex flex-wrap gap-1.5">
                 {it.priority && <Badge variant={it.priority === "P0" ? "brand" : "outline"}>{it.priority}</Badge>}
-                <Badge variant="secondary">{secZh(sectionOf(it))}</Badge>
+                <Badge variant="secondary"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>
                 {it.tr && <Badge variant="secondary" title="DeepSeek 机器翻译，原文见下方">译</Badge>}
               </div>
             </SheetHeader>

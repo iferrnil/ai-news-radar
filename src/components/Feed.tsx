@@ -22,7 +22,8 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
 import type { ItemOut } from "@/lib/types";
 import { useApp } from "./app-shell";
-import { sectionsReady, ago, api, bj, dekText, handleOf, localize, secZh, sectionOf, srcName, xText } from "./common";
+import { sectionsReady, ago, api, bj, dekText, handleOf, localize, sectionOf, srcName, xText } from "./common";
+import { SectionName } from "./section-icon";
 import { countOf, passes } from "./filters";
 import { SourceAvatar } from "./source-avatar";
 
@@ -85,7 +86,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
         )}
       </div>
       <div className="flex h-10 shrink-0 items-center gap-1.5 border-t border-border/50 px-4 type-meta text-faint">
-        <Badge size="sm" variant="outline" className="text-muted-foreground">{secZh(sectionOf(it))}</Badge>
+        <Badge size="sm" variant="outline" className="text-muted-foreground"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>
         {it.also_on_x.length > 0 && <Badge size="sm" variant="muted" className="min-w-0"><Twitter />也在 X</Badge>}
         <a href={it.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} aria-label="打开原文"
           className="-mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded-md opacity-60 transition-[opacity,background-color,color] duration-150 ease-out group-hover/item:opacity-100 hover:bg-secondary hover:text-foreground">
