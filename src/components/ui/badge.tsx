@@ -18,10 +18,21 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // app additions (semantic tints, same recipe as destructive)
+        brand: "bg-brand-soft text-brand shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--brand)_22%,transparent)]",
+        success: "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400",
+        warning: "bg-amber-500/12 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+        muted: "bg-secondary text-muted-foreground",
+      },
+      size: {
+        default: "",
+        // inline chip in cards / hover card / palette / docs: 18px, xs radius
+        sm: "h-[18px] rounded-xs px-1.5 py-0 font-normal",
       },
     },
     defaultVariants: {
       variant: "default",
+      size: "default",
     },
   }
 )
@@ -29,6 +40,7 @@ const badgeVariants = cva(
 function Badge({
   className,
   variant = "default",
+  size = "default",
   render,
   ...props
 }: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
@@ -36,7 +48,7 @@ function Badge({
     defaultTagName: "span",
     props: mergeProps<"span">(
       {
-        className: cn(badgeVariants({ variant }), className),
+        className: cn(badgeVariants({ variant, size }), className),
       },
       props
     ),

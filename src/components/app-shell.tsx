@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Kbd } from "@/components/ui/kbd";
+import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -65,7 +67,7 @@ function TranslateMenu() {
           <div className="flex-1"><div className="type-body font-medium">翻译成中文</div><div className="mt-0.5 type-caption leading-snug text-muted-foreground">显示外文内容的中文译文（标「译」），悬停卡片和详情里可看原文。</div></div>
           <Switch checked={zh} onCheckedChange={(v) => setZh(!!v)} aria-label="翻译成中文" />
         </label>
-        <div className="border-t border-border/50" />
+        <Separator className="bg-border/50" />
         <label className="flex cursor-pointer items-start gap-3 p-4">
           <div className="flex-1">
             <div className="type-body font-medium">抓取时翻译（DeepSeek）</div>
@@ -104,10 +106,10 @@ function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo
         <span className="flex-1 truncate text-left">{label}</span>
         <span className={cn("font-mono type-meta tabular-nums text-faint transition-opacity duration-150 group-hover/src:opacity-0 group-focus-within/src:opacity-0 [@media(hover:none)]:hidden", confirm && "opacity-0")}>{s.item_count || ""}</span>
       </button>
-      <button aria-label={`取消订阅 ${label}`} title="取消订阅" aria-expanded={confirm} onClick={() => setConfirm((v) => !v)}
-        className={cn("absolute right-1 grid size-5 place-items-center rounded-xs text-faint opacity-0 outline-none transition-[opacity,color,background-color] duration-150 hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 group-hover/src:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:mr-1 [@media(hover:none)]:opacity-100", confirm && "text-red-500 opacity-100")}>
+      <Button variant="ghost" size="icon-xs" aria-label={`取消订阅 ${label}`} title="取消订阅" aria-expanded={confirm} onClick={() => setConfirm((v) => !v)}
+        className={cn("absolute right-1 size-5 rounded-xs text-faint opacity-0 hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 group-hover/src:opacity-100 aria-expanded:bg-transparent [@media(hover:none)]:static [@media(hover:none)]:mr-1 [@media(hover:none)]:opacity-100", confirm && "text-red-500 opacity-100")}>
         <MinusCircle className="size-3.5" />
-      </button>
+      </Button>
     </div>
     {/* inline confirm inside the sidebar, so nothing covers the feed */}
     {confirm && (
@@ -275,7 +277,7 @@ function ItemSheet() {
               <SheetTitle className="type-h3 font-semibold leading-snug [text-wrap:pretty] pr-6">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}</SheetTitle>
               <SheetDescription className="sr-only">内容详情</SheetDescription>
               <div className="flex flex-wrap gap-1.5">
-                {it.priority && <Badge variant="outline" className={cn(it.priority === "P0" && "border-brand/40 bg-brand-soft text-brand")}>{it.priority}</Badge>}
+                {it.priority && <Badge variant={it.priority === "P0" ? "brand" : "outline"}>{it.priority}</Badge>}
                 <Badge variant="secondary">{secZh(sectionOf(it))}</Badge>
                 {it.tr && <Badge variant="secondary" title="DeepSeek 机器翻译，原文见下方">译</Badge>}
               </div>
@@ -391,13 +393,13 @@ function Shell({ children }: { children: React.ReactNode }) {
           <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="菜单"><Menu className="size-4" /></Button>
             <div className="hidden min-w-0 truncate type-ui font-semibold tracking-tight sm:block">{title}</div>
-            <button onClick={() => setPalette(true)}
-              className="ml-auto flex h-8 w-full max-w-[360px] items-center gap-2 rounded-lg bg-muted px-2.5 type-body text-faint shadow-hair transition hover:text-muted-foreground hover:shadow-[inset_0_0_0_1px_var(--input)] sm:ml-6 sm:mr-auto">
+            <Button variant="outline" onClick={() => setPalette(true)}
+              className="ml-auto w-full min-w-0 max-w-[360px] shrink justify-start gap-2 bg-muted px-2.5 type-body font-normal text-faint hover:text-muted-foreground dark:bg-muted sm:ml-6 sm:mr-auto">
               <Search className="size-3.5" /><span className="truncate">搜索新闻、来源、命令…</span>
-              <kbd className="ml-auto hidden items-center gap-0.5 rounded-xs bg-background/80 px-1.5 font-mono type-2xs text-muted-foreground shadow-hair sm:flex"><CommandIcon className="size-2.5" />K</kbd>
-            </button>
+              <Kbd className="ml-auto hidden bg-background/80 font-mono shadow-hair sm:inline-flex"><CommandIcon className="size-2.5" />K</Kbd>
+            </Button>
             <Tooltip>
-              <TooltipTrigger render={<span className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 type-meta font-medium text-muted-foreground shadow-hair sm:flex" />}>
+              <TooltipTrigger render={<Badge variant="outline" className="hidden h-6 gap-1.5 px-2.5 text-muted-foreground sm:inline-flex" />}>
                 <span className="relative flex size-1.5">
                   {live && <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
                   <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-amber-500")} />

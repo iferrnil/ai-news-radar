@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileJson, FileUp, Rss, SearchX, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
@@ -32,18 +33,26 @@ import { useApp } from "./app-shell";
 import { SECTIONS, type SectionKey, TYPE, type SourceRow, ago, api, bj, secZh, sectionOf } from "./common";
 import { SourceAvatar } from "./source-avatar";
 
+type StatusKey = "active" | "err" | "off" | "paused" | "all";
+// 在线 = enabled & fetchable · 报错 = 在线 with last_error · 停用 = switched off · 暂停 = enabled but not fetchable (unsupported)
+const STATUS: { v: StatusKey; label: string; badge: "success" | "destructive" | "muted" | "warning" | "outline" }[] = [
+  { v: "active", label: "在线", badge: "success" }, { v: "err", label: "报错", badge: "destructive" }, { v: "off", label: "停用", badge: "muted" },
+  { v: "paused", label: "暂停", badge: "warning" }, { v: "all", label: "全部", badge: "outline" },
+];
+const statusOk = (s: SourceRow, k: StatusKey) => k === "all" ? true : k === "active" ? !!(s.enabled && s.supported) : k === "err" ? !!(s.enabled && s.supported && s.last_error) : k === "off" ? !s.enabled : !!(s.enabled && !s.supported);
+
 const IV = [60, 120, 180, 300, 600, 1800, 3600];
 const ivLabel = (v: number) => (v < 3600 ? `${v / 60} 分钟` : `${v / 3600} 小时`);
 
 function StatusBadge({ s }: { s: SourceRow }) {
-  if (!s.supported) return <Badge variant="outline" className="text-muted-foreground">不支持</Badge>;
-  if (!s.enabled) return <Badge variant="outline" className="text-muted-foreground">已停用</Badge>;
+  if (!s.enabled) return <Badge variant="muted">已停用</Badge>;
+  if (!s.supported) return <Badge variant="warning" title={s.unsupported_reason ?? undefined}>暂停 · 不支持</Badge>;
   if (s.last_error) return (
-    <Tooltip><TooltipTrigger render={<Badge variant="outline" className="max-w-[180px] gap-1 border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400" />}>
+    <Tooltip><TooltipTrigger render={<Badge variant="destructive" className="max-w-[180px]" />}>
       <AlertTriangle className="size-3" /><span className="truncate">报错</span></TooltipTrigger>
       <TooltipContent className="max-w-sm">{s.last_error}</TooltipContent></Tooltip>);
-  if (!s.last_fetched) return <Badge variant="outline" className="gap-1 text-amber-600 dark:text-amber-400"><Loader2 className="size-3 animate-spin" />等待</Badge>;
-  return <Badge variant="outline" className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"><span className="size-1.5 rounded-full bg-emerald-500" />正常{s.last_new ? ` +${s.last_new}` : ""}</Badge>;
+  if (!s.last_fetched) return <Badge variant="warning"><Loader2 className="animate-spin" />等待</Badge>;
+  return <Badge variant="success"><span className="size-1.5 rounded-full bg-emerald-500" />正常{s.last_new ? ` +${s.last_new}` : ""}</Badge>;
 }
 
 type Detect = { type: string; name: string; url: string; count: number; overlap: number; sample: { title: string; published: number | null }[] };
@@ -96,7 +105,7 @@ function AddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChang
             <div className="grid min-w-0 gap-1.5"><Label>分区</Label>{sel("section", SECTIONS.map((x) => [x.key, x.zh]))}</div>
             <div className="grid min-w-0 gap-1.5"><Label>优先级</Label>{sel("priority", [["P0", "P0"], ["P1", "P1"], ["P2", "P2"]])}</div>
           </div>
-          {err && <div className="flex gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 type-body text-red-600 dark:text-red-400"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{err}</div>}
+          {err && <Alert variant="destructive" className="p-3"><AlertTriangle /><AlertDescription className="type-body">{err}</AlertDescription></Alert>}
           {res && (
             <div className="min-w-0 overflow-hidden rounded-lg border bg-muted/30">
               <div className="flex items-start gap-2 border-b p-3">
@@ -107,12 +116,12 @@ function AddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChang
                 </div>
               </div>
               {res.overlap >= 0.5 && (
-                <div className="flex items-start gap-2 border-b bg-amber-500/10 p-3 type-body text-amber-700 dark:text-amber-300">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                  <div className="flex-1">疑似重复：{Math.round(res.overlap * 100)}% 的示例标题已被现有来源收录。
-                    <label className="mt-1.5 flex items-center gap-2"><Checkbox checked={form.force} onCheckedChange={(v) => setForm({ ...form, force: !!v })} />仍然添加</label>
-                  </div>
-                </div>
+                <Alert variant="warning" className="rounded-none border-0 border-b p-3">
+                  <AlertTriangle />
+                  <AlertDescription className="type-body">疑似重复：{Math.round(res.overlap * 100)}% 的示例标题已被现有来源收录。
+                    <Label className="mt-1.5 font-normal"><Checkbox checked={form.force} onCheckedChange={(v) => setForm({ ...form, force: !!v })} />仍然添加</Label>
+                  </AlertDescription>
+                </Alert>
               )}
               <ul className="max-h-48 min-w-0 space-y-1.5 overflow-y-auto overflow-x-hidden p-3 type-caption">
                 {res.sample.map((s, i) => <li key={i} className="flex min-w-0 gap-2"><span className="shrink-0 font-mono text-muted-foreground">{bj(s.published)}</span><span className="min-w-0 flex-1 truncate" title={s.title}>{s.title}</span></li>)}
@@ -131,13 +140,14 @@ function AddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChang
 
 export default function Sources() {
   const { sources: rows, reloadSources, addOpen, setAddOpen } = useApp();
-  const [q, setQ] = useState(""); const [ft, setFt] = useState("all"); const [fsec, setFsec] = useState("all"); const [fs, setFs] = useState("active");
+  const [q, setQ] = useState(""); const [ft, setFt] = useState("all"); const [fsec, setFsec] = useState("all"); const [fs, setFs] = useState<StatusKey>("active");
   const [busy, setBusy] = useState<Record<number, boolean>>({});
   useEffect(() => { const t = setInterval(() => { if (!document.hidden) reloadSources(); }, 15000); return () => clearInterval(t); }, [reloadSources]);
 
   const view = useMemo(() => rows.filter((s) =>
     (!q || (s.name + s.url).toLowerCase().includes(q.toLowerCase())) && (ft === "all" || s.type === ft) && (fsec === "all" || sectionOf({ ...s, is_x: s.type.startsWith("x") }) === fsec) &&
-    (fs === "all" || (fs === "active" ? s.enabled && s.supported : fs === "off" ? !s.enabled || !s.supported : s.enabled && s.supported && s.last_error))), [rows, q, ft, fs, fsec]);
+    statusOk(s, fs)), [rows, q, ft, fs, fsec]);
+  const fsCount = useMemo(() => Object.fromEntries(STATUS.map((x) => [x.v, rows.filter((s) => statusOk(s, x.v)).length])) as Record<StatusKey, number>, [rows]);
   const nAct = rows.filter((s) => s.enabled && s.supported).length;
   const nErr = rows.filter((s) => s.enabled && s.supported && s.last_error).length;
   const nItems = rows.reduce((a, s) => a + (s.enabled ? s.item_count : 0), 0);
@@ -194,10 +204,10 @@ export default function Sources() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {deleted.length > 0 && <Button variant="outline" onClick={() => setRestoreOpen(true)}><RotateCcw />已删除的内置源 · {deleted.length}</Button>}
-          <div className="flex items-center" role="group" aria-label="导入导出">
-            <Button variant="outline" className="rounded-r-none" onClick={() => setImpOpen(true)}><FileUp />导入</Button>
+          <ButtonGroup aria-label="导入导出">
+            <Button variant="outline" onClick={() => setImpOpen(true)}><FileUp />导入</Button>
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" className="-ml-px rounded-l-none" />}><Download />导出</DropdownMenuTrigger>
+              <DropdownMenuTrigger render={<Button variant="outline" />}><Download />导出</DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="type-meta">导出范围</DropdownMenuLabel>
@@ -221,7 +231,7 @@ export default function Sources() {
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
+          </ButtonGroup>
           <Button onClick={() => setAddOpen(true)}><Plus />添加数据源</Button>
         </div>
       </div>
@@ -239,18 +249,20 @@ export default function Sources() {
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input className="pl-8" placeholder="筛选名称或 URL…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <ToggleGroup value={[fs]} onValueChange={(v: string[]) => v[0] && setFs(v[0])} variant="outline" size="sm" spacing={0}>
-          <ToggleGroupItem value="active" className="px-3">在线</ToggleGroupItem>
-          <ToggleGroupItem value="err" className="px-3">报错</ToggleGroupItem>
-          <ToggleGroupItem value="off" className="px-3">停用</ToggleGroupItem>
-          <ToggleGroupItem value="all" className="px-3">全部</ToggleGroupItem>
-        </ToggleGroup>
+        <ButtonGroup aria-label="按状态筛选" className="w-full sm:w-fit">
+          {STATUS.map((x) => (
+            <Button key={x.v} variant="outline" aria-pressed={fs === x.v} onClick={() => setFs(x.v)}
+              className="min-w-0 flex-1 gap-1 px-1.5 type-body text-muted-foreground sm:flex-none sm:gap-1.5 sm:px-2.5 aria-pressed:bg-muted aria-pressed:text-foreground dark:aria-pressed:bg-input/60">
+              {x.label}<Badge variant={x.badge} className="h-4.5 min-w-5 px-1 font-mono tabular-nums">{fsCount[x.v]}</Badge>
+            </Button>
+          ))}
+        </ButtonGroup>
         <Select value={fsec} onValueChange={(v) => setFsec(v as string)}>
-          <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部分区" : secZh(v as SectionKey))}</SelectValue></SelectTrigger>
+          <SelectTrigger className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部分区" : secZh(v as SectionKey))}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="all">全部分区</SelectItem>{SECTIONS.map((x) => <SelectItem key={x.key} value={x.key}>{x.zh}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={ft} onValueChange={(v) => setFt(v as string)}>
-          <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部类型" : TYPE[v])}</SelectValue></SelectTrigger>
+          <SelectTrigger className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部类型" : TYPE[v])}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="all">全部类型</SelectItem>{Object.entries(TYPE).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
         </Select>
         {sel.size > 0 && <Button size="sm" variant="destructive" onClick={() => setToDel(rows.filter((r) => sel.has(r.id)))}><Trash2 />删除所选 · {sel.size}</Button>}
@@ -286,8 +298,8 @@ export default function Sources() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate font-medium">{s.name}</span>
-                        {s.priority && <span className={cn("rounded-xs px-1.5 py-px font-mono type-2xs font-medium leading-4", s.priority === "P0" ? "bg-brand-soft text-brand" : "text-faint shadow-hair")}>{s.priority}</span>}
-                        {s.origin === "user" && <Badge variant="secondary" className="h-4.5 px-1.5 type-2xs">手动</Badge>}
+                        {s.priority && <Badge size="sm" variant={s.priority === "P0" ? "brand" : "outline"} className={cn("font-mono font-medium", s.priority !== "P0" && "text-faint")}>{s.priority}</Badge>}
+                        {s.origin === "user" && <Badge size="sm" variant="secondary">手动</Badge>}
                       </div>
                       <div className="truncate type-caption text-faint">{TYPE[s.type] ?? s.type} · {s.url.replace(/^https?:\/\//, "")}</div>
                     </div>

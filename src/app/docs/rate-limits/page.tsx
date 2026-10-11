@@ -1,18 +1,15 @@
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, BookOpen, ChevronRight, Hash, ExternalLink, Gauge, Info, ShieldCheck } from "lucide-react";
 import data from "@/data/rate-limits.json";
 import { getDb } from "@/lib/db";
 import { computeUsage, RISK_ZH, type RLEntry, type UsageSource } from "@/lib/rate-usage";
-import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "抓取限制 · 文档 · AI Radar" };
 
-const RISK_CLS = {
-  low: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  medium: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  high: "bg-red-500/10 text-red-600 dark:text-red-400",
-} as const;
+const RISK_V = { low: "success", medium: "warning", high: "destructive" } as const;
 
 export default function DocsPage() {
   const entries = data.entries as RLEntry[];
@@ -43,29 +40,29 @@ export default function DocsPage() {
         ))}
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-xl bg-card shadow-card">
-        <table className="w-full type-body">
-          <thead>
-            <tr className="border-b border-border bg-muted/30 text-left type-meta text-faint [&>th]:h-9 [&>th]:px-4 [&>th]:font-medium">
-              <th>类型</th><th>文档限额</th><th className="text-right">我们的用量</th><th>风险</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="mt-6 overflow-hidden rounded-xl bg-card shadow-card">
+        <Table className="type-body">
+          <TableHeader>
+            <TableRow className="bg-muted/30 hover:bg-muted/30 [&>th]:h-9 [&>th]:px-4 [&>th]:type-meta [&>th]:font-medium [&>th]:text-faint">
+              <TableHead>类型</TableHead><TableHead>文档限额</TableHead><TableHead className="text-right">我们的用量</TableHead><TableHead>风险</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {entries.map((e) => {
               const u = usage[e.id];
               return (
-                <tr key={e.id} className="border-b border-border/50 transition-colors duration-150 ease-out last:border-0 hover:bg-hover">
-                  <td className="px-4 py-2.5 font-medium leading-5"><a href={`#${e.id}`} className="transition-colors duration-150 ease-out hover:text-brand">{e.name}</a></td>
-                  <td className="max-w-[360px] px-4 py-2.5 leading-5 text-muted-foreground">
+                <TableRow key={e.id} className="border-border/50 hover:bg-hover">
+                  <TableCell className="px-4 py-2.5 font-medium leading-5"><a href={`#${e.id}`} className="transition-colors duration-150 ease-out hover:text-brand">{e.name}</a></TableCell>
+                  <TableCell className="max-w-[360px] whitespace-normal px-4 py-2.5 leading-5 text-muted-foreground">
                     {e.official ? <span className="line-clamp-2">{e.documented}</span> : <span className="text-amber-700 dark:text-amber-300">未找到官方限额文档</span>}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-right font-mono tabular-nums">{u.perMin} <span className="text-faint">次/分 · {u.count} 源</span></td>
-                  <td className="px-4 py-2.5"><span className={cn("rounded-xs px-1.5 py-0.5 type-meta font-medium", RISK_CLS[e.risk])}>{RISK_ZH[e.risk]}</span></td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-right font-mono tabular-nums">{u.perMin} <span className="text-faint">次/分 · {u.count} 源</span></TableCell>
+                  <TableCell className="px-4 py-2.5"><Badge size="sm" variant={RISK_V[e.risk]}>{RISK_ZH[e.risk]}</Badge></TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       <div className="mt-8 grid gap-4">
@@ -75,8 +72,8 @@ export default function DocsPage() {
             <section key={e.id} id={e.id} className="scroll-mt-20 rounded-xl bg-card px-6 py-5 shadow-card">
               <div className="flex flex-wrap items-start gap-2">
                 <h2 className="group/h relative type-title font-semibold leading-6 tracking-[-0.01em]"><a href={`#${e.id}`} aria-label="链接到本节" className="absolute -left-5 top-0 hidden h-6 items-center text-faint opacity-0 transition-opacity duration-150 ease-out hover:text-brand group-hover/h:opacity-100 sm:flex"><Hash className="size-3.5" /></a>{e.name}</h2>
-                <span className={cn("rounded-xs px-1.5 py-0.5 type-meta font-medium", RISK_CLS[e.risk])}>风险 {RISK_ZH[e.risk]}</span>
-                {!e.official && <span className="chip shadow-hair type-meta text-amber-700 dark:text-amber-300">无官方限额文档</span>}
+                <Badge size="sm" variant={RISK_V[e.risk]}>风险 {RISK_ZH[e.risk]}</Badge>
+                {!e.official && <Badge size="sm" variant="warning">无官方限额文档</Badge>}
               </div>
               <code className="mt-1.5 block break-all font-mono type-caption text-faint">{e.endpoint}</code>
               <dl className="mt-4 grid gap-x-8 gap-y-5 type-body leading-[1.7] md:grid-cols-2 [&_dd]:max-w-[60ch]">

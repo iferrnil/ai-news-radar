@@ -1,5 +1,9 @@
 "use client";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Toggle } from "@/components/ui/toggle";
+import { Separator } from "@/components/ui/separator";
 
 // hover previews only where a real pointer can hover (mobile keeps tap → drawer)
 const HOVER_Q = "(hover: hover) and (pointer: fine)";
@@ -61,7 +65,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
         <span className={cn("min-w-0 truncate font-medium", x ? "text-foreground/85" : "text-muted-foreground")}>{x ? srcName(it).replace(/^@/, "") : it.source}</span>
         {x && <span className="hidden min-w-0 shrink truncate text-faint sm:inline">@{h}</span>}
         {x && <Twitter className="size-2.5 shrink-0 text-faint" />}
-        {it.priority === "P0" && <span className="chip chip-brand shrink-0 px-1 font-mono type-2xs font-semibold tracking-[0.02em]">P0</span>}
+        {it.priority === "P0" && <Badge size="sm" variant="brand" className="px-1 font-mono font-semibold tracking-[0.02em]">P0</Badge>}
         {it.tr && <TrBadge />}
         <time className="ml-auto shrink-0 font-mono type-meta tabular-nums text-faint" title={`北京时间 ${bj(it.published)}`}>{ago(it.published, true)}</time>
       </div>
@@ -82,8 +86,8 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
         )}
       </div>
       <div className="flex h-10 shrink-0 items-center gap-1.5 border-t border-border/50 px-4 type-meta text-faint">
-        <span className="chip shadow-hair">{secZh(sectionOf(it))}</span>
-        {it.also_on_x.length > 0 && <span className="chip min-w-0 gap-1 truncate bg-secondary text-muted-foreground"><Twitter className="size-2 shrink-0" />也在 X</span>}
+        <Badge size="sm" variant="outline" className="text-muted-foreground">{secZh(sectionOf(it))}</Badge>
+        {it.also_on_x.length > 0 && <Badge size="sm" variant="muted" className="min-w-0"><Twitter />也在 X</Badge>}
         <a href={it.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} aria-label="打开原文"
           className="-mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded-md opacity-60 transition-[opacity,background-color,color] duration-150 ease-out group-hover/item:opacity-100 hover:bg-secondary hover:text-foreground">
           <ArrowUpRight className="size-3.5" />
@@ -198,26 +202,25 @@ export default function Feed() {
         {pend.length > 0 && (
           <motion.div initial={{ y: -16, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: -16, opacity: 0 }} transition={{ type: "spring", stiffness: 420, damping: 32 }}
             className="pointer-events-none sticky top-[68px] z-20 -mb-8 flex justify-center">
-            <button onClick={showPending} className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-[oklch(0.52_0.2_282)] px-4 py-1.5 type-body font-medium text-white shadow-[0_10px_30px_-8px_oklch(0.52_0.2_282/0.7)] ring-1 ring-white/15 transition duration-150 ease-out hover:brightness-110">
-              <ArrowUp className="size-3.5" />{pend.length} 条新内容<kbd className="ml-1 rounded-xs bg-white/15 px-1 font-mono type-2xs">N</kbd>
-            </button>
+            <Button onClick={showPending} className="pointer-events-auto h-8 rounded-full bg-[oklch(0.52_0.2_282)] px-4 type-body text-white shadow-[0_10px_30px_-8px_oklch(0.52_0.2_282/0.7)] ring-1 ring-white/15 hover:bg-[oklch(0.52_0.2_282)] hover:brightness-110">
+              <ArrowUp className="size-3.5" />{pend.length} 条新内容<Kbd className="ml-1 h-4.5 bg-white/15 font-mono text-white">N</Kbd>
+            </Button>
           </motion.div>
         )}
       </AnimatePresence>
 
       <div className="flex h-8 items-center gap-2">
-        <button onClick={() => setF({ p0: !f.p0 })} aria-pressed={f.p0}
-          className={cn("flex h-8 items-center gap-1.5 rounded-lg px-2.5 type-caption font-medium shadow-hair transition-colors duration-150 ease-out",
-            f.p0 ? "bg-brand-soft text-brand" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
-          仅 P0<span className="font-mono type-2xs tabular-nums text-faint">{p0n}</span>
-        </button>
+        <Toggle variant="outline" pressed={f.p0} onPressedChange={(v) => setF({ p0: v })}
+          className="gap-1.5 type-caption text-muted-foreground aria-pressed:border-brand/40 aria-pressed:bg-brand-soft aria-pressed:text-brand">
+          仅 P0<Badge size="sm" variant="muted" className="px-1 font-mono tabular-nums text-faint">{p0n}</Badge>
+        </Toggle>
         <div className="ml-auto flex items-center gap-3 type-meta text-faint">
           <span className="hidden items-center gap-1 xl:flex">
             {[["J", "K", "移动"], ["↵", "", "打开"], ["N", "", "新内容"], ["G", "", "顶部"]].map(([a, b, l]) => (
-              <span key={l} className="flex items-center gap-0.5"><kbd className="rounded-xs bg-secondary px-1 font-mono type-2xs leading-4 text-muted-foreground">{a}</kbd>{b && <kbd className="rounded-xs bg-secondary px-1 font-mono type-2xs leading-4 text-muted-foreground">{b}</kbd>}<span className="ml-0.5 mr-1.5">{l}</span></span>))}
+              <span key={l} className="flex items-center gap-0.5"><KbdGroup><Kbd className="font-mono">{a}</Kbd>{b && <Kbd className="font-mono">{b}</Kbd>}</KbdGroup><span className="ml-0.5 mr-1.5">{l}</span></span>))}
           </span>
           <Tooltip>
-            <TooltipTrigger render={<button onClick={refresh} className="flex h-7 items-center gap-1.5 rounded-md px-1.5 tabular-nums transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground" aria-label="刷新" />}>
+            <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={refresh} className="px-1.5 font-normal tabular-nums text-faint" aria-label="刷新" />}>
               <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} /><span className="font-mono">{view.length}</span> 条
             </TooltipTrigger>
             <TooltipContent>{lastFetch ? `最近抓取 ${ago(lastFetch)}（北京时间 ${bj(lastFetch).slice(6)}）` : "等待首轮抓取"} · 点击刷新</TooltipContent>
@@ -242,7 +245,7 @@ export default function Feed() {
         groups.map((g, gi) => (
           <section key={g.day}>
             <div className={cn("sticky top-14 z-10 flex items-center gap-2 bg-background/85 pb-3 type-caption font-medium text-muted-foreground backdrop-blur-xl backdrop-saturate-150", gi === 0 ? "pt-4" : "pt-7", BLEED)}>
-              {g.day}<span className="chip bg-secondary font-mono type-2xs tabular-nums text-faint">{dayCount.get(g.day) ?? g.items.length}</span><span className="h-px flex-1 bg-border/60" />
+              {g.day}<Badge size="sm" variant="muted" className="font-mono tabular-nums text-faint">{dayCount.get(g.day) ?? g.items.length}</Badge><Separator className="flex-1 bg-border/60" />
             </div>
             <div className={GRID}>
               {g.items.map((it) => {

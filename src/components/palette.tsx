@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { BookOpen, Database, FileText, Moon, Plus, SearchX } from "lucide-react";
@@ -51,7 +52,7 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
                 <CommandItem key={it.id} value={`item-${it.id}`} onSelect={() => run(() => setOpen(it))}>
                   <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} className="size-5" />
                   <span className="truncate">{it.is_x ? xText(it) : it.title}</span>
-                  {!inAll(sectionOf(it)) && <span className="chip shrink-0 shadow-hair type-meta text-muted-foreground">{secZh(sectionOf(it))}</span>}
+                  {!inAll(sectionOf(it)) && <Badge size="sm" variant="outline" className="text-muted-foreground">{secZh(sectionOf(it))}</Badge>}
                   <CommandShortcut className="whitespace-nowrap tracking-normal">{ago(it.published, true)}</CommandShortcut>
                 </CommandItem>
               ))}

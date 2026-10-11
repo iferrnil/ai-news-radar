@@ -9,7 +9,7 @@ async function shot(name, path, { theme = "dark", mobile = false, act, w = 1280,
   const ctx = await b.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: w, height: h }, deviceScaleFactor: mobile ? 2 : 1, locale: "zh-CN" });
   await ctx.addInitScript((t) => localStorage.setItem("theme", t), theme);
   const pg = await ctx.newPage();
-  await pg.goto(BASE + path, { waitUntil: "networkidle" });
+  await pg.goto(BASE + path, { waitUntil: "networkidle", timeout: 15000 }).catch(() => {}); // image-heavy views (娱乐) may never go idle
   await pg.waitForSelector(path.startsWith("/?") || path === "/" ? "[data-slot=card]" : path === "/docs" ? "section" : "tbody tr td");
   await pg.waitForTimeout(1200);
   if (act) await act(pg);

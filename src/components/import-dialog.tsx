@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -18,16 +22,11 @@ const MODES: { v: ImportMode; label: string; hint: string }[] = [
   { v: "update", label: "合并并更新", hint: "同时按文件更新已存在来源的分区、优先级、频率与启用状态" },
   { v: "replace", label: "覆盖", hint: "删除本地不在文件中的来源及其内容，需二次确认" },
 ];
-const ok = "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 shadow-[inset_0_0_0_1px_color-mix(in_oklch,currentColor_22%,transparent)]";
-const ST: Record<RowStatus | "remove", { label: string; cls: string }> = {
-  new: { label: "新增", cls: ok },
-  restore: { label: "恢复", cls: ok },
-  update: { label: "更新", cls: "bg-brand-soft text-brand shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--brand)_22%,transparent)]" },
-  dup: { label: "已存在", cls: "text-muted-foreground shadow-hair" },
-  invalid: { label: "无效", cls: "bg-red-500/10 text-red-600 dark:text-red-400 shadow-[inset_0_0_0_1px_color-mix(in_oklch,currentColor_22%,transparent)]" },
-  remove: { label: "删除", cls: "bg-red-500/10 text-red-600 dark:text-red-400 shadow-[inset_0_0_0_1px_color-mix(in_oklch,currentColor_22%,transparent)]" },
+const ST: Record<RowStatus | "remove", { label: string; v: "success" | "brand" | "outline" | "destructive" }> = {
+  new: { label: "新增", v: "success" }, restore: { label: "恢复", v: "success" }, update: { label: "更新", v: "brand" },
+  dup: { label: "已存在", v: "outline" }, invalid: { label: "无效", v: "destructive" }, remove: { label: "删除", v: "destructive" },
 };
-const Pill = ({ k }: { k: keyof typeof ST }) => <span className={cn("inline-flex h-5 items-center rounded-xs px-1.5 type-2xs font-medium whitespace-nowrap", ST[k].cls)}>{ST[k].label}</span>;
+const Pill = ({ k }: { k: keyof typeof ST }) => <Badge size="sm" variant={ST[k].v} className={cn(k === "dup" && "text-muted-foreground")}>{ST[k].label}</Badge>;
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
 
 export default function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (b: boolean) => void; onDone: () => void }) {
@@ -106,30 +105,26 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
           )}
           <input ref={inp} type="file" accept=".json,.opml,.xml,application/json,text/xml" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
 
-          {err && <div role="alert" className="flex min-w-0 items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 type-body text-red-700 dark:text-red-400"><AlertTriangle className="mt-0.5 size-4 shrink-0" /><span className="break-words">{err}</span></div>}
+          {err && <Alert variant="destructive" className="min-w-0"><AlertTriangle /><AlertDescription className="break-words type-body">{err}</AlertDescription></Alert>}
 
           {parsed && (
             <div className="grid min-w-0 gap-2">
               <Label className="type-caption text-muted-foreground">导入方式</Label>
-              <div role="radiogroup" aria-label="导入方式" className="grid min-w-0 gap-1.5 sm:grid-cols-3">
+              <RadioGroup aria-label="导入方式" value={mode} onValueChange={(v) => { setMode(v as ImportMode); preview(file, v as ImportMode); }} className="grid min-w-0 gap-1.5 sm:grid-cols-3">
                 {MODES.map((m) => {
                   const on = mode === m.v, danger = m.v === "replace";
                   return (
-                    <button key={m.v} type="button" role="radio" aria-checked={on}
-                      onClick={() => { setMode(m.v); preview(file, m.v); }}
-                      className={cn("min-w-0 rounded-lg border px-3 py-2 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
-                        on ? (danger ? "border-red-500/60 bg-red-500/[0.06]" : "border-brand/60 bg-brand-soft") : "hover:bg-muted/50")}>
+                    <Label key={m.v} className={cn("min-w-0 cursor-pointer flex-col items-start gap-0.5 rounded-lg border px-3 py-2 font-normal transition-colors has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+                      on ? (danger ? "border-red-500/60 bg-red-500/[0.06]" : "border-brand/60 bg-brand-soft") : "hover:bg-muted/50")}>
                       <span className="flex items-center gap-2">
-                        <span className={cn("grid size-3.5 shrink-0 place-items-center rounded-full border", on ? (danger ? "border-red-500" : "border-brand") : "border-foreground/30")}>
-                          {on && <span className={cn("size-1.5 rounded-full", danger ? "bg-red-500" : "bg-brand")} />}
-                        </span>
+                        <RadioGroupItem value={m.v} className={cn("size-3.5", danger ? "data-checked:border-red-500 data-checked:bg-red-500" : "data-checked:border-brand data-checked:bg-brand")} />
                         <span className={cn("type-body font-medium", danger && "text-red-600 dark:text-red-400")}>{m.label}</span>
                       </span>
-                      <span className="mt-0.5 block pl-5.5 type-meta text-faint">{m.hint}</span>
-                    </button>
+                      <span className="block pl-5.5 type-meta text-faint">{m.hint}</span>
+                    </Label>
                   );
                 })}
-              </div>
+              </RadioGroup>
               {parsed.format === "opml" && (
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
                   <Label className="type-caption text-muted-foreground">OPML 默认分区</Label>
@@ -153,32 +148,32 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
                 <span className="inline-flex items-center gap-1.5 type-caption text-muted-foreground"><Pill k="invalid" />{c.invalid}</span>
                 {mode === "replace" && <span className="inline-flex items-center gap-1.5 type-caption text-muted-foreground"><Pill k="remove" />{c.remove}</span>}
               </div>
-              <div className="max-h-[min(16rem,40vh)] overflow-auto rounded-lg border">
-                <table className="w-full table-fixed type-body">
-                  <thead className="sticky top-0 z-10 bg-popover/95 type-meta text-faint backdrop-blur"><tr className="shadow-[inset_0_-1px_0_var(--border)]"><th className="w-[4.5rem] px-3 py-1.5 text-left font-normal">状态</th><th className="px-3 py-1.5 text-left font-normal">来源</th><th className="hidden w-[42%] px-3 py-1.5 text-left font-normal sm:table-cell">说明</th></tr></thead>
-                  <tbody>
+              <div className="max-h-[min(16rem,40vh)] overflow-auto rounded-lg border [&_[data-slot=table-container]]:overflow-visible">
+                <Table className="table-fixed type-body">
+                  <TableHeader className="sticky top-0 z-10 bg-popover/95 backdrop-blur"><TableRow className="hover:bg-transparent"><TableHead className="h-8 w-[4.5rem] px-3 type-meta font-normal text-faint">状态</TableHead><TableHead className="h-8 px-3 type-meta font-normal text-faint">来源</TableHead><TableHead className="hidden h-8 w-[42%] px-3 type-meta font-normal text-faint sm:table-cell">说明</TableHead></TableRow></TableHeader>
+                  <TableBody>
                     {plan.rows.map((r) => {
                       const e = parsed?.rows[r.i]?.entry;
                       const note = r.reason ?? (e ? `${SECTION_ZH[e.section]} · ${e.priority}` : "");
                       return (
-                        <tr key={r.i} className="border-t border-border/50 first:border-t-0">
-                          <td className="px-3 py-1.5"><Pill k={r.status} /></td>
-                          <td className="px-3 py-1.5"><div className="truncate" title={r.name}>{r.name}</div><div className="truncate type-meta text-faint sm:hidden">{note}</div></td>
-                          <td className="hidden truncate px-3 py-1.5 type-caption text-muted-foreground sm:table-cell" title={note}>{note}</td>
-                        </tr>
+                        <TableRow key={r.i} className="border-border/50">
+                          <TableCell className="px-3 py-1.5"><Pill k={r.status} /></TableCell>
+                          <TableCell className="whitespace-normal px-3 py-1.5"><div className="truncate" title={r.name}>{r.name}</div><div className="truncate type-meta text-faint sm:hidden">{note}</div></TableCell>
+                          <TableCell className="hidden truncate px-3 py-1.5 type-caption text-muted-foreground sm:table-cell" title={note}>{note}</TableCell>
+                        </TableRow>
                       );
                     })}
                     {mode === "replace" && plan.remove.map((r) => (
-                      <tr key={`rm-${r.id}`} className="border-t border-border/50">
-                        <td className="px-3 py-1.5"><Pill k="remove" /></td>
-                        <td className="truncate px-3 py-1.5" title={r.name}>{r.name}</td>
-                        <td className="hidden truncate px-3 py-1.5 type-caption text-muted-foreground sm:table-cell">不在文件中，连同内容删除</td>
-                      </tr>
+                      <TableRow key={`rm-${r.id}`} className="border-border/50">
+                        <TableCell className="px-3 py-1.5"><Pill k="remove" /></TableCell>
+                        <TableCell className="truncate px-3 py-1.5" title={r.name}>{r.name}</TableCell>
+                        <TableCell className="hidden truncate px-3 py-1.5 type-caption text-muted-foreground sm:table-cell">不在文件中，连同内容删除</TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
-              <label className="flex w-fit items-center gap-2 type-body text-muted-foreground"><Checkbox checked={test} onCheckedChange={(v) => setTest(!!v)} />导入后测试抓取新来源</label>
+              <Label className="w-fit type-body font-normal text-muted-foreground"><Checkbox checked={test} onCheckedChange={(v) => setTest(!!v)} />导入后测试抓取新来源</Label>
             </div>
           )}
 

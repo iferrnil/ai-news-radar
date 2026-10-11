@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, MousePointerClick } from "lucide-react";
 import { XLogo as Twitter } from "./x-logo";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,7 +45,7 @@ export function ItemPreview({ it: base }: { it: ItemOut }) {
           <div className="flex items-center gap-1.5 type-body font-medium">
             <span className="truncate">{x ? srcName(it!).replace(/^@/, "") : it!.source}</span>
             {x && <Twitter className="size-2.5 shrink-0 text-faint" />}
-            {it!.priority === "P0" && <span className="chip chip-brand px-1 font-mono type-2xs font-semibold tracking-[0.02em]">P0</span>}
+            {it!.priority === "P0" && <Badge size="sm" variant="brand" className="px-1 font-mono font-semibold tracking-[0.02em]">P0</Badge>}
           </div>
           <div className="mt-0.5 truncate type-meta tabular-nums text-faint">{x ? `@${h} · ` : ""}{bjFull(it!.published)} · {ago(it!.published)}</div>
         </div>
@@ -58,13 +59,13 @@ export function ItemPreview({ it: base }: { it: ItemOut }) {
         {it!.orig && <Original o={it!.orig} x={x} />}
         {it!.also_on_x.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5 type-meta text-muted-foreground">
-            <span className="chip gap-1 bg-secondary"><Twitter className="size-2" />也在 X</span>
+            <Badge size="sm" variant="muted"><Twitter />也在 X</Badge>
             {it!.also_on_x.slice(0, 4).map((a) => <span key={a.url}>@{a.author}</span>)}
           </div>
         )}
       </div>
       <div className="flex items-center gap-2 border-t border-border/50 px-4 py-3 type-meta text-faint">
-        <span className="chip shadow-hair">{secZh(sectionOf(it!))}</span>
+        <Badge size="sm" variant="outline" className="text-muted-foreground">{secZh(sectionOf(it!))}</Badge>
         <span className="flex items-center gap-1"><MousePointerClick className="size-3.5" />点击查看详情</span>
         <a href={it!.url} target="_blank" rel="noopener" className="ml-auto flex items-center gap-0.5 font-medium text-brand hover:underline">原文<ArrowUpRight className="size-3.5" /></a>
       </div>
@@ -73,7 +74,7 @@ export function ItemPreview({ it: base }: { it: ItemOut }) {
 }
 
 export function TrBadge({ className = "" }: { className?: string }) {
-  return <span title="DeepSeek 机器翻译" className={`chip shrink-0 bg-secondary px-1 type-2xs font-medium text-muted-foreground ${className}`}>译</span>;
+  return <Badge size="sm" variant="muted" title="DeepSeek 机器翻译" className={`px-1 font-medium ${className}`}>译</Badge>;
 }
 /** Original (untranslated) text, shown under a translated item in the hover card and drawer. */
 export function Original({ o, x }: { o: { title: string; summary: string }; x: boolean }) {
