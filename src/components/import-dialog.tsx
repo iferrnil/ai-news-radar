@@ -129,7 +129,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
                   <Label className="type-caption text-muted-foreground">OPML 默认分区</Label>
                   <Select value={osec} onValueChange={(v) => { setOsec(v as Entry["section"]); preview(file, mode, v as Entry["section"]); }}>
-                    <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => SECTION_ZH[v as Entry["section"]]}</SelectValue></SelectTrigger>
+                    <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => SECTION_ZH[v as keyof typeof SECTION_ZH]}</SelectValue></SelectTrigger>
                     <SelectContent>{SECTION_KEYS.map((k) => <SelectItem key={k} value={k}>{SECTION_ZH[k]}</SelectItem>)}</SelectContent>
                   </Select>
                   <span className="type-meta text-faint">条目的 category 或文件夹名与分区同名时按其归类</span>
@@ -154,7 +154,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
                   <TableBody>
                     {plan.rows.map((r) => {
                       const e = parsed?.rows[r.i]?.entry;
-                      const note = r.reason ?? (e ? `${SECTION_ZH[e.section]} · ${e.priority}` : "");
+                      const note = r.reason ?? (e ? `${e.sectionName ?? SECTION_ZH[e.section as keyof typeof SECTION_ZH] ?? "国外媒体"} · ${e.priority}${e.filter ? " · 过滤规则" : ""}` : "");
                       return (
                         <TableRow key={r.i} className="border-border/50">
                           <TableCell className="px-3 py-1.5"><Pill k={r.status} /></TableCell>

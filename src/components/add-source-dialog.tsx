@@ -7,10 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SECTIONS, type SectionKey, TYPE, api, bj } from "./common";
+import { type SectionKey, TYPE, api, bj } from "./common";
+import { EMPTY_NEW, EMPTY_RULE, NEW_SECTION, NewSectionFields, RuleFields, SectionSelect, type NewSection, type RuleForm } from "./source-form-parts";
+import { ChevronRight, Filter } from "lucide-react";
 
 // Add-source dialog (sources page), code-split: loaded the first time it opens.
 type Detect = { type: string; name: string; url: string; count: number; overlap: number; sample: { title: string; published: number | null }[] };
@@ -22,6 +25,10 @@ export default function AddDialog({ open, onOpenChange, onAdded }: { open: boole
   const [res, setRes] = useState<Detect | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState<"" | "test" | "add">("");
+  const [newSec, setNewSec] = useState<NewSection>(EMPTY_NEW);
+  const [rule, setRule] = useState<RuleForm>(EMPTY_RULE);
+  const [ruleOpen, setRuleOpen] = useState(false);
+  const [ruleErr, setRuleErr] = useState("");
   const test = async () => {
     setBusy("test"); setErr(""); setRes(null);
     try { const r = await api<Detect>("/api/sources/test", { method: "POST", body: JSON.stringify(form) }); setRes(r); if (!secTouched) setForm((f) => ({ ...f, section: suggest(f.input, r.type) })); } catch (e) { setErr((e as Error).message); }
@@ -30,9 +37,12 @@ export default function AddDialog({ open, onOpenChange, onAdded }: { open: boole
   const add = async () => {
     setBusy("add"); setErr("");
     try {
-      const d = await api("/api/sources", { method: "POST", body: JSON.stringify(form) });
+      const isNew = form.section === NEW_SECTION;
+      if (isNew && !newSec.name.trim()) throw new Error("请填写新分区名称");
+      const d = await api("/api/sources", { method: "POST", body: JSON.stringify({ ...form, section: isNew ? undefined : form.section, newSection: isNew ? newSec : undefined, rule }) });
       toast.success(`已添加「${d.source.name}」`, { description: d.fetch.error ? `首次抓取失败：${d.fetch.error}` : `首次抓取 ${d.fetch.fetched} 条，新增 ${d.fetch.new} 条` });
-      onAdded(); onOpenChange(false); setRes(null); setSecTouched(false); setForm({ ...form, input: "", name: "", force: false });
+      onAdded(); onOpenChange(false); setRes(null); setSecTouched(false); setForm({ ...form, input: "", name: "", force: false, section: isNew ? d.source.grp.replace(/^sec:/, "") : form.section });
+      setNewSec(EMPTY_NEW); setRule(EMPTY_RULE); setRuleOpen(false);
     } catch (e) { setErr((e as Error).message); }
     setBusy("");
   };
@@ -44,7 +54,7 @@ export default function AddDialog({ open, onOpenChange, onAdded }: { open: boole
   );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-2xl">
+      <DialogContent className="max-h-[92dvh] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>添加数据源</DialogTitle>
           <DialogDescription>网页或 Feed URL（自动发现 RSS/Atom）、X 用户名 @handle，或 X 列表链接。</DialogDescription>
@@ -60,8 +70,16 @@ export default function AddDialog({ open, onOpenChange, onAdded }: { open: boole
           </div>
           <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
             <div className="col-span-2 grid min-w-0 gap-1.5 sm:col-span-1"><Label>名称</Label><Input className="w-full" placeholder="可选" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-            <div className="grid min-w-0 gap-1.5"><Label>分区</Label>{sel("section", SECTIONS.map((x) => [x.key, x.zh]))}</div>
+            <div className="grid min-w-0 gap-1.5"><Label>分区</Label><SectionSelect value={form.section} onChange={(v) => { setSecTouched(true); setForm({ ...form, section: v }); }} /></div>
             <div className="grid min-w-0 gap-1.5"><Label>优先级</Label>{sel("priority", [["P0", "P0"], ["P1", "P1"], ["P2", "P2"]])}</div>
+          </div>
+          {form.section === NEW_SECTION && <NewSectionFields v={newSec} set={setNewSec} />}
+          <div className="grid min-w-0 gap-3">
+            <button type="button" onClick={() => setRuleOpen((o) => !o)} aria-expanded={ruleOpen}
+              className="flex w-fit items-center gap-1.5 rounded-md type-body font-medium text-muted-foreground outline-none transition-colors duration-150 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+              <ChevronRight className={cn("size-4 transition-transform duration-200", ruleOpen && "rotate-90")} /><Filter className="size-3.5" />过滤规则<span className="font-normal text-faint">（可选，按标题正则保留 / 隐藏）</span>
+            </button>
+            {ruleOpen && <RuleFields rule={rule} set={setRule} samples={res?.sample.map((x) => x.title)} onError={setRuleErr} />}
           </div>
           {err && <Alert variant="destructive" className="p-3"><AlertTriangle /><AlertDescription className="type-body">{err}</AlertDescription></Alert>}
           {res && (
@@ -89,7 +107,7 @@ export default function AddDialog({ open, onOpenChange, onAdded }: { open: boole
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button onClick={add} disabled={!form.input || !!busy}>{busy === "add" && <Loader2 className="animate-spin" />}添加并订阅</Button>
+          <Button onClick={add} disabled={!form.input || !!busy || !!ruleErr}>{busy === "add" && <Loader2 className="animate-spin" />}添加并订阅</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

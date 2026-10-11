@@ -2,7 +2,7 @@
 //   view = "" (全部) | an exclusive section (lab/cn/dev/media/x — every item is in exactly one, all X posts are "x") | a single source.
 // Plus an optional P0-only toggle. State lives in the URL: /?section=cn | /?section=x | /?source=12 [&p0=1].
 import type { ItemOut } from "@/lib/types";
-import { type SectionKey, SECTIONS, inAll, sectionOf } from "./common";
+import { type SectionKey, SECTIONS, inAll, isCustomKey, sectionOf } from "./common";
 
 export type View = "" | SectionKey;
 export type Filters = { section: View; source: number | null; p0: boolean };
@@ -19,7 +19,7 @@ export const countOf = (items: ItemOut[], f: Filters) => items.reduce((n, it) =>
 export function parseFilters(sp: URLSearchParams): Filters {
   const sec = sp.get("section") ?? "", src = Number(sp.get("source"));
   return {
-    section: (SECTIONS.some((s) => s.key === sec) ? sec : "") as View,
+    section: (SECTIONS.some((s) => s.key === sec) || isCustomKey(sec) ? sec : "") as View, // custom keys are accepted before the list loads
     source: Number.isFinite(src) && src > 0 ? src : null,
     p0: sp.get("p0") === "1",
   };

@@ -1,3 +1,5 @@
+import { hasRule } from "./filter-rule";
+import { evalRule, ruleText } from "./rule-guard";
 import { getDb, RETENTION_HOURS } from "./db";
 import { publish } from "./bus";
 import { decode, normUrl } from "./util";
@@ -6,7 +8,7 @@ import type { FetchedItem, ItemOut, SourceRow } from "./types";
 
 const ITEM_SQL = `SELECT i.id,i.title,i.url,i.summary,i.published,i.fetched,i.is_x,i.author,i.also_on_x,i.image,i.title_zh,i.summary_zh,
   s.id AS source_id, s.name AS source, s.category, s.region, s.type AS source_type, s.priority, s.homepage, s.username, s.grp
-  FROM items i JOIN sources s ON s.id=i.source_id WHERE i.merged_into IS NULL AND s.enabled=1`;
+  FROM items i JOIN sources s ON s.id=i.source_id WHERE i.merged_into IS NULL AND i.hidden=0 AND s.enabled=1`;
 
 export const PREVIEW_CHARS = 280; // cards clamp to 3 lines; hover card / drawer fetch the full text via ?id=
 /** full: untruncated summary (single-item view). zh: include title_zh/summary_zh (omitted otherwise to keep the list payload small). */
@@ -39,6 +41,9 @@ export function storeItems(src: SourceRow, items: FetchedItem[]) {
   const exists = db.prepare("SELECT 1 FROM seen WHERE uid=?");
   const markSeen = db.prepare("INSERT OR IGNORE INTO seen VALUES(?,?)");
   const firstFetch = src.last_fetched == null;
+  // per-source filter rule: items it rejects are marked seen but never stored (null = rule timed out -> keep all)
+  const rule = { include: src.f_include, exclude: src.f_exclude, scope: src.f_scope, cs: src.f_cs };
+  const keep = hasRule(rule) ? evalRule(rule, items.map((it) => ruleText(rule.scope, it.title, it.summary))) : null;
   const findArt = db.prepare("SELECT id, also_on_x FROM items WHERE uid=? AND is_x=0");
   const insItem = db.prepare(`INSERT OR IGNORE INTO items(uid,source_id,title,url,summary,published,fetched,is_x,author,merged_into,image)
     VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
@@ -47,10 +52,11 @@ export function storeItems(src: SourceRow, items: FetchedItem[]) {
   const xsFor = db.prepare(`SELECT i.id, i.url, i.author FROM post_links p JOIN items i ON i.id=p.item_id WHERE p.norm_url=? AND i.merged_into IS NULL`);
   const setMerged = db.prepare("UPDATE items SET merged_into=? WHERE id=?");
   db.transaction(() => {
-    for (const it of items) {
+    for (const [n, it] of items.entries()) {
       // `seen` remembers every uid for SEEN_DAYS, so items dropped by the 48h prune never come back as "new"
       if (exists.get(it.uid)) continue;
       markSeen.run(it.uid, now);
+      if (keep && !keep[n]) continue; // filtered out by the source's rule
       if (it.published == null && firstFetch) continue; // undated entries on a source's first fetch are a backlog, not news
       const pub = Math.min(it.published ?? now, now); // future-dated / undated -> fetch time
       if (pub < cutoff) continue; // outside retention window
@@ -121,4 +127,18 @@ export function deleteSources(ids: number[]) {
   })();
   if (deleted) { db.pragma("incremental_vacuum"); publish({ event: "sources" }); }
   return { deleted, items };
+}
+
+/** Re-evaluate a source's rule over its stored items (retroactive hide/unhide). Returns hidden count. */
+export function reapplyRule(sourceId: number) {
+  const db = getDb();
+  const src = db.prepare("SELECT f_include, f_exclude, f_scope, f_cs FROM sources WHERE id=?").get(sourceId) as { f_include: string | null; f_exclude: string | null; f_scope: "title" | "all" | null; f_cs: number } | undefined;
+  if (!src) return 0;
+  const rule = { include: src.f_include, exclude: src.f_exclude, scope: src.f_scope, cs: src.f_cs };
+  const rows = db.prepare("SELECT id, title, summary FROM items WHERE source_id=?").all(sourceId) as { id: number; title: string; summary: string }[];
+  const keep = evalRule(rule, rows.map((r) => ruleText(rule.scope, r.title, r.summary)), 1000);
+  const upd = db.prepare("UPDATE items SET hidden=? WHERE id=?");
+  let hidden = 0;
+  db.transaction(() => { rows.forEach((r, n) => { const h = keep && !keep[n] ? 1 : 0; hidden += h; upd.run(h, r.id); }); })();
+  return hidden;
 }

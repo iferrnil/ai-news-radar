@@ -9,12 +9,12 @@ import { CommandDialog, Command, CommandEmpty, CommandGroup, CommandInput, Comma
 import { DOCS, docHref } from "@/lib/docs-registry";
 import type { ItemOut } from "@/lib/types";
 import type { Filters } from "./filters";
-import { SECTIONS, inAll, ago, api, handleOf, secZh, sectionOf, xText, localize } from "./common";
+import { inAll, ago, api, handleOf, secZh, sectionOf, xText, localize } from "./common";
 import { SourceAvatar } from "./source-avatar";
-import { SEC_ICON, useApp } from "./app-shell";
+import { secIcon, useApp } from "./app-shell";
 
 export default function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
-  const { navigate, sources, setOpen, setAddOpen, zh } = useApp();
+  const { navigate, sources, sections, setOpen, setAddOpen, zh } = useApp();
   const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -31,7 +31,7 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
   const run = (fn: () => void) => { onOpenChange(false); setQ(""); fn(); };
   const goFeed = (p: Partial<Filters>) => run(() => navigate({ section: "", source: null, ...p }));
   const ql = q.trim().toLowerCase();
-  const navSec = SECTIONS.filter((s) => !ql || s.zh.includes(q.trim()));
+  const navSec = sections.filter((s) => !ql || s.zh.includes(q.trim()));
   const navSrc = ql ? sources.filter((s) => s.enabled && s.name.toLowerCase().includes(ql)).slice(0, 6) : [];
   const acts = [
     { k: "add", label: "添加数据源", icon: Plus, go: () => { router.push("/sources"); setAddOpen(true); } },
@@ -59,7 +59,7 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
             </CommandGroup>
           )}
           {navSec.length + navSrc.length > 0 && <><CommandSeparator /><CommandGroup heading="跳转">
-            {navSec.map((s) => { const I = SEC_ICON[s.key]; return (
+            {navSec.map((s) => { const I = secIcon(s); return (
               <CommandItem key={s.key} value={`sec-${s.key}`} onSelect={() => goFeed({ section: s.key })}><I />{s.zh}</CommandItem>); })}
             {navSrc.map((s) => (
               <CommandItem key={s.id} value={`src-${s.id}`} onSelect={() => goFeed({ source: s.id })}>

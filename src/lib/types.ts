@@ -6,6 +6,7 @@ export interface SourceRow {
   homepage: string | null; username: string | null; enabled: number; supported: number; unsupported_reason: string | null;
   priority: Priority | null; poll_interval: number; last_fetched: number | null; last_error: string | null; last_new: number;
   origin: "seed" | "user"; grp: string | null; note: string | null; created: number;
+  f_include?: string | null; f_exclude?: string | null; f_scope?: "title" | "all" | null; f_cs?: number;
 }
 
 export interface FetchedItem {

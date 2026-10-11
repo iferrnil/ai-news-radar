@@ -39,6 +39,7 @@ DROP INDEX IF EXISTS items_src;
 CREATE TABLE IF NOT EXISTS tcache(h TEXT PRIMARY KEY, t TEXT, s TEXT, ts REAL NOT NULL) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS deleted_seeds(name TEXT PRIMARY KEY, ts REAL NOT NULL) WITHOUT ROWID; -- tombstones: built-ins the user deleted
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sections(key TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, icon TEXT, in_all INTEGER NOT NULL DEFAULT 1, pos INTEGER NOT NULL DEFAULT 0, created REAL) WITHOUT ROWID; -- user-created sidebar sections
 `;
 
 interface SeedSource {
@@ -100,6 +101,9 @@ export function getDb(): Database.Database {
     const scols = new Set((db.prepare("PRAGMA table_info(sources)").all() as { name: string }[]).map((c) => c.name));
     if (!scols.has("overrides")) db.exec("ALTER TABLE sources ADD COLUMN overrides TEXT NOT NULL DEFAULT ''");
     if (!cols.has("image")) db.exec("ALTER TABLE items ADD COLUMN image TEXT");
+    // per-source filter rules (see lib/filter-rule.ts); items.hidden = stored but filtered out by the current rule
+    if (!scols.has("f_include")) db.exec("ALTER TABLE sources ADD COLUMN f_include TEXT; ALTER TABLE sources ADD COLUMN f_exclude TEXT; ALTER TABLE sources ADD COLUMN f_scope TEXT; ALTER TABLE sources ADD COLUMN f_cs INTEGER NOT NULL DEFAULT 0;");
+    if (!cols.has("hidden")) db.exec("ALTER TABLE items ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
     if (!cols.has("title_zh")) db.exec("ALTER TABLE items ADD COLUMN title_zh TEXT; ALTER TABLE items ADD COLUMN summary_zh TEXT;");
     seed(db);
     // one-off repair: entities double-escaped in older rows (e.g. "&mdash;")

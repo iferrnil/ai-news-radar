@@ -7,6 +7,9 @@ import { pollOne } from "@/lib/scheduler";
 import { normUrl } from "@/lib/util";
 import { EntrySchema, MAX_BYTES, MAX_ENTRIES, SECTION_GRP, xProfileUrl, type Entry, type ImportPlan, type PlanRow } from "@/lib/portable";
 import type { SourceRow } from "@/lib/types";
+import { createSection, grpFor, metaFor } from "@/lib/sections";
+import { validateRule } from "@/lib/rule-guard";
+import { reapplyRule } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 // POST { entries, mode: merge|update|replace, dryRun, test } — dryRun returns the plan only.
@@ -35,7 +38,10 @@ export async function POST(req: NextRequest) {
   body.entries.forEach((raw, i) => {
     const r = EntrySchema.safeParse(raw);
     if (!r.success) { rows.push({ i, name: String((raw as { name?: unknown })?.name ?? `#${i + 1}`).slice(0, 120), status: "invalid", reason: r.error.issues.map((x) => x.message).join("；") }); return; }
-    const e = r.data; const url = e.type === "x" ? xProfileUrl(e.username!) : e.url!;
+    const e = r.data;
+    const fr = validateRule(e.filter ? { include: e.filter.include, exclude: e.filter.exclude, scope: e.filter.scope, cs: e.filter.caseSensitive } : {});
+    if ("error" in fr) { rows.push({ i, name: e.name, status: "invalid", reason: fr.error }); return; }
+    const url = e.type === "x" ? xProfileUrl(e.username!) : e.url!;
     const key = e.type === "x" ? `x:${e.username!.toLowerCase()}` : normUrl(url);
     if (seenKeys.has(key)) { rows.push({ i, name: e.name, status: "invalid", reason: "文件内重复" }); return; }
     seenKeys.add(key);
@@ -53,14 +59,23 @@ export async function POST(req: NextRequest) {
   if (body.dryRun) return Response.json(plan);
 
   const now = Date.now() / 1000; const added: number[] = [];
-  const ins = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,grp,overrides)
-    VALUES(@name,@region,@category,@type,@url,@homepage,@username,@enabled,1,@priority,@interval,'user',@now,@grp,@ov)`);
+  const ins = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,grp,overrides,f_include,f_exclude,f_scope,f_cs)
+    VALUES(@name,@region,@category,@type,@url,@homepage,@username,@enabled,1,@priority,@interval,'user',@now,@grp,@ov,@fi,@fe,@fs,@fc)`);
   const upd = db.prepare(`UPDATE sources SET enabled=@enabled, priority=@priority, poll_interval=@interval, grp=@grp,
-    region=@region, category=@category, overrides=@ov WHERE id=@id`);
-  const vals = (e: Entry) => ({
-    enabled: e.enabled ? 1 : 0, priority: e.priority, interval: e.interval ?? intervalFor(e.type, e.priority), grp: SECTION_GRP[e.section],
-    region: e.section === "cn" ? "cn" : "global", category: e.section === "lab" ? "official" : e.section === "x" ? "community" : "media", ov: OV,
-  });
+    region=@region, category=@category, overrides=@ov, f_include=@fi, f_exclude=@fe, f_scope=@fs, f_cs=@fc WHERE id=@id`);
+  // custom sections are matched by NAME (keys differ between installs) and created on demand
+  const secKey = (e: Entry) => {
+    if (e.section in SECTION_GRP) return e.section;
+    if (e.sectionName) { const c = createSection(db, { name: e.sectionName, icon: e.sectionIcon, inAll: e.sectionInAll }); if ("key" in c) return c.key; }
+    return "media";
+  };
+  const vals = (e: Entry) => {
+    const k = secKey(e);
+    return {
+      enabled: e.enabled ? 1 : 0, priority: e.priority, interval: e.interval ?? intervalFor(e.type, e.priority), grp: grpFor(k), ...metaFor(k, e.type !== "rss" && e.type !== "api"), ov: OV,
+      fi: e.filter?.include || null, fe: e.filter?.exclude || null, fs: e.filter?.scope ?? "title", fc: e.filter?.caseSensitive ? 1 : 0,
+    };
+  };
   db.transaction(() => {
     if (remove.length) deleteSources(remove.map((r) => r.id));
     const restores = valid.filter((v) => v.restore);
@@ -73,6 +88,7 @@ export async function POST(req: NextRequest) {
       added.push(Number(res.lastInsertRowid));
     }
   })();
+  for (const v of valid) if (v.match && body.mode !== "merge") reapplyRule(v.match.id); // rules may have changed
   publish({ event: "sources" });
   if (body.test && added.length) {
     const list = db.prepare(`SELECT * FROM sources WHERE id IN (${added.map(() => "?").join(",")}) AND enabled=1`).all(...added) as SourceRow[];

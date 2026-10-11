@@ -5,7 +5,7 @@ import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, BookOpen, ChevronRight, Clapperboard, Command as CommandIcon, Database, FlaskConical, Globe2, Inbox, Menu, Moon, Newspaper,
-  Radio, Search, Sun,
+  Folder, Radio, Search, Settings2, Sun,
 } from "lucide-react";
 import { toast } from "sonner";
 import { XLogo as Twitter } from "./x-logo";
@@ -20,7 +20,7 @@ import { DOCS, docHref } from "@/lib/docs-registry";
 import { type Filters, countOf, p0For, parseFilters, setP0For, toQuery, viewKey } from "./filters";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
-import { SECTIONS, inAll, type SectionKey, type SourceRow, api, secZh, sectionOf } from "./common";
+import { type CustomSectionRow, type Section, type SourceRow, allSections, api, inAll, secZh, sectionOf, setCustomSections } from "./common";
 import { Languages, MinusCircle } from "lucide-react";
 import dynamic from "next/dynamic";
 // ⌘K palette (cmdk) is code-split and only mounted after first open
@@ -35,7 +35,16 @@ function TrButton({ onClick }: { onClick?: () => void }) {
   return <Button variant="ghost" size="icon" aria-label="翻译设置" className={zh ? "text-brand" : ""} onClick={onClick}><Languages className="size-4" /></Button>;
 }
 
-export const SEC_ICON: Record<SectionKey | "all", React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
+export const SEC_ICON: Record<string, React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
+/** Section icon: lucide for built-ins, the user's emoji for custom sections (Folder when none). */
+export function secIcon(s: Pick<Section, "key" | "icon">): React.ElementType {
+  if (SEC_ICON[s.key]) return SEC_ICON[s.key];
+  if (!s.icon) return Folder;
+  let C = EMOJI.get(s.icon); // stable component per emoji (no remounts)
+  if (!C) { const e = s.icon; const Emoji = ({ className }: { className?: string }) => <span aria-hidden className={cn("grid place-items-center text-[14px] leading-none", className)}>{e}</span>; C = Emoji; EMOJI.set(e, C); }
+  return C;
+}
+const EMOJI = new Map<string, React.ElementType>();
 
 type Ctx = {
   f: Filters; setF: (p: Partial<Filters>) => void;
@@ -43,6 +52,7 @@ type Ctx = {
   navigate: (p: Partial<Filters>) => void;
   facet: ItemOut[]; setFacet: (i: ItemOut[]) => void; isRead: (id: number) => boolean; markRead: (id: number) => void; sources: SourceRow[]; reloadSources: () => Promise<void>;
   live: boolean; setLive: (b: boolean) => void; open: ItemOut | null; setOpen: (i: ItemOut | null) => void;
+  sections: Section[]; // built-in + user-created (re-render trigger; read via allSections()/secZh too)
   setPalette: (b: boolean) => void; addOpen: boolean; setAddOpen: (b: boolean) => void;
   onStream: (fn: (ev: string, data: any) => void) => () => void;
   zh: boolean; setZh: (b: boolean) => void;
@@ -117,9 +127,24 @@ function NavItem({ active, icon: Icon, label, count, onClick }: { active: boolea
       active ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : "text-muted-foreground hover:bg-hover hover:text-foreground", !active && count === 0 && "opacity-60")}>
       {active && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
       <Icon className={cn("size-4 transition-colors duration-150 ease-out", active ? "text-brand" : "text-faint group-hover:text-foreground")} />
-      <span className="flex-1 text-left">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
       {count != null && <span className={cn("font-mono type-meta tabular-nums", count === 0 ? "text-faint/60" : "text-faint")}>{count}</span>}
     </button>
+  );
+}
+
+/** Sidebar section row; user-created sections get a hover/focus "管理分区" button (rename / delete live on /sources). */
+function SecNav({ s, active, count, onClick, onManage }: { s: Section; active: boolean; count: number; onClick: () => void; onManage: () => void }) {
+  const item = <NavItem active={active} icon={secIcon(s)} label={s.zh} count={count} onClick={onClick} />;
+  if (!s.custom) return item;
+  return (
+    <div className="group/sec relative">
+      {item}
+      <Button variant="ghost" size="icon-xs" aria-label={`管理分区「${s.zh}」`} onClick={onManage}
+        className="absolute right-9 top-1 z-10 bg-sidebar text-faint opacity-0 transition-opacity duration-150 group-hover/sec:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100">
+        <Settings2 />
+      </Button>
+    </div>
   );
 }
 
@@ -166,7 +191,7 @@ function DocsGroup({ path, onGo }: { path: string; onGo: (href: string) => void 
 }
 
 export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
-  const { f, navigate, sources, facet } = useApp();
+  const { f, navigate, sources, facet, sections } = useApp();
   const router = useRouter(); const path = usePathname();
   const active = sources.filter((s) => s.enabled && s.supported);
   const feed = path === "/";
@@ -175,6 +200,7 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const go = (p: Partial<Filters>) => { navigate({ section: "", source: null, ...p }); onNavigate?.(); };
   const on = (section: Filters["section"]) => feed && f.source == null && f.section === section;
   const errs = active.filter((s) => s.last_error).length;
+  const manage = () => { router.push("/sources?sections=1"); onNavigate?.(); };
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2.5 px-4">
@@ -190,10 +216,10 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         <div className="space-y-0.5 px-2.5 pb-3">
           <SectionLabel first>信息流</SectionLabel>
           <NavItem active={on("")} icon={Inbox} label="全部" count={count("")} onClick={() => go({})} />
-          {SECTIONS.filter((s) => inAll(s.key)).map((s) => <NavItem key={s.key} active={on(s.key)} icon={SEC_ICON[s.key]} label={s.zh} count={count(s.key)} onClick={() => go({ section: s.key })} />)}
+          {sections.filter((s) => inAll(s.key)).map((s) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} onClick={() => go({ section: s.key })} onManage={manage} />)}
           {/* sections outside 全部 (e.g. 娱乐) sit below a divider */}
           <div className="mx-2 my-2 h-px bg-border" role="separator" title="不计入「全部」" />
-          {SECTIONS.filter((s) => !inAll(s.key)).map((s) => <NavItem key={s.key} active={on(s.key)} icon={SEC_ICON[s.key]} label={s.zh} count={count(s.key)} onClick={() => go({ section: s.key })} />)}
+          {sections.filter((s) => !inAll(s.key)).map((s) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} onClick={() => go({ section: s.key })} onManage={manage} />)}
           <SectionLabel>管理</SectionLabel>
           <NavItem active={path === "/sources"} icon={Database} label="数据源" count={active.length} onClick={() => { router.push("/sources"); onNavigate?.(); }} />
           <DocsGroup path={path} onGo={(h) => { router.push(h); onNavigate?.(); }} />
@@ -202,7 +228,7 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
               <ChevronRight className="size-3.5 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90" />订阅源<span className="ml-auto font-mono tabular-nums">{active.length}</span>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-px">
-              {SECTIONS.map((sec) => {
+              {sections.map((sec) => {
                 const list = active.filter((s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }) === sec.key);
                 if (!list.length) return null;
                 return (
@@ -292,7 +318,12 @@ function Shell({ children }: { children: React.ReactNode }) {
     if (path !== "/" || new URLSearchParams(window.location.search).has("p0")) return;
     if (p0For(viewKey(fRef.current))) router.replace(toQuery({ ...fRef.current, p0: true }), { scroll: false });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const reloadSources = useCallback(async () => setSources(await api<SourceRow[]>("/api/sources")), []);
+  const [sections, setSections] = useState<Section[]>(() => allSections());
+  const reloadSources = useCallback(async () => {
+    const [src, secs] = await Promise.all([api<SourceRow[]>("/api/sources"), api<CustomSectionRow[]>("/api/sections").catch(() => null)]);
+    if (secs) { setCustomSections(secs); setSections(allSections()); }
+    setSources(src);
+  }, []);
   useEffect(() => { let t: ReturnType<typeof setTimeout> | null = null; reloadSourcesRef.current = () => { if (!t) t = setTimeout(() => { t = null; reloadSources(); }, 3000); }; }, [reloadSources]);
   useEffect(() => { reloadNowRef.current = () => { reloadSources(); }; }, [reloadSources]);
   // structural changes arrive via the SSE "sources" event; this slow poll only refreshes fetch status dots, and pauses in hidden tabs
@@ -301,8 +332,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((p) => !p); } };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, []);
-  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, sources, reloadSources, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, zh, setZh }),
-    [f, setF, navigate, facet, isRead, markRead, sources, reloadSources, live, open, setOpen, addOpen, onStream, zh, setZh]);
+  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, sources, reloadSources, sections, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, zh, setZh }),
+    [f, setF, navigate, facet, isRead, markRead, sources, reloadSources, sections, live, open, setOpen, addOpen, onStream, zh, setZh]);
   const title = path === "/sources" ? "数据源" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
     : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
 

@@ -1,15 +1,18 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, FileJson, FileUp, Rss, SearchX, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, Filter, FolderCog, Pencil, FileJson, FileUp, Rss, SearchX, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import dynamic from "next/dynamic";
+import { useRouter, useSearchParams } from "next/navigation";
 import { buildJson, buildOpml, exportFileName, type ExportSource } from "@/lib/portable-export";
 
 const ImportDialog = dynamic(() => import("./import-dialog"), { ssr: false });
+const EditSourceDialog = dynamic(() => import("./source-edit-dialogs").then((m) => m.EditSourceDialog), { ssr: false });
+const SectionsDialog = dynamic(() => import("./source-edit-dialogs").then((m) => m.SectionsDialog), { ssr: false });
 const AddDialog = dynamic(() => import("./add-source-dialog"), { ssr: false });
 const DeleteConfirm = dynamic(() => import("./sources-dialogs").then((m) => m.DeleteConfirm), { ssr: false });
 const RestoreDialog = dynamic(() => import("./sources-dialogs").then((m) => m.RestoreDialog), { ssr: false });
@@ -29,7 +32,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
 import { useApp } from "./app-shell";
-import { SECTIONS, type SectionKey, TYPE, type SourceRow, ago, api, bj, secZh, sectionOf } from "./common";
+import { type SectionKey, TYPE, type SourceRow, ago, api, bj, customSections, secZh, sourceSection } from "./common";
 import { SourceAvatar } from "./source-avatar";
 
 type StatusKey = "active" | "err" | "off" | "paused" | "all";
@@ -56,13 +59,20 @@ function StatusBadge({ s }: { s: SourceRow }) {
 
 
 export default function Sources() {
-  const { sources: rows, reloadSources, addOpen, setAddOpen } = useApp();
+  const { sources: rows, reloadSources, addOpen, setAddOpen, sections } = useApp();
+  const [editSrc, setEditSrc] = useState<SourceRow | null>(null); const [editUsed, setEditUsed] = useState(false);
+  useEffect(() => { if (editSrc) setEditUsed(true); }, [editSrc]);
+  const [secOpen, setSecOpen] = useState(false); const [secUsed, setSecUsed] = useState(false);
+  useEffect(() => { if (secOpen) setSecUsed(true); }, [secOpen]);
+  // sidebar "管理分区" links here with ?sections=1
+  const sp = useSearchParams(); const router = useRouter();
+  useEffect(() => { if (sp.get("sections") === "1") { setSecOpen(true); router.replace("/sources", { scroll: false }); } }, [sp, router]);
   const [q, setQ] = useState(""); const [ft, setFt] = useState("all"); const [fsec, setFsec] = useState("all"); const [fs, setFs] = useState<StatusKey>("active");
   const [busy, setBusy] = useState<Record<number, boolean>>({});
   useEffect(() => { const t = setInterval(() => { if (!document.hidden) reloadSources(); }, 15000); return () => clearInterval(t); }, [reloadSources]);
 
   const view = useMemo(() => rows.filter((s) =>
-    (!q || (s.name + s.url).toLowerCase().includes(q.toLowerCase())) && (ft === "all" || s.type === ft) && (fsec === "all" || sectionOf({ ...s, is_x: s.type.startsWith("x") }) === fsec) &&
+    (!q || (s.name + s.url).toLowerCase().includes(q.toLowerCase())) && (ft === "all" || s.type === ft) && (fsec === "all" || sourceSection(s) === fsec) &&
     statusOk(s, fs)), [rows, q, ft, fs, fsec]);
   const fsCount = useMemo(() => Object.fromEntries(STATUS.map((x) => [x.v, rows.filter((s) => statusOk(s, x.v)).length])) as Record<StatusKey, number>, [rows]);
   const nAct = rows.filter((s) => s.enabled && s.supported).length;
@@ -106,11 +116,12 @@ export default function Sources() {
   const [scope, setScope] = useState<"all" | "enabled" | "view" | "sel">("all");
   const doExport = (fmt: "json" | "opml") => {
     const base = scope === "enabled" ? rows.filter((r) => r.enabled) : scope === "view" ? view : scope === "sel" ? rows.filter((r) => sel.has(r.id)) : rows;
-    const list: ExportSource[] = base.filter((r) => r.type !== "html").map((r) => ({ ...r, section: sectionOf(r) }));
+    const list: ExportSource[] = base.filter((r) => r.type !== "html").map((r) => ({ ...r, section: sourceSection(r) }));
+    const custom = customSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false }));
     if (!list.length) { toast.error("没有可导出的来源"); return; }
     const d = new Date();
-    if (fmt === "json") download(exportFileName("json", d), buildJson(list, d), "application/json");
-    else download(exportFileName("opml", d), buildOpml(list, d), "text/x-opml");
+    if (fmt === "json") download(exportFileName("json", d), buildJson(list, d, custom), "application/json");
+    else download(exportFileName("opml", d), buildOpml(list, d, custom), "text/x-opml");
     const nx = list.filter((r) => r.type.startsWith("x")).length;
     toast.success(`已导出 ${list.length} 个来源`, { description: fmt === "opml" && nx ? `${nx} 个 X 来源以自定义 type="x" 写入，其他阅读器会忽略它们` : undefined });
   };
@@ -125,6 +136,7 @@ export default function Sources() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {deleted.length > 0 && <Button variant="outline" onClick={() => setRestoreOpen(true)}><RotateCcw />已删除的内置源 · {deleted.length}</Button>}
+          <Button variant="outline" onClick={() => setSecOpen(true)}><FolderCog />分区</Button>
           <ButtonGroup aria-label="导入导出">
             <Button variant="outline" onClick={() => setImpOpen(true)}><FileUp />导入</Button>
             <DropdownMenu>
@@ -180,7 +192,7 @@ export default function Sources() {
         </ButtonGroup>
         <Select value={fsec} onValueChange={(v) => setFsec(v as string)}>
           <SelectTrigger className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部分区" : secZh(v as SectionKey))}</SelectValue></SelectTrigger>
-          <SelectContent><SelectItem value="all">全部分区</SelectItem>{SECTIONS.map((x) => <SelectItem key={x.key} value={x.key}>{x.zh}</SelectItem>)}</SelectContent>
+          <SelectContent><SelectItem value="all">全部分区</SelectItem>{sections.map((x) => <SelectItem key={x.key} value={x.key}>{x.icon ? `${x.icon} ` : ""}{x.zh}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={ft} onValueChange={(v) => setFt(v as string)}>
           <SelectTrigger className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部类型" : TYPE[v])}</SelectValue></SelectTrigger>
@@ -221,12 +233,15 @@ export default function Sources() {
                         <span className="truncate font-medium">{s.name}</span>
                         {s.priority && <Badge size="sm" variant={s.priority === "P0" ? "brand" : "outline"} className={cn("font-mono font-medium", s.priority !== "P0" && "text-faint")}>{s.priority}</Badge>}
                         {s.origin === "user" && <Badge size="sm" variant="secondary">手动</Badge>}
+                        {(s.f_include || s.f_exclude) && (
+                          <Tooltip><TooltipTrigger render={<Badge size="sm" variant="muted" className="cursor-default" aria-label="有过滤规则" />}><Filter />过滤{s.hidden_count ? ` ${s.hidden_count}` : ""}</TooltipTrigger>
+                            <TooltipContent className="max-w-sm font-mono">{[s.f_include && `包含 /${s.f_include}/`, s.f_exclude && `排除 /${s.f_exclude}/`].filter(Boolean).join(" · ")}{s.f_scope === "all" ? "（标题+摘要）" : "（标题）"}{s.hidden_count ? ` · 已隐藏 ${s.hidden_count} 条` : ""}</TooltipContent></Tooltip>)}
                       </div>
                       <div className="truncate type-caption text-faint">{TYPE[s.type] ?? s.type} · {s.url.replace(/^https?:\/\//, "")}</div>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="hidden type-body text-muted-foreground md:table-cell">{secZh(sectionOf({ ...s, is_x: s.type.startsWith("x") }))}</TableCell>
+                <TableCell className="hidden type-body text-muted-foreground md:table-cell">{secZh(sourceSection(s))}</TableCell>
                 <TableCell className="hidden sm:table-cell">
                   {s.supported ? (
                     <Select value={String(s.poll_interval)} onValueChange={(v) => patch(s, { poll_interval: Number(v) }, `${s.name} 改为每 ${ivLabel(Number(v))}`)}>
@@ -243,6 +258,7 @@ export default function Sources() {
                       {busy[s.id] ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem onClick={() => setEditSrc(s)}><Pencil />编辑分区与过滤…</DropdownMenuItem>
                       <DropdownMenuItem disabled={!s.supported} onClick={() => fetchNow(s)}><RefreshCw />立即抓取</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => window.open(s.homepage || s.url, "_blank")}><ExternalLink />打开主页</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(s.url); toast.success("已复制链接"); }}><Link2 />复制 URL</DropdownMenuItem>
@@ -262,6 +278,8 @@ export default function Sources() {
       {addUsed && <AddDialog open={addOpen} onOpenChange={setAddOpen} onAdded={reloadSources} />}
       {delUsed && <DeleteConfirm toDel={toDel} onCancel={() => setToDel(null)} onConfirm={confirmDelete} />}
       {restoreUsed && <RestoreDialog open={restoreOpen} onOpenChange={setRestoreOpen} deleted={deleted} restore={restore} />}
+      {editUsed && <EditSourceDialog src={editSrc} onClose={() => setEditSrc(null)} onSaved={reloadSources} />}
+      {secUsed && <SectionsDialog open={secOpen} onOpenChange={setSecOpen} sources={rows} onChanged={reloadSources} />}
       {impOpen && <ImportDialog open={impOpen} onOpenChange={setImpOpen} onDone={reloadSources} />}
     </div>
   );
