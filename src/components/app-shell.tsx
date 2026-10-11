@@ -152,15 +152,15 @@ function useClosedFolders() {
 }
 function SourceFolder({ s, icon: Icon, list, open, onToggle, children }: { s: Section; icon: React.ElementType; list: SourceRow[]; open: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
-    <Collapsible open={open} onOpenChange={onToggle} className="pt-1">
-      <CollapsibleTrigger aria-label={`文件夹：${s.zh}`} className="group flex h-7 w-full items-center gap-1.5 rounded-md px-2 type-meta text-faint outline-none transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+    <Collapsible open={open} onOpenChange={onToggle}>
+      <CollapsibleTrigger aria-label={`文件夹：${s.zh}`} className="group flex h-7 w-full items-center gap-1.5 rounded-md px-2 type-caption text-muted-foreground outline-none transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
         <ChevronRight className="size-3.5 shrink-0 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90" />
         <Icon className="size-3.5 shrink-0 opacity-80" />
         <span className="min-w-0 flex-1 truncate text-left">{s.zh}</span>
         <span className="font-mono tabular-nums" title={`${list.length} 个来源`}>{list.length}</span>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div role="group" aria-label={`${s.zh} 的订阅源`} className="relative ml-[13px] space-y-px border-l border-border pl-1.5">{children}</div>
+        <div role="group" aria-label={`${s.zh} 的订阅源`} className="relative ml-[13px] space-y-px border-l border-border pb-0.5 pl-1.5">{children}</div>
       </CollapsibleContent>
     </Collapsible>
   );
@@ -171,40 +171,46 @@ function SectionLabel({ children, first }: { children: React.ReactNode; first?: 
 }
 
 const DOCS_KEY = "sidebar.docs.open";
-function DocsGroup({ path, onGo }: { path: string; onGo: (href: string) => void }) {
-  const inDocs = path.startsWith("/docs");
-  const [open, setOpen] = useState(true);
-  useEffect(() => { const v = localStorage.getItem(DOCS_KEY); if (v != null) setOpen(v === "1"); }, []);
-  const toggle = (b: boolean) => { setOpen(b); localStorage.setItem(DOCS_KEY, b ? "1" : "0"); };
+const SOURCES_KEY = "sidebar.sources.open";
+/** Collapsible sidebar group (文档, 数据源): header row + chevron; open state persisted in localStorage `storageKey`.
+ *  `onHeader` (optional) makes the label navigate (文档 → /docs); without it the whole header toggles. */
+function NavGroup({ icon: Icon, label, count, storageKey, defaultOpen = true, current, inside, onHeader, children }: {
+  icon: React.ElementType; label: string; count?: number; storageKey: string; defaultOpen?: boolean; current?: boolean; inside?: boolean; onHeader?: () => void; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => { const v = localStorage.getItem(storageKey); if (v != null) setOpen(v === "1"); }, [storageKey]);
+  const toggle = (b: boolean) => { setOpen(b); localStorage.setItem(storageKey, b ? "1" : "0"); };
   return (
     <Collapsible open={open} onOpenChange={toggle}>
       <div className={cn("group relative flex h-8 w-full items-center rounded-lg type-body font-medium tracking-[-0.005em] transition-colors duration-150 ease-out",
-        path === "/docs" ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : inDocs ? "text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
-        {path === "/docs" && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
-        <button onClick={() => { onGo("/docs"); if (!open) toggle(true); }} className="flex h-full flex-1 items-center gap-2.5 rounded-lg pl-2.5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-          <BookOpen className={cn("size-4 transition-colors duration-150 ease-out", inDocs ? "text-brand" : "text-faint group-hover:text-foreground")} />
-          <span className="flex-1 text-left">文档</span>
+        current ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : inside ? "text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
+        {current && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
+        <button onClick={() => { if (onHeader) { onHeader(); if (!open) toggle(true); } else toggle(!open); }} aria-expanded={onHeader ? undefined : open}
+          className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-lg pl-2.5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          <Icon className={cn("size-4 transition-colors duration-150 ease-out", inside ? "text-brand" : "text-faint group-hover:text-foreground")} />
+          <span className="flex-1 truncate text-left">{label}</span>
+          {count != null && <span className="font-mono type-meta tabular-nums text-faint">{count}</span>}
         </button>
-        <CollapsibleTrigger aria-label={open ? "收起文档" : "展开文档"} className="mr-1 grid size-6 place-items-center rounded-md text-faint outline-none transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+        <CollapsibleTrigger aria-label={open ? `收起${label}` : `展开${label}`} className="mr-1 grid size-6 place-items-center rounded-md text-faint outline-none transition-colors duration-150 ease-out hover:bg-hover hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
           <ChevronRight className={cn("size-3.5 transition-transform duration-200 ease-out", open && "rotate-90")} />
         </CollapsibleTrigger>
       </div>
       <CollapsibleContent>
-        <div className="relative ml-[17px] mt-px space-y-px border-l border-border py-0.5 pl-2">
-          {DOCS.map((d) => {
-            const on = path === docHref(d);
-            return (
-              <button key={d.slug} onClick={() => onGo(docHref(d))}
-                className={cn("relative flex h-7 w-full items-center gap-2 rounded-md px-2 type-caption transition-colors duration-150 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                  on ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
-                {on && <span className="absolute -left-[9.5px] top-1/2 h-3.5 w-px -translate-y-1/2 bg-brand" />}
-                <span className="truncate">{d.title}</span>
-              </button>
-            );
-          })}
-        </div>
+        <div className="relative ml-[17px] mt-px space-y-px border-l border-border py-0.5 pl-2">{children}</div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+/** child row inside a NavGroup (doc pages, 管理数据源) */
+function GroupLink({ on, icon: Icon, children, onClick }: { on: boolean; icon?: React.ElementType; children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className={cn("relative flex h-7 w-full items-center gap-2 rounded-md px-2 type-caption transition-colors duration-150 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        on ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}>
+      {on && <span className="absolute -left-[9.5px] top-1/2 h-3.5 w-px -translate-y-1/2 bg-brand" />}
+      {Icon && <Icon className="size-3.5 shrink-0 text-faint" />}
+      <span className="truncate">{children}</span>
+    </button>
   );
 }
 
@@ -243,24 +249,21 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
           {outside.length > 0 && <div className="mx-2 my-2 h-px bg-border" role="separator" title="不计入「全部」" />}
           {outside.map(sec)}
           <SectionLabel>管理</SectionLabel>
-          <NavItem active={path === "/sources"} icon={Database} label="数据源" count={active.length} onClick={() => { router.push("/sources"); onNavigate?.(); }} />
-          <DocsGroup path={path} onGo={(h) => { router.push(h); onNavigate?.(); }} />
-          <Collapsible defaultOpen className="pt-4">
-            <CollapsibleTrigger className="group flex h-6 w-full items-center gap-1 px-2 type-meta font-medium tracking-[0.04em] text-faint transition-colors duration-150 ease-out hover:text-foreground">
-              <ChevronRight className="size-3.5 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90" />订阅源<span className="ml-auto font-mono tabular-nums">{active.length}</span>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-px">
-              {sections.map((sec) => {
-                const list = listOf(sec.key);
-                if (!list.length) return null;
-                return (
-                  <SourceFolder key={sec.key} s={sec} icon={secIcon(sec)} list={list} open={!closed.has(sec.key)} onToggle={() => toggleFolder(sec.key)}>
-                    {list.map((s) => <SourceRowNav key={s.id} s={s} active={f.source === s.id && feed} onGo={() => go({ source: s.id })} />)}
-                  </SourceFolder>
-                );
-              })}
-            </CollapsibleContent>
-          </Collapsible>
+          <NavGroup icon={Database} label="数据源" count={active.length} storageKey={SOURCES_KEY} defaultOpen={false} inside={path === "/sources"}>
+            <GroupLink on={path === "/sources"} icon={Settings2} onClick={() => { router.push("/sources"); onNavigate?.(); }}>管理数据源</GroupLink>
+            {sections.map((sec) => {
+              const list = listOf(sec.key);
+              if (!list.length) return null;
+              return (
+                <SourceFolder key={sec.key} s={sec} icon={secIcon(sec)} list={list} open={!closed.has(sec.key)} onToggle={() => toggleFolder(sec.key)}>
+                  {list.map((s) => <SourceRowNav key={s.id} s={s} active={f.source === s.id && feed} onGo={() => go({ source: s.id })} />)}
+                </SourceFolder>
+              );
+            })}
+          </NavGroup>
+          <NavGroup icon={BookOpen} label="文档" storageKey={DOCS_KEY} current={path === "/docs"} inside={path.startsWith("/docs")} onHeader={() => { router.push("/docs"); onNavigate?.(); }}>
+            {DOCS.map((d) => <GroupLink key={d.slug} on={path === docHref(d)} onClick={() => { router.push(docHref(d)); onNavigate?.(); }}>{d.title}</GroupLink>)}
+          </NavGroup>
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border p-3 type-meta text-faint">

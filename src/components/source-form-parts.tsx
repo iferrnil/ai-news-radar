@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { allSections } from "./common";
-import { SectionIcon, SectionName } from "./section-icon";
+import { SectionIcon } from "./section-icon";
 
 export const NEW_SECTION = "__new";
 export type NewSection = { name: string; icon: string; inAll: boolean };
@@ -41,10 +41,10 @@ export function SectionSelect({ value, onChange, allowNew = true, exclude, class
   return (
     <Select value={value} onValueChange={(v) => onChange(v as string)}>
       <SelectTrigger className={cn("w-full", className)} aria-label="分区">
-        <SelectValue>{(v: string) => (v === NEW_SECTION ? "＋ 新建分区…" : (() => { const s = opts.find((o) => o.key === v); return s ? <SectionName s={s} /> : "选择分区"; })())}</SelectValue>
+        <SelectValue>{(v: string) => (v === NEW_SECTION ? "＋ 新建分区…" : (() => { const s = opts.find((o) => o.key === v); return s ? s.zh : "选择分区"; })())}</SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {opts.map((s) => <SelectItem key={s.key} value={s.key}><SectionName s={s} /></SelectItem>)}
+        {opts.map((s) => <SelectItem key={s.key} value={s.key}>{s.zh}</SelectItem>)}
         {allowNew && <><SelectSeparator /><SelectItem value={NEW_SECTION}>＋ 新建分区…</SelectItem></>}
       </SelectContent>
     </Select>

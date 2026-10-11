@@ -56,8 +56,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
 import { useApp } from "./app-shell";
-import { SectionName } from "./section-icon";
-import { type SectionKey, TYPE, type SourceRow, ago, api, bj, allSections, sourceSection } from "./common";
+import { type SectionKey, TYPE, type SourceRow, ago, api, bj, allSections, sourceSection, secZh } from "./common";
 import { SourceAvatar } from "./source-avatar";
 
 type StatusKey = "active" | "err" | "off" | "paused" | "all";
@@ -217,8 +216,8 @@ export default function Sources() {
           ))}
         </ButtonGroup>
         <Select value={fsec} onValueChange={(v) => setFsec(v as string)}>
-          <SelectTrigger className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部分区" : <SectionName k={v as SectionKey} />)}</SelectValue></SelectTrigger>
-          <SelectContent><SelectItem value="all">全部分区</SelectItem>{sections.map((x) => <SelectItem key={x.key} value={x.key}><SectionName s={x} /></SelectItem>)}</SelectContent>
+          <SelectTrigger className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部分区" : secZh(v as SectionKey))}</SelectValue></SelectTrigger>
+          <SelectContent><SelectItem value="all">全部分区</SelectItem>{sections.map((x) => <SelectItem key={x.key} value={x.key}>{x.zh}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={ft} onValueChange={(v) => setFt(v as string)}>
           <SelectTrigger className="w-[120px]"><SelectValue>{(v: string) => (v === "all" ? "全部类型" : TYPE[v])}</SelectValue></SelectTrigger>
@@ -267,7 +266,7 @@ export default function Sources() {
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="hidden type-body text-muted-foreground md:table-cell"><SectionName k={sourceSection(s)} /></TableCell>
+                <TableCell className="hidden type-body text-muted-foreground md:table-cell">{secZh(sourceSection(s))}</TableCell>
                 <TableCell className="hidden sm:table-cell">
                   {s.supported ? (
                     <Select value={String(s.poll_interval)} onValueChange={(v) => patch(s, { poll_interval: Number(v) }, `${s.name} 改为每 ${ivLabel(Number(v))}`)}>

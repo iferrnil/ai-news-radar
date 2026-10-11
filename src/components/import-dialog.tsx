@@ -16,7 +16,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { MAX_BYTES, SECTION_ZH, parseImport, type Entry, type ImportMode, type ImportPlan, type ParsedRow, type RowStatus } from "@/lib/portable";
 import { allSections, api, secZh } from "./common";
-import { SectionName } from "./section-icon";
 
 const MODES: { v: ImportMode; label: string; hint: string }[] = [
   { v: "merge", label: "合并", hint: "只添加新来源，已存在的保持不变（推荐）" },
@@ -130,8 +129,8 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
                   <Label className="type-caption text-muted-foreground">OPML 默认分区</Label>
                   <Select value={osec} onValueChange={(v) => { setOsec(v as Entry["section"]); preview(file, mode, v as Entry["section"]); }}>
-                    <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => <SectionName k={v} />}</SelectValue></SelectTrigger>
-                    <SelectContent>{allSections().map((x) => <SelectItem key={x.key} value={x.key}><SectionName s={x} /></SelectItem>)}</SelectContent>
+                    <SelectTrigger size="sm" className="w-[120px]"><SelectValue>{(v: string) => secZh(v)}</SelectValue></SelectTrigger>
+                    <SelectContent>{allSections().map((x) => <SelectItem key={x.key} value={x.key}>{x.zh}</SelectItem>)}</SelectContent>
                   </Select>
                   <span className="type-meta text-faint">条目的 category 或文件夹名与分区同名时按其归类</span>
                 </div>
