@@ -1,0 +1,7 @@
+/build/
+/.cache/
+/resources/server/
+/resources/darwin/
+/resources/darwin-*/
+/resources/linux-*/
+/resources/windows-*/

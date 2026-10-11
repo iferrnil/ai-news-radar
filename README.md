@@ -166,3 +166,7 @@ NPM_REGISTRY=https://registry.npmmirror.com APT_MIRROR=mirrors.tuna.tsinghua.edu
 ```
 
 - 基础镜像 `node:22-bookworm-slim` 来自 Docker Hub；若拉不下来，请在 Docker/OrbStack 设置里配置 registry mirror。
+
+## macOS 桌面版
+
+`desktop/` 是基于 [MyGo](https://github.com/egoist/mygo) 的 macOS 客户端：原生窗口 + 菜单栏图标，内置 Node 22 运行同一套 Next.js 服务（仅监听 127.0.0.1），数据存放在 `~/Library/Application Support/AI News Radar/`。构建、首次打开（Gatekeeper）和 GitHub Actions 打包说明见 [desktop/README.md](desktop/README.md)。

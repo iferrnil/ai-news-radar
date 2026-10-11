@@ -1,0 +1,174 @@
+// AI News Radar desktop shell (MyGo): runs the bundled Next.js standalone server on
+// 127.0.0.1 and shows it in a native window with a tray/menu.
+package main
+
+import (
+	"context"
+	_ "embed"
+	"fmt"
+	"io"
+	"log"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	"github.com/egoist/mygo"
+)
+
+//go:embed resources/tray.png
+var trayIcon []byte
+
+const appName = "AI News Radar"
+
+func main() {
+	if !mygo.App.RequestSingleInstanceLock() {
+		return // the running instance gets OnSecondInstance and comes to the front
+	}
+	var (
+		srv  *Server
+		win  *mygo.Window
+		data string
+	)
+	show := func() {
+		if win != nil {
+			win.Show()
+			win.Focus()
+		}
+	}
+	mygo.App.OnSecondInstance(func([]string, string) { show() })
+	mygo.App.OnActivate(func(bool) { show() })
+
+	mygo.App.WhenReady(func() {
+		var err error
+		data, err = mygo.App.Path(mygo.PathUserData)
+		if err != nil {
+			fatal("data dir", err)
+			return
+		}
+		res, err := mygo.App.Path(mygo.PathResources)
+		if err != nil {
+			fatal("resources", err)
+			return
+		}
+		_ = os.MkdirAll(data, 0o755)
+		logf, _ := os.OpenFile(filepath.Join(data, "server.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+		var lw io.Writer = io.Discard
+		if logf != nil {
+			lw = logf
+		}
+		node, app := bundleLayout(res)
+
+		win = mygo.NewWindow(mygo.WindowOptions{Title: appName, Width: 1280, Height: 840, MinWidth: 380, MinHeight: 520, BackgroundColor: "light-dark(#ffffff, #0b0b0f)"})
+		win.Page().LoadHTML(splashHTML, "")
+		// closing the window hides it (the app keeps running in the tray); 退出 quits
+		win.OnClose(func(e *mygo.CloseEvent) {
+			if !quitting.Load() {
+				e.PreventDefault()
+				win.Hide()
+			}
+		})
+
+		srv, err = StartServer(ServerConfig{Node: node, AppDir: app, DataDir: data, Log: lw})
+		if err != nil {
+			fatal("启动内置服务失败", err)
+			return
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			if err := srv.WaitHealthy(ctx); err != nil {
+				fatal("内置服务未就绪（详见数据目录 server.log）", err)
+				return
+			}
+			win.Page().LoadURL(srv.URL + "/")
+		}()
+		go func() { // the server died on its own: tell the user instead of a blank window
+			<-srv.Done()
+			if !quitting.Load() {
+				win.Page().LoadHTML(errorHTML("内置服务已退出，请重启应用。日志：server.log"), "")
+			}
+		}()
+
+		// links: our own origin stays in the window, everything else goes to the default browser
+		own := func(u string) bool { return srv != nil && strings.HasPrefix(u, srv.URL) }
+		win.Page().SetWindowOpenHandler(func(req mygo.WindowOpenRequest) *mygo.WindowOptions {
+			go mygo.Shell.OpenExternal(req.URL)
+			return nil
+		})
+		win.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
+			if own(e.URL) || strings.HasPrefix(e.URL, "about:") {
+				return
+			}
+			if p, err := url.Parse(e.URL); err == nil && (p.Scheme == "http" || p.Scheme == "https" || p.Scheme == "mailto") {
+				e.PreventDefault()
+				go mygo.Shell.OpenExternal(e.URL)
+			}
+		})
+
+		items := func() []*mygo.MenuItem {
+			return []*mygo.MenuItem{
+				{Label: "显示 / 隐藏", Accelerator: "CmdOrCtrl+Shift+R", Click: func(*mygo.MenuItem, *mygo.Window) {
+					if win.IsVisible() {
+						win.Hide()
+					} else {
+						show()
+					}
+				}},
+				{Label: "刷新", Accelerator: "CmdOrCtrl+R", Click: func(*mygo.MenuItem, *mygo.Window) { show(); win.Page().Reload() }},
+				{Label: "打开数据目录", Click: func(*mygo.MenuItem, *mygo.Window) { go mygo.Shell.OpenPath(data) }},
+				mygo.Separator(),
+				{Label: "退出 " + appName, Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { quit() }},
+			}
+		}
+		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+			{Label: appName, Submenu: append([]*mygo.MenuItem{{Role: mygo.RoleAbout}, mygo.Separator()}, items()...)},
+			{Label: "编辑", Submenu: []*mygo.MenuItem{{Role: mygo.RoleUndo}, {Role: mygo.RoleRedo}, mygo.Separator(), {Role: mygo.RoleCut}, {Role: mygo.RoleCopy}, {Role: mygo.RolePaste}, {Role: mygo.RoleSelectAll}}},
+			{Label: "视图", Submenu: []*mygo.MenuItem{{Role: mygo.RoleResetZoom}, {Role: mygo.RoleZoomIn}, {Role: mygo.RoleZoomOut}, mygo.Separator(), {Role: mygo.RoleToggleFullScreen}}},
+			{Role: mygo.RoleWindow},
+		}))
+		if _, err := mygo.NewTray(mygo.TrayOptions{Icon: trayIcon, IconIsTemplate: true, ToolTip: appName, Menu: mygo.NewMenu(items())}); err != nil {
+			log.Println("tray:", err) // e.g. Linux without AppIndicator; the app menu still works
+		}
+	})
+
+	// graceful shutdown: stop node (SIGTERM -> it closes SQLite) before the process exits
+	// any quit (menu, Cmd+Q, Dock, SIGTERM) must let the window really close instead of hiding
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { quitting.Store(true) })
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { quitting.Store(true); stopServer(srv) })
+	mygo.App.OnQuit(func() { stopServer(srv) })
+	if err := mygo.App.Run(); err != nil {
+		stopServer(srv)
+		log.Fatal(err)
+	}
+	stopServer(srv)
+}
+
+var quitting atomic.Bool
+
+func quit() { quitting.Store(true); mygo.App.Quit() }
+
+func stopServer(s *Server) {
+	if s != nil {
+		t := time.Now()
+		err := s.Stop()
+		log.Printf("server stopped in %v (err=%v)", time.Since(t).Round(time.Millisecond), err)
+	}
+}
+
+func fatal(what string, err error) {
+	log.Printf("%s: %v", what, err)
+	for _, w := range mygo.Windows() {
+		w.Page().LoadHTML(errorHTML(fmt.Sprintf("%s：%v", what, err)), "")
+	}
+}
+
+const page = `<!doctype html><meta charset="utf-8"><style>html{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:15px -apple-system,"PingFang SC",sans-serif;background:light-dark(#fff,#0b0b0f);color:light-dark(#333,#ccc)}.b{display:flex;flex-direction:column;align-items:center;gap:14px}.l{width:56px;height:56px;border-radius:14px;background:linear-gradient(#8b5cf6,#4f46e5)}</style><div class="b"><div class="l"></div><div>%s</div></div>`
+
+var splashHTML = fmt.Sprintf(page, "AI News Radar 正在启动…")
+
+func errorHTML(msg string) string {
+	return fmt.Sprintf(page, strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(msg))
+}

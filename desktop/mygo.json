@@ -1,0 +1,17 @@
+{
+  "name": "AI News Radar",
+  "identifier": "com.iferrnil.ainewsradar",
+  "version": "0.1.0",
+  "copyright": "© 2026 iferrnil",
+  "icon": "resources/icon.png",
+  "out": "build",
+  "macos": {
+    "minimumSystemVersion": "12.0",
+    "helperEntitlements": {
+      "node/bin/node": "entitlements-node.plist"
+    },
+    "infoPlist": {
+      "LSApplicationCategoryType": "public.app-category.news"
+    }
+  }
+}

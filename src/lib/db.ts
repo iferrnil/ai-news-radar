@@ -89,6 +89,8 @@ export function getDb(): Database.Database {
   if (!g.__newsDb) {
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     const db = new Database(DB_PATH);
+    // close cleanly (WAL checkpoint) when the process exits, e.g. SIGTERM from the desktop shell or docker stop
+    process.once("exit", () => { try { db.close(); } catch {} });
     // auto_vacuum must be set before WAL / on an empty DB; convert existing DBs once with VACUUM
     if ((db.pragma("auto_vacuum", { simple: true }) as number) !== 2) { db.pragma("auto_vacuum = INCREMENTAL"); db.exec("VACUUM"); }
     db.pragma("journal_mode = WAL");

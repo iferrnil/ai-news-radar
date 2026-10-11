@@ -1,0 +1,66 @@
+# Builds the macOS desktop app (desktop/, MyGo + bundled Node) and uploads the .dmg.
+# Without signing secrets the app is signed ad hoc (Gatekeeper asks on first open).
+# With MACOS_CERTIFICATE, MACOS_CERTIFICATE_PASSWORD, MACOS_SIGNING_IDENTITY, APPLE_ID, APPLE_TEAM_ID,
+# APPLE_APP_PASSWORD it is signed with the Developer ID and notarized.
+name: desktop-macos
+on:
+  workflow_dispatch:
+  push:
+    tags: ["desktop-v*"]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
+      - run: npm ci --no-audit --no-fund
+      - name: Import the certificate and the notary credentials
+        id: sign
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE" ] || [ -z "$MACOS_SIGNING_IDENTITY" ]; then echo "no signing secrets: ad-hoc build"; exit 0; fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"; password="$(openssl rand -base64 24)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain
+          macos=$(jq -n --arg id "$MACOS_SIGNING_IDENTITY" '{signingIdentity: $id}')
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_PASSWORD" ]; then
+            xcrun notarytool store-credentials notary --keychain "$keychain" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+            macos=$(echo "$macos" | jq --arg k "$keychain" '. + {notarize: {keychainProfile: "notary", keychain: $k}}')
+          fi
+          jq --argjson m "$macos" '.macos += $m' desktop/mygo.json > "$RUNNER_TEMP/mygo.json" && mv "$RUNNER_TEMP/mygo.json" desktop/mygo.json
+          echo "signed=1" >> "$GITHUB_OUTPUT"
+      - name: Build (Next standalone + Node + MyGo, darwin/universal)
+        run: desktop/scripts/package.sh darwin/universal
+      - name: Verify
+        run: |
+          app="desktop/build/darwin-universal/AI News Radar.app"
+          lipo -info "$app/Contents/MacOS/AI News Radar" "$app/Contents/Resources/node/bin/node"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          ls -la desktop/build/darwin-universal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-News-Radar-macOS
+          path: desktop/build/darwin-universal/*.dmg
+          if-no-files-found: error
