@@ -250,7 +250,6 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
           {outside.map(sec)}
           <SectionLabel>管理</SectionLabel>
           <NavGroup icon={Database} label="数据源" count={active.length} storageKey={SOURCES_KEY} defaultOpen={false} inside={path === "/sources"}>
-            <GroupLink on={path === "/sources"} icon={Settings2} onClick={() => { router.push("/sources"); onNavigate?.(); }}>管理数据源</GroupLink>
             {sections.map((sec) => {
               const list = listOf(sec.key);
               if (!list.length) return null;
