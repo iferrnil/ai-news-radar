@@ -121,10 +121,10 @@ export function StatusDot({ s }: { s: Pick<SourceRow, "enabled" | "supported" | 
   return <span className={cn("inline-block size-1.5 shrink-0 rounded-full", c)} />;
 }
 
-function NavItem({ active, icon: Icon, label, count, onClick }: { active: boolean; icon: React.ElementType; label: string; count?: number; onClick: () => void }) {
+function NavItem({ active, icon: Icon, label, count, onClick, className }: { active: boolean; icon: React.ElementType; label: string; count?: number; onClick: () => void; className?: string }) {
   return (
     <button onClick={onClick} className={cn("group relative flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 type-body font-medium tracking-[-0.005em] transition-colors duration-150 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-      active ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : "text-muted-foreground hover:bg-hover hover:text-foreground", !active && count === 0 && "opacity-60")}>
+      active ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : "text-muted-foreground hover:bg-hover hover:text-foreground", !active && count === 0 && "opacity-60", className)}>
       {active && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
       <Icon className={cn("size-4 transition-colors duration-150 ease-out", active ? "text-brand" : "text-faint group-hover:text-foreground")} />
       <span className="min-w-0 flex-1 truncate text-left">{label}</span>
@@ -133,19 +133,48 @@ function NavItem({ active, icon: Icon, label, count, onClick }: { active: boolea
   );
 }
 
-/** Sidebar section row; user-created sections get a hover/focus "管理分区" button (rename / delete live on /sources). */
-function SecNav({ s, active, count, onClick, onManage }: { s: Section; active: boolean; count: number; onClick: () => void; onManage: () => void }) {
-  const item = <NavItem active={active} icon={secIcon(s)} label={s.zh} count={count} onClick={onClick} />;
-  if (!s.custom) return item;
+/** Sidebar section row = filter button + (when it has sources) a chevron that expands its subscriptions as a tree.
+ *  User-created sections also get a hover/focus ⚙ that opens 管理分区 (rename / icon / delete) on /sources. */
+function SecNav({ s, active, count, onClick, onManage, list, open, onToggle, renderSource }: {
+  s: Section; active: boolean; count: number; onClick: () => void; onManage: () => void;
+  list: SourceRow[]; open: boolean; onToggle: () => void; renderSource: (src: SourceRow) => React.ReactNode;
+}) {
   return (
-    <div className="group/sec relative">
-      {item}
-      <Button variant="ghost" size="icon-xs" aria-label={`管理分区「${s.zh}」`} onClick={onManage}
-        className="absolute right-9 top-1 z-10 bg-sidebar text-faint opacity-0 transition-opacity duration-150 group-hover/sec:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100">
-        <Settings2 />
-      </Button>
+    <div>
+      <div className="group/sec relative">
+        <NavItem active={active} icon={secIcon(s)} label={s.zh} count={count} onClick={onClick} className="pr-8" />
+        {s.custom && (
+          <Button variant="ghost" size="icon-xs" aria-label={`管理分区「${s.zh}」`} onClick={onManage}
+            className="absolute right-8 top-1 z-10 bg-sidebar text-faint opacity-0 transition-opacity duration-150 group-hover/sec:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100">
+            <Settings2 />
+          </Button>
+        )}
+        {list.length > 0 && (
+          <Button variant="ghost" size="icon-xs" aria-label={`${open ? "收起" : "展开"}「${s.zh}」的订阅源`} aria-expanded={open} onClick={onToggle}
+            className="absolute right-1 top-1 z-10 text-faint hover:text-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground">
+            <ChevronRight className={cn("transition-transform duration-200 ease-out", open && "rotate-90")} />
+          </Button>
+        )}
+      </div>
+      {open && list.length > 0 && (
+        <div role="group" aria-label={`${s.zh} 的订阅源`} className="relative mb-1 ml-[17px] mt-px space-y-px border-l border-border pl-1.5 animate-in fade-in-0 slide-in-from-top-1 duration-150">
+          {list.map(renderSource)}
+        </div>
+      )}
     </div>
   );
+}
+
+const TREE_KEY = "sidebar.tree.open";
+function useTreeOpen() {
+  const [open, setOpen] = useState<Set<string>>(new Set()); // collapsed by default
+  useEffect(() => { try { setOpen(new Set(JSON.parse(localStorage.getItem(TREE_KEY) || "[]"))); } catch {} }, []);
+  const toggle = useCallback((k: string) => setOpen((cur) => {
+    const n = new Set(cur); if (n.has(k)) n.delete(k); else n.add(k);
+    try { localStorage.setItem(TREE_KEY, JSON.stringify([...n])); } catch {}
+    return n;
+  }), []);
+  return [open, toggle] as const;
 }
 
 function SectionLabel({ children, first }: { children: React.ReactNode; first?: boolean }) {
@@ -201,6 +230,11 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const on = (section: Filters["section"]) => feed && f.source == null && f.section === section;
   const errs = active.filter((s) => s.last_error).length;
   const manage = () => { router.push("/sources?sections=1"); onNavigate?.(); };
+  const [tree, toggleTree] = useTreeOpen();
+  const listOf = (k: string) => active.filter((s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }) === k);
+  const sec = (s: Section) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} onClick={() => go({ section: s.key })} onManage={manage}
+    list={listOf(s.key)} open={tree.has(s.key)} onToggle={() => toggleTree(s.key)}
+    renderSource={(src) => <SourceRowNav key={src.id} s={src} active={f.source === src.id && feed} onGo={() => go({ source: src.id })} />} />;
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2.5 px-4">
@@ -216,32 +250,13 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         <div className="space-y-0.5 px-2.5 pb-3">
           <SectionLabel first>信息流</SectionLabel>
           <NavItem active={on("")} icon={Inbox} label="全部" count={count("")} onClick={() => go({})} />
-          {sections.filter((s) => inAll(s.key)).map((s) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} onClick={() => go({ section: s.key })} onManage={manage} />)}
+          {sections.filter((s) => inAll(s.key)).map(sec)}
           {/* sections outside 全部 (e.g. 娱乐) sit below a divider */}
           <div className="mx-2 my-2 h-px bg-border" role="separator" title="不计入「全部」" />
-          {sections.filter((s) => !inAll(s.key)).map((s) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} onClick={() => go({ section: s.key })} onManage={manage} />)}
+          {sections.filter((s) => !inAll(s.key)).map(sec)}
           <SectionLabel>管理</SectionLabel>
           <NavItem active={path === "/sources"} icon={Database} label="数据源" count={active.length} onClick={() => { router.push("/sources"); onNavigate?.(); }} />
           <DocsGroup path={path} onGo={(h) => { router.push(h); onNavigate?.(); }} />
-          <Collapsible defaultOpen className="pt-4">
-            <CollapsibleTrigger className="group flex h-6 w-full items-center gap-1 px-2 type-meta font-medium tracking-[0.04em] text-faint transition-colors duration-150 ease-out hover:text-foreground">
-              <ChevronRight className="size-3.5 transition-transform duration-200 ease-out group-data-[panel-open]:rotate-90" />订阅源<span className="ml-auto font-mono tabular-nums">{active.length}</span>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-px">
-              {sections.map((sec) => {
-                const list = active.filter((s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }) === sec.key);
-                if (!list.length) return null;
-                return (
-                  <div key={sec.key} className="pt-2">
-                    <div className="flex h-6 items-center px-2 type-meta text-faint">{sec.zh}</div>
-                    <div className="relative ml-[11px] space-y-px border-l border-border pl-1.5">
-                    {list.map((s) => <SourceRowNav key={s.id} s={s} active={f.source === s.id && feed} onGo={() => go({ source: s.id })} />)}
-                    </div>
-                  </div>
-                );
-              })}
-            </CollapsibleContent>
-          </Collapsible>
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border p-3 type-meta text-faint">

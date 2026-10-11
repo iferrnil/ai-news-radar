@@ -1,7 +1,10 @@
 "use client";
 // Shared add/edit fields: section picker (with inline "新建分区") and the per-source filter rule with a live preview.
 import { useEffect, useState } from "react";
-import { AlertTriangle, Eye, EyeOff, Filter, Loader2 } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, Eye, EyeOff, Filter, Loader2, SmilePlus } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -14,6 +17,23 @@ import { allSections } from "./common";
 export const NEW_SECTION = "__new";
 export type NewSection = { name: string; icon: string; inAll: boolean };
 export const EMPTY_NEW: NewSection = { name: "", icon: "", inAll: true };
+
+const IconPickerPanel = dynamic(() => import("./icon-picker"), { ssr: false, loading: () => <div className="grid h-[280px] w-[300px] place-items-center"><Loader2 className="size-4 animate-spin text-faint" /></div> });
+
+/** Section icon button: shows the current emoji (or a placeholder) and opens the lazy picker panel. */
+export function IconPicker({ value, onChange, label = "选择图标", className }: { value: string; onChange: (v: string) => void; label?: string; className?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger render={<Button type="button" variant="outline" aria-label={label} className={cn("w-full px-0 text-[16px]", className)} />}>
+        {value ? <span className="leading-none">{value}</span> : <SmilePlus className="text-faint" />}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-3">
+        {open && <IconPickerPanel value={value} onPick={(v) => { onChange(v); setOpen(false); }} />}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export function SectionSelect({ value, onChange, allowNew = true, exclude, className }: { value: string; onChange: (v: string) => void; allowNew?: boolean; exclude?: string; className?: string }) {
   const opts = allSections().filter((s) => s.key !== exclude);
@@ -36,8 +56,7 @@ export function NewSectionFields({ v, set }: { v: NewSection; set: (v: NewSectio
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] items-end gap-3 rounded-lg border border-dashed bg-muted/30 p-3 sm:grid-cols-[minmax(0,1fr)_4.5rem_auto]">
       <div className="grid min-w-0 gap-1.5"><Label htmlFor="sec-name">新分区名称</Label>
         <Input id="sec-name" maxLength={24} placeholder="如：视频生成、UI设计" value={v.name} onChange={(e) => set({ ...v, name: e.target.value })} /></div>
-      <div className="grid min-w-0 gap-1.5"><Label htmlFor="sec-icon">图标</Label>
-        <Input id="sec-icon" maxLength={4} placeholder="🎬" className="text-center" value={v.icon} onChange={(e) => set({ ...v, icon: e.target.value })} /></div>
+      <div className="grid min-w-0 gap-1.5"><Label>图标</Label><IconPicker value={v.icon} onChange={(icon) => set({ ...v, icon })} label="新分区图标" /></div>
       <Label className="col-span-2 h-8 font-normal sm:col-span-1"><Switch checked={v.inAll} onCheckedChange={(b) => set({ ...v, inAll: b })} />显示在「全部」</Label>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, Filter, FolderCog, Pencil, FileJson, FileUp, Rss, SearchX, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, TextCursorInput, Download, Filter, FolderCog, Pencil, FileJson, FileUp, Rss, SearchX, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,30 @@ const SectionsDialog = dynamic(() => import("./source-edit-dialogs").then((m) =>
 const AddDialog = dynamic(() => import("./add-source-dialog"), { ssr: false });
 const DeleteConfirm = dynamic(() => import("./sources-dialogs").then((m) => m.DeleteConfirm), { ssr: false });
 const RestoreDialog = dynamic(() => import("./sources-dialogs").then((m) => m.RestoreDialog), { ssr: false });
+
+/** Source name on /sources: click to rename inline (Enter / blur saves, Esc cancels). Saved as a user override. */
+function InlineName({ s, editing, setEditing, onSaved }: { s: SourceRow; editing: boolean; setEditing: (b: boolean) => void; onSaved: () => void }) {
+  const [v, setV] = useState(s.name); const [busy, setBusy] = useState(false);
+  useEffect(() => { if (editing) setV(s.name); }, [editing, s.name]);
+  const save = async () => {
+    const name = v.replace(/\s+/g, " ").trim();
+    if (name === s.name) { setEditing(false); return; }
+    if (!name) { toast.error("名称不能为空"); return; }
+    setBusy(true);
+    try { await api(`/api/sources/${s.id}`, { method: "PATCH", body: JSON.stringify({ name }) }); toast.success(`已重命名为「${name}」`); setEditing(false); onSaved(); }
+    catch (e) { toast.error("重命名失败", { description: (e as Error).message }); }
+    setBusy(false);
+  };
+  if (editing) return (
+    <Input autoFocus aria-label={`重命名 ${s.name}`} maxLength={80} disabled={busy} value={v} onChange={(e) => setV(e.target.value)} onFocus={(e) => e.target.select()}
+      onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { e.stopPropagation(); setEditing(false); } }} onBlur={() => !busy && save()}
+      aria-invalid={!v.trim() || undefined} className="h-7 min-w-0 max-w-[280px] px-2 font-medium" />
+  );
+  return (
+    <button type="button" onClick={() => setEditing(true)} title="点击重命名"
+      className="min-w-0 truncate rounded-sm text-left font-medium decoration-dashed decoration-faint underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50">{s.name}</button>
+  );
+}
 
 function download(name: string, text: string, mime: string) {
   const url = URL.createObjectURL(new Blob([text], { type: mime }));
@@ -60,6 +84,7 @@ function StatusBadge({ s }: { s: SourceRow }) {
 
 export default function Sources() {
   const { sources: rows, reloadSources, addOpen, setAddOpen, sections } = useApp();
+  const [renaming, setRenaming] = useState<number | null>(null);
   const [editSrc, setEditSrc] = useState<SourceRow | null>(null); const [editUsed, setEditUsed] = useState(false);
   useEffect(() => { if (editSrc) setEditUsed(true); }, [editSrc]);
   const [secOpen, setSecOpen] = useState(false); const [secUsed, setSecUsed] = useState(false);
@@ -230,7 +255,7 @@ export default function Sources() {
                     <SourceAvatar name={s.name} username={s.username} homepage={s.homepage} url={s.url} x={s.type.startsWith("x")} className="size-7" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="truncate font-medium">{s.name}</span>
+                        <InlineName s={s} editing={renaming === s.id} setEditing={(b) => setRenaming(b ? s.id : null)} onSaved={reloadSources} />
                         {s.priority && <Badge size="sm" variant={s.priority === "P0" ? "brand" : "outline"} className={cn("font-mono font-medium", s.priority !== "P0" && "text-faint")}>{s.priority}</Badge>}
                         {s.origin === "user" && <Badge size="sm" variant="secondary">手动</Badge>}
                         {(s.f_include || s.f_exclude) && (
@@ -258,6 +283,7 @@ export default function Sources() {
                       {busy[s.id] ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem onClick={() => setTimeout(() => setRenaming(s.id), 120)}><TextCursorInput />重命名</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setEditSrc(s)}><Pencil />编辑分区与过滤…</DropdownMenuItem>
                       <DropdownMenuItem disabled={!s.supported} onClick={() => fetchNow(s)}><RefreshCw />立即抓取</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => window.open(s.homepage || s.url, "_blank")}><ExternalLink />打开主页</DropdownMenuItem>

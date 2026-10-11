@@ -51,7 +51,7 @@ export function seed(db: Database.Database) {
   if (!fs.existsSync(/*turbopackIgnore: true*/ SEED_PATH)) return;
   const data = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ SEED_PATH, "utf8")) as { sources: SeedSource[] };
   const tomb = new Set((db.prepare("SELECT name FROM deleted_seeds").all() as { name: string }[]).map((r) => r.name));
-  const have = new Map((db.prepare("SELECT id, name FROM sources").all() as { id: number; name: string }[]).map((r) => [r.name, r.id]));
+  const have = new Map((db.prepare("SELECT id, COALESCE(seed_name, name) name FROM sources").all() as { id: number; name: string }[]).map((r) => [r.name, r.id]));
   const sync = process.env.SYNC_SEED !== "0";
   const ins = db.prepare(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,unsupported_reason,priority,poll_interval,origin,grp,note,created)
     VALUES(@name,@region,@category,@type,@url,@homepage,@username,@enabled,@supported,@reason,@priority,@interval,'seed',@grp,@note,@now)`);
@@ -103,6 +103,8 @@ export function getDb(): Database.Database {
     if (!cols.has("image")) db.exec("ALTER TABLE items ADD COLUMN image TEXT");
     // per-source filter rules (see lib/filter-rule.ts); items.hidden = stored but filtered out by the current rule
     if (!scols.has("f_include")) db.exec("ALTER TABLE sources ADD COLUMN f_include TEXT; ALTER TABLE sources ADD COLUMN f_exclude TEXT; ALTER TABLE sources ADD COLUMN f_scope TEXT; ALTER TABLE sources ADD COLUMN f_cs INTEGER NOT NULL DEFAULT 0;");
+    // renamed built-ins remember their sources.json name, so seed sync still matches them (and never reverts the rename)
+    if (!scols.has("seed_name")) db.exec("ALTER TABLE sources ADD COLUMN seed_name TEXT");
     if (!cols.has("hidden")) db.exec("ALTER TABLE items ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
     if (!cols.has("title_zh")) db.exec("ALTER TABLE items ADD COLUMN title_zh TEXT; ALTER TABLE items ADD COLUMN summary_zh TEXT;");
     seed(db);

@@ -115,7 +115,7 @@ export function deleteSources(ids: number[]) {
   let deleted = 0, items = 0;
   db.transaction(() => {
     for (const id of ids) {
-      const s = db.prepare("SELECT name, origin FROM sources WHERE id=?").get(id) as { name: string; origin: string } | undefined;
+      const s = db.prepare("SELECT COALESCE(seed_name, name) name, origin FROM sources WHERE id=?").get(id) as { name: string; origin: string } | undefined;
       if (!s) continue;
       db.prepare("DELETE FROM seen WHERE uid IN (SELECT uid FROM items WHERE source_id=?)").run(id);
       db.prepare("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE source_id=?)").run(id);
