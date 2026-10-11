@@ -52,8 +52,8 @@ export default function DocsPage() {
               const u = usage[e.id];
               return (
                 <TableRow key={e.id} className="border-border/50 hover:bg-hover">
-                  <TableCell className="px-4 py-2.5 font-medium leading-5"><a href={`#${e.id}`} className="transition-colors duration-150 ease-out hover:text-brand">{e.name}</a></TableCell>
-                  <TableCell className="max-w-[360px] whitespace-normal px-4 py-2.5 leading-5 text-muted-foreground">
+                  <TableCell className="min-w-[150px] max-w-[260px] whitespace-normal px-4 py-2.5 font-medium leading-5"><a href={`#${e.id}`} className="transition-colors duration-150 ease-out hover:text-brand">{e.name}</a></TableCell>
+                  <TableCell className="min-w-[240px] max-w-[360px] whitespace-normal px-4 py-2.5 leading-5 text-muted-foreground">
                     {e.official ? <span className="line-clamp-2">{e.documented}</span> : <span className="text-amber-700 dark:text-amber-300">未找到官方限额文档</span>}
                   </TableCell>
                   <TableCell className="px-4 py-2.5 text-right font-mono tabular-nums">{u.perMin} <span className="text-faint">次/分 · {u.count} 源</span></TableCell>

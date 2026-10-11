@@ -173,8 +173,8 @@ export default function Sources() {
         <ButtonGroup aria-label="按状态筛选" className="w-full sm:w-fit">
           {STATUS.map((x) => (
             <Button key={x.v} variant="outline" aria-pressed={fs === x.v} onClick={() => setFs(x.v)}
-              className="min-w-0 flex-1 gap-1 px-1.5 type-body text-muted-foreground sm:flex-none sm:gap-1.5 sm:px-2.5 aria-pressed:bg-muted aria-pressed:text-foreground dark:aria-pressed:bg-input/60">
-              {x.label}<Badge variant={x.badge} className="h-4.5 min-w-5 px-1 font-mono tabular-nums">{fsCount[x.v]}</Badge>
+              className="min-w-0 flex-auto gap-0.5 px-1 type-caption text-muted-foreground min-[380px]:gap-1 min-[380px]:px-1.5 min-[380px]:type-body sm:flex-none sm:gap-1.5 sm:px-2.5 aria-pressed:bg-muted aria-pressed:text-foreground dark:aria-pressed:bg-input/60">
+              {x.label}<Badge variant={x.badge} className="h-4.5 min-w-4.5 px-0.5 font-mono tabular-nums min-[380px]:min-w-5 min-[380px]:px-1">{fsCount[x.v]}</Badge>
             </Button>
           ))}
         </ButtonGroup>

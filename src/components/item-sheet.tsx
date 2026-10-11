@@ -19,15 +19,15 @@ export default function ItemSheet() {
       <SheetContent initialFocus={false} className="w-full gap-0 border-border bg-popover p-0 sm:max-w-[520px]">
         {it && (
           <>
-            <SheetHeader className="gap-3 border-b p-5 pr-12">
-              <div className="flex items-center gap-2.5">
+            <SheetHeader className="gap-3 border-b p-5">
+              <div className="flex items-center gap-2.5 pr-8">
                 <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} />
                 <div className="min-w-0 leading-tight">
                   <div className="truncate type-body font-medium">{it.is_x ? `@${handleOf(it)}` : it.source}</div>
                   <div className="truncate type-caption tabular-nums text-muted-foreground">{bjFull(it.published)} · {ago(it.published)}</div>
                 </div>
               </div>
-              <SheetTitle className="type-h3 font-semibold leading-snug [text-wrap:pretty] pr-6">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}</SheetTitle>
+              <SheetTitle className="type-h3 font-semibold leading-snug [text-wrap:pretty]">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}</SheetTitle>
               <SheetDescription className="sr-only">内容详情</SheetDescription>
               <div className="flex flex-wrap gap-1.5">
                 {it.priority && <Badge variant={it.priority === "P0" ? "brand" : "outline"}>{it.priority}</Badge>}
