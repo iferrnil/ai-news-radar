@@ -10,7 +10,6 @@ const HOVER_Q = "(hover: hover) and (pointer: fine)";
 function useCanHover() {
   return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
 }
-import { AnimatePresence, LazyMotion, domAnimation, m as motion } from "framer-motion";
 import { ArrowUp, ArrowUpRight, Inbox, RefreshCw, WifiOff } from "lucide-react";
 import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
@@ -196,18 +195,14 @@ export default function Feed() {
   const lastFetch = Math.max(0, ...sources.filter((s) => s.enabled).map((s) => s.last_fetched ?? 0));
 
   return (
-    <LazyMotion features={domAnimation}>
     <div className={cn("mx-auto w-full max-w-[1480px] pb-24 pt-4", PAD)}>
-      <AnimatePresence>
         {pend.length > 0 && (
-          <motion.div initial={{ y: -16, opacity: 0, scale: 0.96 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: -16, opacity: 0 }} transition={{ type: "spring", stiffness: 420, damping: 32 }}
-            className="pointer-events-none sticky top-[68px] z-20 -mb-8 flex justify-center">
+          <div className="animate-in fade-in-0 zoom-in-95 slide-in-from-top-4 duration-200 ease-out pointer-events-none sticky top-[68px] z-20 -mb-8 flex justify-center">
             <Button onClick={showPending} className="pointer-events-auto h-8 rounded-full bg-[oklch(0.52_0.2_282)] px-4 type-body text-white shadow-[0_10px_30px_-8px_oklch(0.52_0.2_282/0.7)] ring-1 ring-white/15 hover:bg-[oklch(0.52_0.2_282)] hover:brightness-110">
               <ArrowUp className="size-3.5" />{pend.length} 条新内容<Kbd className="ml-1 h-4.5 bg-white/15 font-mono text-white">N</Kbd>
             </Button>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
       <div className="flex h-8 items-center gap-2">
         <Toggle variant="outline" pressed={f.p0} onPressedChange={(v) => setF({ p0: v })}
@@ -258,16 +253,13 @@ export default function Feed() {
       )}
       {!loading && shown < view.length && <div ref={sentinel} className={cn(GRID, "mt-3 md:mt-4 xl:mt-5 2xl:mt-6")}>{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>}
 
-      <AnimatePresence>
         {showTop && (
-          <motion.button initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18, ease: "easeOut" }}
+          <button
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="回到顶部"
-            className="fixed bottom-6 right-6 z-30 grid size-9 place-items-center rounded-full bg-popover text-muted-foreground shadow-card ring-1 ring-border transition-colors duration-150 ease-out hover:text-foreground">
+            className="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 ease-out fixed bottom-6 right-6 z-30 grid size-9 place-items-center rounded-full bg-popover text-muted-foreground shadow-card ring-1 ring-border transition-colors duration-150 ease-out hover:text-foreground">
             <ArrowUp className="size-4" />
-          </motion.button>
+          </button>
         )}
-      </AnimatePresence>
     </div>
-    </LazyMotion>
   );
 }

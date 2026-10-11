@@ -7,7 +7,7 @@ Real-time aggregator of domestic + international AI news for an AI content creat
 
 ## Stack
 - Next.js 16 (App Router) · TypeScript · React 19
-- shadcn/ui **Base UI** variant (`components.json` style `base-nova`; components use `render` props, not Radix `asChild`) · Tailwind CSS v4 (CSS-first tokens in `src/app/globals.css`) · lucide-react · framer-motion · sonner · cmdk · next-themes
+- shadcn/ui **Base UI** variant (`components.json` style `base-nova`; components use `render` props, not Radix `asChild`) · Tailwind CSS v4 (CSS-first tokens in `src/app/globals.css`) · lucide-react · sonner · tw-animate-css (no framer-motion) · `cn` (shadcn's clsx+tailwind-merge replacement) · cmdk · next-themes
 - SQLite via `better-sqlite3` (WAL), `fast-xml-parser` for RSS/Atom
 - **Node ≥ 22 required** (better-sqlite3 v13 has no build for Node 20). On the shared box Node 22 lives in `~/.local/node22`; run `export PATH=~/.local/node22/bin:$PATH` first.
 
@@ -145,9 +145,11 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - Items may carry `image` (jandan images, bilibili covers); cards show a fixed-height lazy thumbnail (`referrerPolicy=no-referrer`), hover card/drawer show it larger. `@next/next/no-img-element` is off on purpose.
 
 ## Performance notes (Oct 2026 pass)
-- `/api/items` and `/api/sources` go through `src/lib/http.ts#jsonResponse`: weak content ETag + `Cache-Control: private, no-cache` (polls revalidate → 304), gzip > 1 KB, nulls dropped.
+- `/api/items` and `/api/sources` go through `src/lib/http.ts#jsonResponse`: weak content ETag + `Cache-Control: private, no-cache` (polls revalidate → 304), brotli q5 (≈14% smaller than gzip, ~1 ms) or gzip > 1 KB, nulls dropped.
 - ⌘K palette (`components/palette.tsx`, cmdk) is `next/dynamic` and mounted only after first open. Don't import `ui/command` from `app-shell.tsx` or it lands back in the main chunk.
-- framer-motion is used via `LazyMotion` + `m` (domAnimation features) in `Feed.tsx`; use `m.*`, not `motion.*`.
+- framer-motion was removed (−74 KB raw on the feed): the new-items pill and back-to-top button use tw-animate `animate-in` classes. Don't re-add a motion lib for small enter effects.
+- Code-split on first use (`next/dynamic`, `ssr:false`, mounted via a `*Used` flag so exit animations still run): palette, item drawer (`item-sheet.tsx`), mobile nav sheet (`mobile-nav.tsx`), translate popover (`translate-menu.tsx`; `TrButton` placeholder looks identical and opens it on first click), add-source dialog (`add-source-dialog.tsx`), delete-confirm/restore dialogs (`sources-dialogs.tsx`), import dialog. app-shell warms the drawer + palette chunks on `requestIdleCallback`. Keep Dialog/Sheet/Popover/Switch imports out of `app-shell.tsx`.
+- First-load JS (gzip -9, from prerendered HTML script tags; measure with `bash`-sum of chunk files): feed 266 KB, /sources 305 KB, /docs 253 KB (Oct 11; before this pass 310/315/272). ~444 KB raw of every route is Next/React itself.
 - Source list refresh: structural changes arrive via the SSE `sources` event; the sidebar polls only every 60 s (sources page 15 s) for status dots, skipped while the tab is hidden.
 - Fonts: WenKai is the biggest cold-load cost (~2.1 MB / 41 slices on the feed, Regular+Medium; 0 B warm). Dropping Medium would roughly halve it but titles would lose weight (faux bold); the alternative is system CJK fonts.
 - Thumbnails: fixed-height box + `loading=lazy decoding=async` → CLS 0.
@@ -185,6 +187,6 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 
 ## shadcn components (Base UI, `base-nova`)
 - Prefer the official component over hand-rolled markup: Button, ButtonGroup (status filter + 导入/导出 split button on /sources), Badge, Toggle (feed 仅 P0), Kbd/KbdGroup (shortcut hints, ⌘K, N), RadioGroup (import mode cards), Table (sources, import preview, docs rate-limits), Alert, Empty, Separator, Select, Switch, Checkbox, Input, Dialog/AlertDialog, Sheet, Tooltip, HoverCard, Popover, DropdownMenu, Command, Skeleton, Sonner.
-- Add new ones with `npx shadcn@latest add <name>`; the CLI currently writes `import { cn } from "cn"` — change it to `@/lib/utils`, and answer **no** to overwriting existing files (e.g. `separator.tsx`).
+- Add new ones with `npx shadcn@latest add <name>`; generated files import `{ cn } from "cn"` — that is the real `cn` npm package (already a dependency; `@/lib/utils` just re-exports it), either import works; answer **no** to overwriting existing files (e.g. `separator.tsx`).
 - Intentional exceptions: sidebar nav rows / docs tree / source rows in `app-shell.tsx` stay custom (shadcn `Sidebar` would pull in its provider/cookie layer for no gain); the import drop zone is a native `<button>` + hidden file input.
 - /sources status filter = ButtonGroup of outline Buttons with `aria-pressed` and a count Badge: 在线 (enabled & supported, success) · 报错 (在线 with last_error, destructive) · 停用 (enabled=0, muted) · 暂停 (enabled but supported=0, warning) · 全部 (outline). All toolbar controls are h-8.

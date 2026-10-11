@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, BookOpen, ChevronRight, Clapperboard, Command as CommandIcon, Database, ExternalLink, FlaskConical, Globe2, Inbox, Menu, Moon, Newspaper,
+  Activity, BookOpen, ChevronRight, Clapperboard, Command as CommandIcon, Database, FlaskConical, Globe2, Inbox, Menu, Moon, Newspaper,
   Radio, Search, Sun,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -12,25 +12,28 @@ import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Kbd } from "@/components/ui/kbd";
-import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DOCS, docHref } from "@/lib/docs-registry";
 import { type Filters, countOf, p0For, parseFilters, setP0For, toQuery, viewKey } from "./filters";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
-import { SECTIONS, inAll, type SectionKey, type SourceRow, ago, api, bj, bjFull, dekText, handleOf, secZh, sectionOf, srcName, } from "./common";
-import { SourceAvatar } from "./source-avatar";
-import { Original, useFullItem } from "./item-preview";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
+import { SECTIONS, inAll, type SectionKey, type SourceRow, api, secZh, sectionOf } from "./common";
 import { Languages, MinusCircle } from "lucide-react";
 import dynamic from "next/dynamic";
 // ⌘K palette (cmdk) is code-split and only mounted after first open
 const Palette = dynamic(() => import("./palette"), { ssr: false });
+// drawer, mobile nav sheet and translate popover are split the same way (Dialog/Popover/Switch stay out of first load)
+const ItemSheet = dynamic(() => import("./item-sheet"), { ssr: false });
+const MobileNav = dynamic(() => import("./mobile-nav"), { ssr: false });
+const TranslateMenu = dynamic(() => import("./translate-menu"), { ssr: false, loading: () => <TrButton /> });
+/** Placeholder with the same look as the translate popover trigger; first click loads the real menu (opened). */
+function TrButton({ onClick }: { onClick?: () => void }) {
+  const { zh } = useApp();
+  return <Button variant="ghost" size="icon" aria-label="翻译设置" className={zh ? "text-brand" : ""} onClick={onClick}><Languages className="size-4" /></Button>;
+}
 
 export const SEC_ICON: Record<SectionKey | "all", React.ElementType> = { all: Inbox, lab: FlaskConical, cn: Globe2, media: Newspaper, x: Twitter, ent: Clapperboard };
 
@@ -46,42 +49,6 @@ type Ctx = {
 };
 const AppCtx = createContext<Ctx>(null as unknown as Ctx);
 export const useApp = () => useContext(AppCtx);
-
-type TrStatus = { available: boolean; enabled: boolean; queued: number; done: number; cached: number; failed: number; lastError: string | null; model: string };
-/** Top-bar popover: client display toggle (localStorage) + server fetch-time translation toggle (DB setting). */
-function TranslateMenu() {
-  const { zh, setZh } = useApp();
-  const [st, setSt] = useState<TrStatus | null>(null);
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const get = () => api<{ translate: TrStatus }>("/api/settings").then((r) => setSt(r.translate)).catch(() => {});
-    get(); const t = setInterval(get, 3000); return () => clearInterval(t);
-  }, [open]);
-  const setServer = async (on: boolean) => { const r = await api<{ translate: TrStatus }>("/api/settings", { method: "PATCH", body: JSON.stringify({ translate: on }) }); setSt(r.translate); toast.success(on ? "已开启抓取时翻译" : "已关闭抓取时翻译"); };
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger render={<Button variant="ghost" size="icon" aria-label="翻译设置" className={zh ? "text-brand" : ""} />}><Languages className="size-4" /></PopoverTrigger>
-      <PopoverContent align="end" className="w-[300px] gap-0 p-0">
-        <label className="flex cursor-pointer items-start gap-3 p-4">
-          <div className="flex-1"><div className="type-body font-medium">翻译成中文</div><div className="mt-0.5 type-caption leading-snug text-muted-foreground">显示外文内容的中文译文（标「译」），悬停卡片和详情里可看原文。</div></div>
-          <Switch checked={zh} onCheckedChange={(v) => setZh(!!v)} aria-label="翻译成中文" />
-        </label>
-        <Separator className="bg-border/50" />
-        <label className="flex cursor-pointer items-start gap-3 p-4">
-          <div className="flex-1">
-            <div className="type-body font-medium">抓取时翻译（DeepSeek）</div>
-            <div className="mt-0.5 type-caption leading-snug text-muted-foreground">
-              {!st ? "读取中…" : !st.available ? "未配置 DEEPSEEK_API_KEY，翻译不可用。" : `新外文条目自动翻译标题与摘要 · 已译 ${st.done}（缓存 ${st.cached}）· 排队 ${st.queued}${st.failed ? ` · 失败 ${st.failed}` : ""}`}
-            </div>
-            {st?.lastError && <div className="mt-1 type-meta text-red-500">{st.lastError}</div>}
-          </div>
-          <Switch checked={!!st?.enabled} disabled={!st?.available} onCheckedChange={(v) => setServer(!!v)} aria-label="抓取时翻译" />
-        </label>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 /** Sidebar source row: click to filter; hover/focus (always on touch) reveals 取消订阅 with a small confirm + undo toast. */
 function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo: () => void }) {
@@ -198,7 +165,7 @@ function DocsGroup({ path, onGo }: { path: string; onGo: (href: string) => void 
   );
 }
 
-function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const { f, navigate, sources, facet } = useApp();
   const router = useRouter(); const path = usePathname();
   const active = sources.filter((s) => s.enabled && s.supported);
@@ -258,58 +225,6 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function ItemSheet() {
-  const { open, setOpen } = useApp();
-  const { item: it } = useFullItem(open); // shared cache with the hover preview
-  return (
-    <Sheet open={!!it} onOpenChange={(b) => !b && setOpen(null)}>
-      <SheetContent initialFocus={false} className="w-full gap-0 border-border bg-popover p-0 sm:max-w-[520px]">
-        {it && (
-          <>
-            <SheetHeader className="gap-3 border-b p-5 pr-12">
-              <div className="flex items-center gap-2.5">
-                <SourceAvatar name={it.source} username={it.is_x ? handleOf(it) : null} homepage={it.homepage} url={it.url} x={!!it.is_x} />
-                <div className="min-w-0 leading-tight">
-                  <div className="truncate type-body font-medium">{it.is_x ? `@${handleOf(it)}` : it.source}</div>
-                  <div className="truncate type-caption tabular-nums text-muted-foreground">{bjFull(it.published)} · {ago(it.published)}</div>
-                </div>
-              </div>
-              <SheetTitle className="type-h3 font-semibold leading-snug [text-wrap:pretty] pr-6">{it.is_x ? `${srcName(it).replace(/^@/, "")} 在 X 上发帖` : it.title}</SheetTitle>
-              <SheetDescription className="sr-only">内容详情</SheetDescription>
-              <div className="flex flex-wrap gap-1.5">
-                {it.priority && <Badge variant={it.priority === "P0" ? "brand" : "outline"}>{it.priority}</Badge>}
-                <Badge variant="secondary">{secZh(sectionOf(it))}</Badge>
-                {it.tr && <Badge variant="secondary" title="DeepSeek 机器翻译，原文见下方">译</Badge>}
-              </div>
-            </SheetHeader>
-            <ScrollArea className="min-h-0 flex-1">
-              <div className="space-y-5 p-5">
-                <p className="whitespace-pre-wrap type-ui leading-7 text-foreground/85">{it.is_x ? it.summary || it.title : dekText(it.summary) || "（该来源未提供摘要）"}</p>
-                {it.image && <img src={it.image} alt="" referrerPolicy="no-referrer" className="mt-3 max-h-[420px] w-full rounded-lg bg-muted object-contain" />}
-                {it.orig && <Original o={it.orig} x={!!it.is_x} />}
-                {it.also_on_x.length > 0 && (
-                  <div className="rounded-lg border bg-muted/40 p-3">
-                    <div className="mb-2 type-caption font-medium text-muted-foreground">也在 X 上发布</div>
-                    {it.also_on_x.map((x) => (
-                      <a key={x.url} href={x.url} target="_blank" className="flex items-center gap-2 py-1 type-body hover:text-brand">
-                        <SourceAvatar name={x.author ?? "x"} username={x.author} x className="size-5" />@{x.author}<ExternalLink className="ml-auto size-3.5 opacity-50" />
-                      </a>))}
-                  </div>
-                )}
-                <div className="type-caption text-muted-foreground">来源：{it.source} · 北京时间 {bj(it.published)}</div>
-              </div>
-            </ScrollArea>
-            <div className="flex gap-2 border-t p-4">
-              <Button className="flex-1" render={<a href={it.url} target="_blank" rel="noopener" />}>打开原文<ExternalLink /></Button>
-              <Button variant="outline" onClick={() => { navigator.clipboard?.writeText(it.url); toast.success("已复制链接"); }}>复制链接</Button>
-            </div>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
-}
-
 function Shell({ children }: { children: React.ReactNode }) {
   const sp = useSearchParams();
   const router = useRouter();
@@ -336,6 +251,17 @@ function Shell({ children }: { children: React.ReactNode }) {
   const [paletteUsed, setPaletteUsed] = useState(false);
   useEffect(() => { if (palette) setPaletteUsed(true); }, [palette]);
   const [mobileNav, setMobileNav] = useState(false);
+  const [navUsed, setNavUsed] = useState(false);
+  useEffect(() => { if (mobileNav) setNavUsed(true); }, [mobileNav]);
+  const [drawerUsed, setDrawerUsed] = useState(false);
+  useEffect(() => { if (open) setDrawerUsed(true); }, [open]);
+  const [trUsed, setTrUsed] = useState(false);
+  // warm the split chunks once the page is idle so the first drawer / ⌘K open has no load delay
+  useEffect(() => {
+    const warm = () => { import("./item-sheet"); import("./palette"); };
+    if ("requestIdleCallback" in window) { const id = requestIdleCallback(warm, { timeout: 4000 }); return () => cancelIdleCallback(id); }
+    const t = setTimeout(warm, 2500); return () => clearTimeout(t);
+  }, []);
   const [addOpen, setAddOpen] = useState(false);
   const reloadSourcesRef = useRef<(() => void) | null>(null);
   const reloadNowRef = useRef<(() => void) | null>(null);
@@ -384,11 +310,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <AppCtx.Provider value={ctx}>
       <div className="flex min-h-screen">
         <aside className="sticky top-0 hidden h-screen w-[244px] shrink-0 border-r border-sidebar-border bg-sidebar lg:block"><SidebarBody /></aside>
-        <Sheet open={mobileNav} onOpenChange={setMobileNav}>
-          <SheetContent side="left" className="w-[270px] bg-sidebar p-0" showCloseButton={false}>
-            <SheetTitle className="sr-only">导航</SheetTitle><SidebarBody onNavigate={() => setMobileNav(false)} />
-          </SheetContent>
-        </Sheet>
+        {navUsed && <MobileNav open={mobileNav} onOpenChange={setMobileNav} />}
         <div className="glow flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="菜单"><Menu className="size-4" /></Button>
@@ -407,7 +329,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               </TooltipTrigger>
               <TooltipContent>{live ? "实时推送已连接（SSE）" : "实时推送已断开，正在自动重连；内容仍可浏览"}</TooltipContent>
             </Tooltip>
-            <TranslateMenu />
+            {trUsed ? <TranslateMenu defaultOpen /> : <TrButton onClick={() => setTrUsed(true)} />}
             <ThemeToggle />
             <Button variant="ghost" size="icon" render={<Link href="/sources" aria-label="数据源" />} className="hidden sm:inline-flex"><Database className="size-4" /></Button>
           </header>
@@ -415,7 +337,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       {paletteUsed && <Palette open={palette} onOpenChange={setPalette} />}
-      <ItemSheet />
+      {drawerUsed && <ItemSheet />}
       <Toaster position="bottom-right" />
     </AppCtx.Provider>
   );
