@@ -29,7 +29,7 @@ rec("no 管理数据源 row in sidebar group", await side.getByRole("button", { 
 await page.getByRole("banner").getByRole("link", { name: "数据源" }).click(); await page.waitForURL(/\/sources/);
 rec("/sources reachable via header 数据源 button", new URL(page.url()).pathname === "/sources");
 await page.goto(B + "/"); await page.waitForTimeout(800); await page.keyboard.press("Control+k"); await page.locator("[data-slot=command-input]").waitFor();
-await page.keyboard.type("管理数据源"); await page.keyboard.press("Enter"); await page.waitForURL(/\/sources/);
+await page.locator("[data-slot=command-input]").fill("管理数据源"); { const opt = page.getByRole("option", { name: /管理数据源/ }).first(); await opt.waitFor(); await opt.click(); } await page.waitForURL(/\/sources/); // click the filtered option (Enter raced the filter on slow CI)
 rec("/sources reachable via command palette 管理数据源", new URL(page.url()).pathname === "/sources");
 await side.getByRole("button", { name: /^文档/ }).first().click(); await page.waitForURL(/\/docs/);
 rec("文档 header still navigates", new URL(page.url()).pathname === "/docs");
