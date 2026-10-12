@@ -45,6 +45,7 @@ func main() {
 	mygo.App.OnSecondInstance(func([]string, string) { show() })
 	mygo.App.OnActivate(func(bool) { show() })
 
+	started := time.Now()
 	mygo.App.WhenReady(func() {
 		var err error
 		data, err = mygo.App.Path(mygo.PathUserData)
@@ -65,7 +66,7 @@ func main() {
 		}
 		node, app := bundleLayout(res)
 
-		win = mygo.NewWindow(mygo.WindowOptions{Title: appName, Width: 1280, Height: 840, MinWidth: 380, MinHeight: 520, BackgroundColor: "light-dark(#ffffff, #0b0b0f)"})
+		win = mygo.NewWindow(windowOptions())
 		win.Page().LoadHTML(splashHTML, "")
 		// closing the window hides it (the app keeps running in the tray); 退出 quits
 		win.OnClose(func(e *mygo.CloseEvent) {
@@ -88,6 +89,21 @@ func main() {
 				fatal("内置服务未就绪（详见数据目录 server.log）", err)
 				return
 			}
+			healthy := time.Since(started)
+			var offDOM func()
+			offDOM = win.Page().OnDOMReady(func() {
+				offDOM()
+				dom := time.Since(started)
+				go func() { // first feed card (or an empty/error state) on screen = "first content"
+					for i := 0; i < 400; i++ {
+						if ok, err := win.Page().Eval(firstContentJS); err == nil && ok == true {
+							log.Printf("startup: healthy=%v dom=%v content=%v", healthy.Round(time.Millisecond), dom.Round(time.Millisecond), time.Since(started).Round(time.Millisecond))
+							return
+						}
+						time.Sleep(50 * time.Millisecond)
+					}
+				}()
+			})
 			win.Page().LoadURL(srv.URL + "/")
 			go watchNotifications(appCtx, srv.URL, func(b notifyBatch) { notifyP0(win, srv.URL, b, show) })
 		}()
@@ -130,12 +146,14 @@ func main() {
 				{Label: "退出 " + appName, Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { quit() }},
 			}
 		}
-		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-			{Label: appName, Submenu: append([]*mygo.MenuItem{{Role: mygo.RoleAbout}, mygo.Separator()}, items()...)},
-			{Label: "编辑", Submenu: []*mygo.MenuItem{{Role: mygo.RoleUndo}, {Role: mygo.RoleRedo}, mygo.Separator(), {Role: mygo.RoleCut}, {Role: mygo.RoleCopy}, {Role: mygo.RolePaste}, {Role: mygo.RoleSelectAll}}},
-			{Label: "视图", Submenu: []*mygo.MenuItem{{Role: mygo.RoleResetZoom}, {Role: mygo.RoleZoomIn}, {Role: mygo.RoleZoomOut}, mygo.Separator(), {Role: mygo.RoleToggleFullScreen}}},
-			{Role: mygo.RoleWindow},
-		}))
+		// page commands (window.__radarCmd in app-shell.tsx); the page also handles the same keys itself and ignores a repeat
+		cmd := func(c string) func(*mygo.MenuItem, *mygo.Window) {
+			return func(*mygo.MenuItem, *mygo.Window) {
+				show()
+				go func() { _, _ = win.Page().Eval(pageCmdJS(c)) }()
+			}
+		}
+		mygo.App.SetMenu(mygo.NewMenu(appMenu(items(), cmd)))
 		if _, err := mygo.NewTray(mygo.TrayOptions{Icon: trayIcon, IconIsTemplate: true, ToolTip: appName, Menu: mygo.NewMenu(items())}); err != nil {
 			log.Println("tray:", err) // e.g. Linux without AppIndicator; the app menu still works
 		}

@@ -45,7 +45,8 @@ function groupByDay(list: ItemOut[]) {
 }
 
 // max 3 per row; one gap value for both axes: 12px mobile · 16px md · 20px xl (1280) · 24px 2xl (1536+)
-const GRID = "grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3 xl:gap-5 2xl:gap-6";
+// columns follow the width of <main> (@container in app-shell), so hiding the sidebar reflows the grid
+const GRID = "grid grid-cols-1 gap-3 @2xl:grid-cols-2 @2xl:gap-4 @5xl:grid-cols-3 @5xl:gap-5 @7xl:gap-6";
 // content side padding (mirrored by the sticky day header's negative margin): 16 · 24 (sm) · 32 (xl) · 40 (2xl)
 const PAD = "px-4 sm:px-6 xl:px-8 2xl:px-10";
 const BLEED = "-mx-4 px-4 sm:-mx-6 sm:px-6 xl:-mx-8 xl:px-8 2xl:-mx-10 2xl:px-10";
@@ -294,7 +295,7 @@ export default function Feed() {
           </section>
         ))
       )}
-      {!loading && shown < view.length && <div ref={sentinel} className={cn(GRID, "mt-3 md:mt-4 xl:mt-5 2xl:mt-6")}>{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>}
+      {!loading && shown < view.length && <div ref={sentinel} className={cn(GRID, "mt-3 @2xl:mt-4 @5xl:mt-5 @7xl:mt-6")}>{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>}
 
         {showTop && (
           <button

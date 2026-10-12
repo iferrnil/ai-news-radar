@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { buildJson, buildOpml, exportFileName, type ExportSource } from "@/lib/portable-export";
+import type { ExportSource } from "@/lib/portable-export";
 
 const ImportDialog = dynamic(() => import("./import-dialog"), { ssr: false });
 const EditSourceDialog = dynamic(() => import("./source-edit-dialogs").then((m) => m.EditSourceDialog), { ssr: false });
@@ -58,7 +58,7 @@ import { EmptyState } from "./empty-state";
 import { useApp } from "./app-shell";
 import { type SectionKey, TYPE, type SourceRow, ago, api, bj, allSections, sourceSection, secZh } from "./common";
 import { SourceAvatar } from "./source-avatar";
-import { HealthBadge } from "./source-health";
+import { HealthBadge } from "./source-health-badge";
 
 type StatusKey = "active" | "err" | "off" | "paused" | "all";
 // 在线 = enabled & fetchable · 报错 = 在线 with last_error · 停用 = switched off · 暂停 = enabled but not fetchable (unsupported)
@@ -140,12 +140,14 @@ export default function Sources() {
   const allSel = view.length > 0 && view.every((s) => sel.has(s.id));
   const [impOpen, setImpOpen] = useState(false);
   const [scope, setScope] = useState<"all" | "enabled" | "view" | "sel">("all");
-  const doExport = (fmt: "json" | "opml") => {
+  // the export builders load on first use (they are not needed to render the page)
+  const doExport = async (fmt: "json" | "opml") => {
     const base = scope === "enabled" ? rows.filter((r) => r.enabled) : scope === "view" ? view : scope === "sel" ? rows.filter((r) => sel.has(r.id)) : rows;
     const list: ExportSource[] = base.filter((r) => r.type !== "html").map((r) => ({ ...r, section: sourceSection(r) }));
     const custom = allSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false }));
     if (!list.length) { toast.error("没有可导出的来源"); return; }
     const d = new Date();
+    const { buildJson, buildOpml, exportFileName } = await import("@/lib/portable-export");
     if (fmt === "json") download(exportFileName("json", d), buildJson(list, d, custom), "application/json");
     else download(exportFileName("opml", d), buildOpml(list, d, custom), "text/x-opml");
     const nx = list.filter((r) => r.type.startsWith("x")).length;

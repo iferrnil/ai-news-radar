@@ -5,7 +5,7 @@ import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, BookOpen, ChevronRight, Command as CommandIcon, Database, Inbox, Menu, Moon,
-  Radio, SlidersHorizontal, Search, Settings2, Sun,
+  PanelLeft, Radio, SlidersHorizontal, Search, Settings2, Sun,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -177,6 +177,8 @@ function SectionLabel({ children, first }: { children: React.ReactNode; first?: 
 }
 
 const DOCS_KEY = "sidebar.docs.open";
+export const SIDEBAR_KEY = "sidebar.collapsed";
+const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
 const SOURCES_KEY = "sidebar.sources.open";
 /** Collapsible sidebar group (文档, 数据源): header row + chevron; open state persisted in localStorage `storageKey`.
  *  `onHeader` (optional) makes the label navigate (文档 → /docs); without it the whole header toggles. */
@@ -240,7 +242,7 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const outside = sections.filter((s) => !inAll(s.key));
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center gap-2.5 px-4">
+      <div className="app-brand flex h-14 items-center gap-2.5 px-4">
         <div className="grid size-7 place-items-center rounded-lg bg-gradient-to-b from-violet-500 to-indigo-600 text-white shadow-[0_0_0_1px_rgb(255_255_255/0.15)_inset,0_4px_12px_-2px_oklch(0.56_0.22_285/0.5)]">
           <Radio className="size-4" />
         </div>
@@ -367,10 +369,40 @@ function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => { reloadNowRef.current = () => { reloadSources(); }; }, [reloadSources]);
   // structural changes arrive via the SSE "sources" event; this slow poll only refreshes fetch status dots, and pauses in hidden tabs
   useEffect(() => { reloadSources(); const t = setInterval(() => { if (!document.hidden) reloadSources(); }, 60000); return () => clearInterval(t); }, [reloadSources]);
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((p) => !p); } };
-    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
+  // sidebar collapse (≥lg only; mobile keeps its sheet). The <html data-sidebar> attribute is set before paint by the
+  // inline script in layout.tsx, so a collapsed sidebar never flashes open; CSS in globals.css does the animation.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => { setCollapsed(document.documentElement.dataset.sidebar === "collapsed"); }, []);
+  const lastToggle = useRef(0);
+  const toggleSidebar = useCallback(() => {
+    // the desktop menu accelerator and the page keydown may both fire for one ⌘B: count it once
+    const now = performance.now(); if (now - lastToggle.current < 250) return; lastToggle.current = now;
+    setCollapsed((c) => {
+      const n = !c;
+      document.documentElement.dataset.sidebar = n ? "collapsed" : "expanded";
+      try { localStorage.setItem(SIDEBAR_KEY, n ? "1" : "0"); } catch {}
+      return n;
+    });
   }, []);
+  const desktopCmd = useCallback((cmd: string) => {
+    if (cmd === "sidebar") { if (window.matchMedia("(min-width: 1024px)").matches) toggleSidebar(); else setMobileNav((v) => !v); }
+    else if (cmd === "search") setPalette(true);
+    else if (cmd === "settings") router.push("/settings");
+  }, [toggleSidebar, router]);
+  useEffect(() => {
+    const w = window as unknown as { __radarCmd?: (c: string) => void; __radarDesktop?: boolean };
+    w.__radarCmd = desktopCmd;
+    const h = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "k") { e.preventDefault(); setPalette((p) => !p); }
+      else if (k === "b" && !e.shiftKey && !(e.target as HTMLElement)?.isContentEditable) { e.preventDefault(); desktopCmd("sidebar"); }
+      // desktop app only (browsers keep their own ⌘F / ⌘,)
+      else if (w.__radarDesktop && k === "f") { e.preventDefault(); desktopCmd("search"); }
+      else if (w.__radarDesktop && k === ",") { e.preventDefault(); desktopCmd("settings"); }
+    };
+    window.addEventListener("keydown", h); return () => { window.removeEventListener("keydown", h); delete w.__radarCmd; };
+  }, [desktopCmd]);
   const markManyRead = useCallback((ids: number[]) => rs.markRead(ids), []);
   const markManyUnread = useCallback((ids: number[]) => rs.markUnread(ids), []);
   const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, zh, setZh }),
@@ -381,11 +413,19 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <AppCtx.Provider value={ctx}>
       <div className="flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-[244px] shrink-0 border-r border-sidebar-border bg-sidebar lg:block"><SidebarBody /></aside>
+        <aside id="app-sidebar" aria-label="侧边栏" inert={collapsed} className="app-sidebar sticky top-0 hidden h-screen w-[244px] shrink-0 overflow-hidden border-r border-sidebar-border bg-sidebar lg:block">
+          <div className="h-full w-[244px]"><SidebarBody /></div>
+        </aside>
         {navUsed && <MobileNav open={mobileNav} onOpenChange={setMobileNav} />}
         <div className="glow flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
+          <header className="app-header sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="菜单"><Menu className="size-4" /></Button>
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" className="-ml-1 hidden lg:inline-flex" onClick={toggleSidebar} aria-label={collapsed ? "显示侧边栏" : "隐藏侧边栏"} aria-controls="app-sidebar" data-state={collapsed ? "collapsed" : "expanded"} data-testid="sidebar-toggle" />}>
+                <PanelLeft className="size-4" />
+              </TooltipTrigger>
+              <TooltipContent className="flex items-center gap-2">{collapsed ? "显示侧边栏" : "隐藏侧边栏"}<Kbd className="font-mono">{MOD}B</Kbd></TooltipContent>
+            </Tooltip>
             <div className="hidden min-w-0 truncate type-ui font-semibold tracking-tight sm:block">{title}</div>
             <Button variant="outline" onClick={() => setPalette(true)}
               className="ml-auto w-full min-w-0 max-w-[360px] shrink justify-start gap-2 bg-muted px-2.5 type-body font-normal text-faint hover:text-muted-foreground dark:bg-muted sm:ml-6 sm:mr-auto">
@@ -395,7 +435,8 @@ function Shell({ children }: { children: React.ReactNode }) {
             <Tooltip>
               <TooltipTrigger render={<Badge variant="outline" className="hidden h-6 gap-1.5 px-2.5 text-muted-foreground sm:inline-flex" />}>
                 <span className="relative flex size-1.5">
-                  {live && <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />}
+                  {/* pings 3× after (re)connecting, then rests: an endless animation kept the desktop app repainting (~17% CPU idle) */}
+                  {live && <span className="absolute inline-flex size-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_3_forwards] rounded-full bg-emerald-400 opacity-75" />}
                   <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-amber-500")} />
                 </span>{live ? "Live" : "重连中"}
               </TooltipTrigger>
@@ -405,7 +446,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
             <Button variant="ghost" size="icon" render={<Link href="/sources" aria-label="数据源" />} className="hidden sm:inline-flex"><Database className="size-4" /></Button>
           </header>
-          <main className="min-w-0 flex-1">{children}</main>
+          <main className="@container min-w-0 flex-1">{children}</main>
         </div>
       </div>
       {paletteUsed && <Palette open={palette} onOpenChange={setPalette} />}
@@ -417,7 +458,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <TooltipProvider delay={300}><Suspense><Shell>{children}</Shell></Suspense></TooltipProvider>
     </ThemeProvider>
   );

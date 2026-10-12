@@ -16,7 +16,7 @@ trap cleanup EXIT
 for i in $(seq 40); do curl -sf "$UPSTREAM_MOCK/__ctl?state=1" -o /dev/null && break; sleep 0.25; done
 BASE="${1:-}"; shift || true
 if [ -z "$BASE" ]; then BASE="$TMP/baseline.db"; bash e2e/make-fixture.sh "$BASE" || { echo "fixture failed"; exit 1; }; fi
-TESTS="${*:-t1 t2 t3 t4 t5 t6 t7 t8 t9 t10 t11 t12 t13 t14 t15}"
+TESTS="${*:-t1 t2 t3 t4 t5 t6 t7 t8 t9 t10 t11 t12 t13 t14 t15 t16}"
 pass=0; failn=0; failed=""
 for t in $TESTS; do
   for p in $(pgrep -f next-server || true); do kill -9 "$p" 2>/dev/null; done; sleep 0.5
