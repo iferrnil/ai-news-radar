@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { BookOpen, Database, FileText, Moon, Plus, SearchX } from "lucide-react";
+import { BookOpen, Database, FileText, Moon, Plus, SearchX, SlidersHorizontal } from "lucide-react";
 import { EmptyState } from "./empty-state";
 import { CommandDialog, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from "@/components/ui/command";
 import { DOCS, docHref } from "@/lib/docs-registry";
@@ -38,6 +38,7 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
   const acts = [
     { k: "add", label: "添加数据源", icon: Plus, go: () => { router.push("/sources"); setAddOpen(true); } },
     { k: "sources", label: "管理数据源", icon: Database, go: () => router.push("/sources") },
+    { k: "settings", label: "设置（DeepSeek 翻译）", icon: SlidersHorizontal, go: () => router.push("/settings") },
     { k: "docs", label: "文档", icon: BookOpen, go: () => router.push("/docs") },
     ...DOCS.map((d) => ({ k: `docs-${d.slug}`, label: `文档 / ${d.title}`, icon: FileText, go: () => router.push(docHref(d)) })),
     { k: "theme", label: "切换深色/浅色", icon: Moon, go: () => setTheme(resolvedTheme === "dark" ? "light" : "dark") },

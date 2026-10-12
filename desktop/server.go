@@ -58,10 +58,11 @@ func FreePort() (int, error) {
 }
 
 // serverEnv is the child's environment: the parent's minus anything secret or
-// conflicting, plus the desktop settings. The DeepSeek key is never passed and
-// translation stays off.
+// conflicting, plus the desktop settings. The DeepSeek key is never passed via
+// env and translation defaults to off; the user sets both in 设置, which stores
+// the key in <dataDir>/secrets.json (0600). In-app settings are never locked here.
 func serverEnv(parent []string, port int, dataDir string, appDir string, extra []string) []string {
-	drop := map[string]bool{"DEEPSEEK_API_KEY": true, "TRANSLATE_ENABLED": true, "PORT": true, "HOSTNAME": true, "NEWS_DB": true, "SOURCES_JSON": true, "NODE_OPTIONS": true}
+	drop := map[string]bool{"DEEPSEEK_API_KEY": true, "TRANSLATE_ENABLED": true, "PORT": true, "HOSTNAME": true, "NEWS_DB": true, "SOURCES_JSON": true, "NODE_OPTIONS": true, "SETTINGS_LOCKED": true, "SECRETS_FILE": true}
 	var env []string
 	for _, kv := range parent {
 		k := kv
@@ -80,6 +81,7 @@ func serverEnv(parent []string, port int, dataDir string, appDir string, extra [
 		fmt.Sprintf("PORT=%d", port), "HOSTNAME=127.0.0.1",
 		"NEWS_DB="+filepath.Join(dataDir, "news.db"),
 		"SOURCES_JSON="+filepath.Join(appDir, "sources", "sources.json"),
+		"SECRETS_FILE="+filepath.Join(dataDir, "secrets.json"),
 		"AI_RADAR_DESKTOP=1",
 	)
 	return append(env, extra...)

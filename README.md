@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-violet.svg)](LICENSE)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
+[![macOS 下载](https://img.shields.io/github/v/release/iferrnil/ai-news-radar?filter=desktop-v%2A&label=macOS%20%E4%B8%8B%E8%BD%BD&logo=apple)](https://github.com/iferrnil/ai-news-radar/releases/latest)
 [![Docker](https://img.shields.io/badge/docker-build%20locally-blue)](#镜像加速构建说明)
 
 > A self-hosted, near-real-time radar for domestic + international AI news: 22 curated sources (P0 lab blogs & API notes, scoop X accounts, Chinese AI media, Techmeme, plus a few Chinese entertainment/funny feeds), polled by priority and pushed live to the browser.
@@ -60,7 +61,7 @@ flowchart LR
 
 ## 中文翻译（DeepSeek，可选）
 
-- 设置 `DEEPSEEK_API_KEY`（见 `.env.example`；本地放 `.env.local`，Docker 用环境变量；切勿提交）后，新抓到的**非中文**条目会在入库后异步翻译**标题和摘要**（中文为主的条目直接跳过）。
+- 在 **设置** 页（侧栏「设置」或 ⌘K）填写 DeepSeek API key（可选 Base URL / 模型，带“测试连接”），立即生效、无需重启；key 只存服务器端 `data/secrets.json`（权限 0600），任何接口/导出/日志都只显示“已配置”。也可用环境变量 `DEEPSEEK_API_KEY`（见 `.env.example`；本地放 `.env.local`；切勿提交），站内保存的 key 优先。配置后，新抓到的**非中文**条目会在入库后异步翻译**标题和摘要**（中文为主的条目直接跳过）。
 - 省钱设计：每批 10 条 JSON 进出、并发 2、超时 90 s、429/5xx 指数退避重试；按内容哈希缓存（重复内容不再翻译），每条只翻译一次；摘要最多 1500 字。原文与译文分开存（`title_zh` / `summary_zh`）。
 - 顶栏「文 A」按钮：**翻译成中文**（浏览器端显示开关，译文标「译」，悬停卡片和详情中可看原文）；**抓取时翻译**（服务端开关，存数据库，可覆盖 `TRANSLATE_ENABLED`）。关闭显示时列表接口不返回译文字段。
 - 实测：3 条标题+摘要约 290 token；按 DeepSeek flash 价目，翻译 500 条约 $0.1–0.3。
@@ -94,6 +95,8 @@ npm run build && npm run start -- -p 3000
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `DEEPSEEK_API_KEY` | （空） | 可选。设置后在抓取时用 DeepSeek 把外文标题/摘要译成中文；不设置则翻译功能自动关闭 |
+| `SETTINGS_LOCKED` | 本地 `0`；**Docker 镜像/compose 默认 `1`** | `1` = 锁定站内设置：不能在网页里保存/清除/测试新 key（防止公网访客设置 key），只能用环境变量；私有部署可设 `0` |
+| `SECRETS_FILE` | `<NEWS_DB 所在目录>/secrets.json` | 站内保存的 DeepSeek 设置文件（0600） |
 | `TRANSLATE_ENABLED` | `1` | 抓取时翻译的服务端默认值（站内开关保存在数据库，优先级更高） |
 | `DEEPSEEK_MODEL` / `TRANSLATE_BATCH` / `TRANSLATE_CONCURRENCY` / `TRANSLATE_SUMMARY_CHARS` | `deepseek-chat` / `10` / `2` / `1500` | 模型、每批条数、并发、摘要截断长度 |
 | `PORT` | 3000 | 服务端口 |
@@ -168,5 +171,9 @@ NPM_REGISTRY=https://registry.npmmirror.com APT_MIRROR=mirrors.tuna.tsinghua.edu
 - 基础镜像 `node:22-bookworm-slim` 来自 Docker Hub；若拉不下来，请在 Docker/OrbStack 设置里配置 registry mirror。
 
 ## macOS 桌面版
+
+**下载**：[最新版本（GitHub Releases）](https://github.com/iferrnil/ai-news-radar/releases/latest)，Apple Silicon 选 `…-macos-arm64.dmg`，Intel 选 `…-macos-x64.dmg`，可用 `SHA256SUMS` 校验。
+
+> **首次打开（Gatekeeper）**：未公证的版本会提示“无法验证开发者”。右键（Control-点按）App → **打开** → 再点 **打开**；或 系统设置 → 隐私与安全性 → **仍要打开**；或终端执行 `xattr -dr com.apple.quarantine "/Applications/AI News Radar.app"`。之后正常双击即可。
 
 `desktop/` 是基于 [MyGo](https://github.com/egoist/mygo) 的 macOS 客户端：原生窗口 + 菜单栏图标，内置 Node 22 运行同一套 Next.js 服务（仅监听 127.0.0.1），数据存放在 `~/Library/Application Support/AI News Radar/`。构建、首次打开（Gatekeeper）和 GitHub Actions 打包说明见 [desktop/README.md](desktop/README.md)。

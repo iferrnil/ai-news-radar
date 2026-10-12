@@ -1,13 +1,12 @@
 // Fetch-time translation of non-Chinese titles/summaries via DeepSeek (OpenAI-compatible chat API).
-// Disabled unless DEEPSEEK_API_KEY is set; can be switched off with TRANSLATE_ENABLED=0 or the UI setting (DB `settings`).
+// Disabled unless a key is configured (in-app 设置 or DEEPSEEK_API_KEY, see secrets.ts); can be switched off with TRANSLATE_ENABLED=0 or the UI setting (DB `settings`).
 // Cost controls: only items that look non-Chinese, title + summary (capped), batched, cached by content hash, never twice.
 import { createHash } from "node:crypto";
 import { getDb } from "./db";
 import { publish } from "./bus";
 import { queryItems } from "./store";
+import { chatUrl, deepseekKey, deepseekModel } from "./secrets";
 
-const API = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/chat/completions";
-const MODEL = process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
 const BATCH = Number(process.env.TRANSLATE_BATCH ?? 10);
 const CONC = Number(process.env.TRANSLATE_CONCURRENCY ?? 2);
 const SUMMARY_CAP = Number(process.env.TRANSLATE_SUMMARY_CHARS ?? 1500);
@@ -17,7 +16,9 @@ type St = { queue: number[]; queued: Set<number>; running: number; done: number;
 const g = globalThis as unknown as { __tr?: St };
 const st: St = (g.__tr ??= { queue: [], queued: new Set(), running: 0, done: 0, cached: 0, failed: 0, calls: 0, lastError: null, authFailed: false, backfilled: false, tokIn: 0, tokOut: 0 });
 
-export const hasKey = () => !!process.env.DEEPSEEK_API_KEY;
+export const hasKey = () => !!deepseekKey();
+/** a new/changed key gets a fresh chance (clears the 401 latch) */
+export function resetAuth() { st.authFailed = false; st.lastError = null; }
 export function getSetting(k: string): string | null {
   return (getDb().prepare("SELECT v FROM settings WHERE k=?").get(k) as { v: string } | undefined)?.v ?? null;
 }
@@ -29,7 +30,7 @@ export function translateEnabled() {
 }
 export const translateStatus = () => ({
   available: hasKey(), enabled: translateEnabled(), setting: getSetting("translate"), env: process.env.TRANSLATE_ENABLED ?? null,
-  queued: st.queue.length, running: st.running, done: st.done, cached: st.cached, failed: st.failed, calls: st.calls, tokensIn: st.tokIn, tokensOut: st.tokOut, lastError: st.lastError, model: MODEL,
+  queued: st.queue.length, running: st.running, done: st.done, cached: st.cached, failed: st.failed, calls: st.calls, tokensIn: st.tokIn, tokensOut: st.tokOut, lastError: st.lastError, model: deepseekModel(),
 });
 
 const CJK = /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/g;
@@ -71,10 +72,10 @@ async function callApi(batch: { i: number; t: string; s: string }[]) {
     st.calls++;
     let res: Response;
     try {
-      res = await fetch(API, {
+      res = await fetch(chatUrl(), {
         method: "POST", signal: AbortSignal.timeout(90_000),
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}` },
-        body: JSON.stringify({ model: MODEL, temperature: 0.2, response_format: { type: "json_object" }, max_tokens: 6000,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${deepseekKey()}` },
+        body: JSON.stringify({ model: deepseekModel(), temperature: 0.2, response_format: { type: "json_object" }, max_tokens: 6000,
           messages: [{ role: "system", content: SYSTEM }, { role: "user", content: JSON.stringify(batch) }] }),
       });
     } catch (e) { if (attempt < 3) { await sleep(2000 * 2 ** attempt); continue; } throw e; }

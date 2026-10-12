@@ -1,0 +1,137 @@
+# Release workflow for the macOS desktop app (desktop/, MyGo + bundled Node).
+# Trigger: push a tag `desktop-v*` (e.g. desktop-v0.1.0) or run it manually (Actions → desktop-release).
+# Builds one .dmg per arch (arm64 + x64, each ~half the size of a universal build), writes SHA256SUMS
+# and publishes a GitHub Release with notes. Without signing secrets the app is signed ad hoc
+# (Gatekeeper asks on first open, see README). With MACOS_CERTIFICATE, MACOS_CERTIFICATE_PASSWORD,
+# MACOS_SIGNING_IDENTITY (+ APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD) it is Developer ID signed and notarized.
+# Install: needs a token with the `workflow` scope → move this file to .github/workflows/desktop-release.yml.
+name: desktop-release
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (desktop-vX.Y.Z); empty = desktop-v<version in desktop/mygo.json>"
+        required: false
+      draft:
+        description: "Create the release as a draft"
+        type: boolean
+        default: true
+permissions:
+  contents: write
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # tags for the changelog
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
+      - run: npm ci --no-audit --no-fund
+      - name: Import the certificate and the notary credentials
+        id: sign
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE" ] || [ -z "$MACOS_SIGNING_IDENTITY" ]; then echo "no signing secrets: ad-hoc build"; exit 0; fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"; password="$(openssl rand -base64 24)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain
+          macos=$(jq -n --arg id "$MACOS_SIGNING_IDENTITY" '{signingIdentity: $id}')
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_PASSWORD" ]; then
+            xcrun notarytool store-credentials notary --keychain "$keychain" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+            macos=$(echo "$macos" | jq --arg k "$keychain" '. + {notarize: {keychainProfile: "notary", keychain: $k}}')
+          fi
+          jq --argjson m "$macos" '.macos += $m' desktop/mygo.json > "$RUNNER_TEMP/mygo.json" && mv "$RUNNER_TEMP/mygo.json" desktop/mygo.json
+          echo "signed=1" >> "$GITHUB_OUTPUT"
+      - name: Version from the tag
+        id: ver
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then tag="$GITHUB_REF_NAME"; elif [ -n "$INPUT_TAG" ]; then tag="$INPUT_TAG"; else tag="desktop-v$(jq -r .version desktop/mygo.json)"; fi
+          case "$tag" in desktop-v[0-9]*) ;; *) echo "bad tag: $tag"; exit 1;; esac
+          ver="${tag#desktop-v}"
+          jq --arg v "$ver" '.version = $v' desktop/mygo.json > "$RUNNER_TEMP/m.json" && mv "$RUNNER_TEMP/m.json" desktop/mygo.json
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"; echo "ver=$ver" >> "$GITHUB_OUTPUT"
+      - name: Build (Next standalone + Node + MyGo, darwin/arm64 + darwin/amd64)
+        run: desktop/scripts/package.sh darwin/arm64,darwin/amd64
+      - name: Verify + collect
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          mkdir -p dist
+          for a in arm64:arm64 amd64:x64; do
+            d="desktop/build/darwin-${a%%:*}"; app="$d/AI News Radar.app"
+            lipo -info "$app/Contents/MacOS/AI News Radar" "$app/Contents/Resources/node/bin/node"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            dmg=$(ls "$d"/*.dmg | head -1); hdiutil verify "$dmg"
+            cp "$dmg" "dist/AI-News-Radar-$VER-macos-${a##*:}.dmg"
+          done
+          (cd dist && shasum -a 256 *.dmg > SHA256SUMS && cat SHA256SUMS)
+      - name: Release notes
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          VER: ${{ steps.ver.outputs.ver }}
+          SIGNED: ${{ steps.sign.outputs.signed }}
+        run: |
+          prev=$(git tag -l 'desktop-v*' --sort=-v:refname | grep -vx "$TAG" | head -1 || true)
+          {
+            echo "## AI News Radar $VER（macOS 桌面版）"
+            echo
+            echo "| 芯片 | 下载 |"; echo "|---|---|"
+            echo "| Apple Silicon（M 系列） | \`AI-News-Radar-$VER-macos-arm64.dmg\` |"
+            echo "| Intel | \`AI-News-Radar-$VER-macos-x64.dmg\` |"
+            echo
+            if [ "$SIGNED" = 1 ]; then echo "已使用 Developer ID 签名并经 Apple 公证。"
+            else
+              echo "**首次打开**：本版本为 ad-hoc 签名（未公证），macOS 会提示“无法验证开发者”。"
+              echo "右键（或 Control-点按）App → 打开 → 再点“打开”；或在 系统设置 → 隐私与安全性 中点“仍要打开”。"
+              echo "也可以执行：\`xattr -dr com.apple.quarantine \"/Applications/AI News Radar.app\"\`"
+            fi
+            echo
+            echo "DeepSeek 翻译：在 App 内 **设置** 页填写 API key（保存在本机数据目录，权限 0600）。"
+            echo
+            echo "校验：\`shasum -a 256 -c SHA256SUMS\`"
+            echo
+            if [ -n "$prev" ]; then echo "### 变更（$prev → $TAG）"; git log --no-merges --pretty='- %s' "$prev..HEAD" -- . | head -50; fi
+          } > dist/NOTES.md
+          cat dist/NOTES.md
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VER: ${{ steps.ver.outputs.ver }}
+          DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.dmg dist/SHA256SUMS --clobber
+            gh release edit "$TAG" --notes-file dist/NOTES.md
+          else
+            flags=(--title "AI News Radar $VER (macOS)" --notes-file dist/NOTES.md --target "$GITHUB_SHA")
+            [ "$DRAFT" = true ] && flags+=(--draft)
+            gh release create "$TAG" dist/*.dmg dist/SHA256SUMS "${flags[@]}"
+          fi

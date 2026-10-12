@@ -23,6 +23,7 @@ services:
       RETENTION_HOURS: ${RETENTION_HOURS:-48}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       TRANSLATE_ENABLED: ${TRANSLATE_ENABLED:-1}
+      SETTINGS_LOCKED: ${SETTINGS_LOCKED:-1}   # 0 = allow setting the DeepSeek key in 设置 (only on a private deployment)
       SEEN_DAYS: ${SEEN_DAYS:-30}
       DISABLE_POLLER: ${DISABLE_POLLER:-0}
       SYNC_SEED: ${SYNC_SEED:-1}

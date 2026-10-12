@@ -5,7 +5,7 @@ import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, BookOpen, ChevronRight, Command as CommandIcon, Database, Inbox, Menu, Moon,
-  Radio, Search, Settings2, Sun,
+  Radio, SlidersHorizontal, Search, Settings2, Sun,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -260,6 +260,7 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
               );
             })}
           </NavGroup>
+          <NavItem active={path === "/settings"} icon={SlidersHorizontal} label="设置" onClick={() => { router.push("/settings"); onNavigate?.(); }} />
           <NavGroup icon={BookOpen} label="文档" storageKey={DOCS_KEY} current={path === "/docs"} inside={path.startsWith("/docs")} onHeader={() => { router.push("/docs"); onNavigate?.(); }}>
             {DOCS.map((d) => <GroupLink key={d.slug} on={path === docHref(d)} onClick={() => { router.push(docHref(d)); onNavigate?.(); }}>{d.title}</GroupLink>)}
           </NavGroup>
@@ -355,7 +356,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, []);
   const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, sources, reloadSources, sections, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, zh, setZh }),
     [f, setF, navigate, facet, isRead, markRead, sources, reloadSources, sections, live, open, setOpen, addOpen, onStream, zh, setZh]);
-  const title = path === "/sources" ? "数据源" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
+  const title = path === "/sources" ? "数据源" : path === "/settings" ? "设置" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
     : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
 
   return (

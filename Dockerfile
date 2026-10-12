@@ -21,7 +21,8 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1 \
-    NEWS_DB=/app/data/news.db SOURCES_JSON=/app/sources/sources.json
+    NEWS_DB=/app/data/news.db SOURCES_JSON=/app/sources/sources.json \
+    SETTINGS_LOCKED=1
 # standalone server + static assets + seed catalog; native module compiled for this arch
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static

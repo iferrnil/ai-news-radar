@@ -119,7 +119,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## Translation (DeepSeek, optional)
 
 - `src/lib/translate.ts`: `storeItems` → `enqueueTranslation(newIds)`; worker batches (10, concurrency 2) to DeepSeek `chat/completions` with JSON output; cache `tcache(h=sha1(title,summary))`, 7-day prune. `items.title_zh/summary_zh`: NULL = not processed, '' = not needed (mostly CJK, see `needsTranslation`), else translation. On completion it publishes SSE `update` with zh fields.
-- Enabled only if `DEEPSEEK_API_KEY` is set; DB `settings.translate` ('1'/'0', via `PATCH /api/settings`) overrides `TRANSLATE_ENABLED`. Startup backfills untranslated retained items once.
+- Enabled only if a key is configured (in-app 设置 → `data/secrets.json` 0600 via src/lib/secrets.ts, else env `DEEPSEEK_API_KEY`); DB `settings.translate` ('1'/'0', via `PATCH /api/settings`) overrides `TRANSLATE_ENABLED`. Startup backfills untranslated retained items once.
 - API: `/api/items?zh=1` adds `title_zh`/`summary_zh` (list payload omits them otherwise). Client: `zh` in AppCtx (localStorage `zh`), `localize()` swaps fields and keeps `orig`; `TrBadge`/`Original` in `item-preview.tsx`.
 - Never commit keys; `.env*` is gitignored except `.env.example`.
 
@@ -225,5 +225,11 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - Go module `desktop/` (MyGo pinned v0.4.3 incl. `tool` directive; Go 1.27.1). `main.go` = window/tray/menu/single instance/link routing; `server.go` = spawn bundled node (`--require <data>/desktop-preload.cjs server.js`, env from `serverEnv`: drops DEEPSEEK_API_KEY/NODE_OPTIONS/…, sets TRANSLATE_ENABLED=0, HOSTNAME=127.0.0.1, free PORT, NEWS_DB in userData), `/api/health` wait, shutdown = close stdin (preload exits) → SIGTERM → kill. Stdin is used because GTK/WebKit threads leave SIGTERM blocked in the child's mask (verified on Linux).
 - `src/lib/db.ts` closes the DB on process `exit` (WAL checkpoint) — harmless for web/docker.
 - `desktop/scripts/package.sh [platforms]` (MIRROR=cn for npmmirror): STANDALONE build → `resources/server` (.next renamed `next-dist` + server.js distDir patched, because mygo drops hidden files; sharp/@img removed; better-sqlite3 13 ships Node-API prebuilds, copied per platform) → Node binaries per arch → `go tool mygo build`. Generated resources/build/.cache are gitignored; `desktop` is in .dockerignore, eslint ignores, tsconfig exclude.
-- Linux can cross-compile the universal .app (unsigned, no dmg); signing/dmg need macOS → workflow kept at `desktop/ci/desktop-macos.yml` (publishing token lacks `workflow` scope; move it to `.github/workflows/` to enable) (ad hoc, or Developer ID + notarization when secrets exist).
+- Linux can cross-compile the universal .app (unsigned, no dmg); signing/dmg need macOS → workflow kept at `desktop/ci/desktop-release.yml (tag desktop-v* → per-arch dmgs + SHA256SUMS + gh release)` (publishing token lacks `workflow` scope; move it to `.github/workflows/` to enable) (ad hoc, or Developer ID + notarization when secrets exist).
 - Tests: `cd desktop && go test ./...`; `AI_RADAR_TEST_RES=$PWD/build/linux-amd64 go test ./...` runs the real bundle (seed, health, index, graceful stop, WAL checkpointed).
+
+## Settings (DeepSeek, in-app)
+- `src/lib/secrets.ts`: key/base/model in `SECRETS_FILE` (default dirname(NEWS_DB)/secrets.json, atomic write, 0600), read at runtime (no restart). APIs expose only `deepseekPublic()` (configured/source/baseUrl/model/locked) — never the key; never log it.
+- `/api/settings` GET/PATCH (`deepseek.key|clearKey|baseUrl|model` → 403 when `SETTINGS_LOCKED=1`), `/api/settings/test` (stored key always; typed key only unlocked). UI: `/settings` (Settings.tsx), sidebar 设置, ⌘K, translate menu link.
+- Docker/compose default `SETTINGS_LOCKED=1`; desktop drops SETTINGS_LOCKED/SECRETS_FILE and sets SECRETS_FILE=<dataDir>/secrets.json. Box prod runs `SETTINGS_LOCKED=1` too.
+- Tests: e2e t12 (restart.sh accepts extra env, e.g. `restart.sh SETTINGS_LOCKED=1`); packaged linux smoke /tmp/gui-settings.sh.

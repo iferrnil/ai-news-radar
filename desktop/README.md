@@ -4,7 +4,7 @@
 
 - 启动时在 `127.0.0.1` 的随机空闲端口启动内置服务，`/api/health` 就绪后在原生窗口（WKWebView）中打开；
 - 数据库在用户数据目录：`~/Library/Application Support/AI News Radar/news.db`（日志 `server.log` 也在这里）；
-- 不读取/传递 `DEEPSEEK_API_KEY`，翻译默认关闭（`TRANSLATE_ENABLED=0`）；
+- 不读取/传递环境变量 `DEEPSEEK_API_KEY`，翻译默认关闭；在 App 的 **设置** 页填写 DeepSeek key（保存到数据目录 `secrets.json`，权限 0600，立即生效）后可开启“抓取时翻译”。没有用 macOS 钥匙串：MyGo 没有钥匙串 API，而调用 `security` 命令会把 key 暴露在进程参数里；
 - 站外链接用默认浏览器打开；只允许运行一个实例（再次打开会把窗口调到前台）；
 - 关闭窗口 = 隐藏（菜单栏图标仍在），菜单栏 / 应用菜单：显示 / 隐藏（⌘⇧R）、刷新（⌘R）、打开数据目录、退出（⌘Q）；
 - 退出时先关闭内置服务的 stdin（服务随即退出并正常关闭 SQLite），再依次 SIGTERM、强杀兜底。
@@ -40,9 +40,18 @@ codesign --force --deep --sign - "AI News Radar.app"
 xattr -dr com.apple.quarantine "AI News Radar.app"
 ```
 
-## GitHub Actions
+## GitHub Actions / Releases
 
-工作流文件在 `desktop/ci/desktop-macos.yml`（推送工作流需要 GitHub token 的 `workflow` 权限，当前发布用的 token 没有，所以没放进 `.github/workflows/`）。启用：`mkdir -p .github/workflows && git mv desktop/ci/desktop-macos.yml .github/workflows/ && git commit -m "ci: desktop" && git push`（需先 `gh auth refresh -s workflow`）。启用后，手动触发（Actions › desktop-macos › Run workflow）或推送 `desktop-v*` 标签时，在 `macos-latest` 上构建 universal 版，产物 `AI-News-Radar-macOS`（.dmg）可在该次运行页面下载。
+工作流在 `desktop/ci/desktop-release.yml`（推送 `.github/workflows/` 需要 token 的 `workflow` 权限，当前 token 只有 `gist, read:org, repo`）。启用步骤：
+
+```bash
+gh auth refresh -h github.com -s workflow
+mkdir -p .github/workflows && git mv desktop/ci/desktop-release.yml .github/workflows/desktop-release.yml
+git commit -m "ci: desktop release workflow" && git push
+git tag desktop-v0.1.0 && git push --tags
+```
+
+推送 `desktop-v*` 标签（或 Actions › desktop-release › Run workflow，可选 tag / 草稿）后，在 `macos-latest` 上分别构建 arm64 和 x64 两个 .dmg（版本号取自标签），校验签名后生成 `SHA256SUMS` 和发布说明，创建（或更新）对应的 GitHub Release。
 
 - 没有配置签名 secrets：ad-hoc 签名（按上面“首次打开”处理）；
 - 配置了以下 secrets：用 Developer ID 签名并公证（无需任何首次打开操作）：
