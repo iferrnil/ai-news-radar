@@ -1,5 +1,5 @@
 "use client";
-// 设置: DeepSeek key (write-only, masked), optional base URL / model, translation toggle.
+// 设置: DeepSeek key (write-only, masked), optional base URL / model, translation toggle; P0 通知, 阅读, desktop updates (settings-extra.tsx).
 import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Lock, PlugZap, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -12,10 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { api } from "./common";
+import { DesktopCard, NotifyCard, ReadingCard, type NotifyPrefs } from "./settings-extra";
 
 type DS = { configured: boolean; source: "app" | "env" | null; baseUrl: string; model: string; baseUrlCustom: boolean; modelCustom: boolean; locked: boolean };
 type TR = { available: boolean; enabled: boolean; done: number; queued: number; failed: number; lastError: string | null };
-type S = { deepseek: DS; translate: TR };
+type S = { deepseek: DS; translate: TR; notify: NotifyPrefs; desktop: boolean; version?: string | null };
 type Test = { ok: boolean; error?: string } | null;
 
 export default function Settings() {
@@ -44,7 +45,7 @@ export default function Settings() {
   return (
     <div className="mx-auto w-full max-w-[760px] px-3 pb-20 pt-6 sm:px-6">
       <h1 className="type-h1 font-semibold tracking-tight">设置</h1>
-      <p className="mt-0.5 type-body text-muted-foreground">DeepSeek 翻译。API key 只保存在服务器端（本机数据目录，权限 0600），不会出现在任何接口返回、日志或导出文件中。</p>
+      <p className="mt-0.5 type-body text-muted-foreground">DeepSeek 翻译、P0 通知与阅读。API key 只保存在服务器端（本机数据目录，权限 0600），不会出现在任何接口返回、日志或导出文件中。</p>
 
       {locked && <Alert className="mt-4"><Lock /><AlertTitle>设置已锁定</AlertTitle><AlertDescription>这个部署设置了 SETTINGS_LOCKED=1，只能通过环境变量（DEEPSEEK_API_KEY 等）配置。</AlertDescription></Alert>}
 
@@ -104,6 +105,10 @@ export default function Settings() {
           </label>
         </CardContent>
       </Card>
+
+      <NotifyCard desktop={!!s?.desktop} server={s?.notify ?? null} locked={locked} onSaved={(n) => setS((cur) => (cur ? { ...cur, notify: n } : cur))} />
+      <ReadingCard />
+      {s?.desktop && <DesktopCard version={s.version ?? null} />}
     </div>
   );
 }

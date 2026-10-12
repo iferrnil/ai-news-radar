@@ -89,9 +89,10 @@ export function storeItems(src: SourceRow, items: FetchedItem[]) {
   })();
   enqueueTranslation(newIds);
   for (const id of removed) publish({ event: "removed", id });
-  if (newIds.length) for (const r of queryItems(`AND i.id IN (${newIds.map(() => "?").join(",")})`, newIds, newIds.length)) publish({ event: "item", item: r });
+  const fresh = newIds.length ? queryItems(`AND i.id IN (${newIds.map(() => "?").join(",")})`, newIds, newIds.length) : [];
+  for (const r of fresh) publish({ event: "item", item: r });
   for (const id of updated) for (const r of queryItems("AND i.id=?", [id], 1)) publish({ event: "update", item: r });
-  return { newIds, merged: updated.size };
+  return { newIds, merged: updated.size, fresh };
 }
 
 /** Drop items past retention and old seen-IDs, then actually give the space back (incremental vacuum + WAL truncate). */
@@ -102,7 +103,9 @@ export function prune() {
     db.prepare("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE published < ?)").run(cutoff);
     db.prepare("DELETE FROM tcache WHERE ts < ?").run(Date.now() / 1000 - 7 * 86400);
     db.prepare("DELETE FROM seen WHERE ts < ?").run(Date.now() / 1000 - Number(process.env.SEEN_DAYS ?? 30) * 86400);
-    return db.prepare("DELETE FROM items WHERE published < ?").run(cutoff).changes;
+    const n = db.prepare("DELETE FROM items WHERE published < ?").run(cutoff).changes;
+    if (n) db.prepare("DELETE FROM read_items WHERE item_id NOT IN (SELECT id FROM items)").run();
+    return n;
   })();
   db.pragma("incremental_vacuum");
   db.pragma("wal_checkpoint(TRUNCATE)");
@@ -121,6 +124,7 @@ export function deleteSources(ids: number[]) {
       db.prepare("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE source_id=?)").run(id);
       items += db.prepare("DELETE FROM items WHERE source_id=?").run(id).changes;
       db.prepare("DELETE FROM sources WHERE id=?").run(id);
+      db.prepare("DELETE FROM source_health WHERE source_id=?").run(id);
       if (s.origin === "seed") db.prepare("INSERT OR REPLACE INTO deleted_seeds VALUES(?,?)").run(s.name, Date.now() / 1000);
       deleted++;
     }

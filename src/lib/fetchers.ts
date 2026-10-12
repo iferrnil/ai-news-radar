@@ -1,4 +1,5 @@
-import { clean, httpGet, normUrl, parseDate, sleep, UA } from "./util";
+import { clean, errMsg, httpGet, normUrl, parseDate, UA } from "./util";
+import { backoff, FetchError, kindOf, netFetch, retryAfter, sleep } from "./net";
 import { discoverFeeds, parseFeed } from "./feed";
 import type { FetchedItem, SourceRow } from "./types";
 
@@ -22,9 +23,9 @@ async function condGet(url: string, headers: Record<string, string> = {}) {
 export async function fetchRss(src: Src): Promise<FetchedItem[]> {
   const r = await condGet(src.url);
   if (r.status === 304) return []; // unchanged since last poll
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) throw new FetchError(`HTTP ${r.status}`, r.status === 404 ? "not_found" : r.status === 429 ? "rate_limit" : "http");
   const f = parseFeed(await r.text());
-  if (!f) throw new Error("不是有效的 RSS/Atom");
+  if (!f) throw new FetchError("不是有效的 RSS/Atom", "parse");
   return f.items;
 }
 
@@ -103,23 +104,49 @@ export async function fetchApi(src: Src): Promise<FetchedItem[]> {
 }
 
 // ---------------------------------------------------------------- X via FxEmbed
-const FX = "https://api.fxtwitter.com/2";
-/** FxEmbed returns spurious 404s ("User not found" for real users) – retry 404/429/5xx; only 404 on every try is a real miss. */
-async function fxGet(url: string, tries = 5): Promise<Response> {
-  let last: Response | Error | null = null;
-  for (let i = 0; i < tries; i++) {
-    try {
-      const r = await fetch(url, { headers: { "User-Agent": "ai-news-crawler/1.0", Accept: "application/json" }, signal: AbortSignal.timeout(20000) });
-      if (![404, 429, 500, 502, 503, 504].includes(r.status)) return r;
-      last = r;
-      if (r.status === 404 && i === tries - 1) return r;
-    } catch (e) {
-      last = e as Error;
+// FxEmbed (api.fxtwitter.com) is free but flaky: spurious 404 "User not found" for real accounts, 429s and slow replies.
+// FX_MIRRORS = comma-separated API bases tried in order (default the official one; e.g. add https://api.fixupx.com/2).
+// A mirror that fails 3 times in a row is skipped for 5 min (unless every mirror is down).
+const FX_BASES = (process.env.FX_MIRRORS || "https://api.fxtwitter.com/2").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean);
+const gm = globalThis as unknown as { __fxMirrors?: Map<string, { fails: number; until: number }> };
+const mirrors = (gm.__fxMirrors ??= new Map());
+const FX_TIMEOUT = Number(process.env.FX_TIMEOUT_MS ?? 12_000);
+const FX_TRIES = Number(process.env.FX_TRIES ?? 3);
+const mirrorOrder = () => {
+  const now = Date.now();
+  const ok = FX_BASES.filter((b) => (mirrors.get(b)?.until ?? 0) <= now);
+  return ok.length ? ok : FX_BASES;
+};
+const mark = (b: string, ok: boolean) => {
+  const m = mirrors.get(b) ?? { fails: 0, until: 0 };
+  if (ok) { m.fails = 0; m.until = 0; } else if (++m.fails >= 3) m.until = Date.now() + 5 * 60_000;
+  mirrors.set(b, m);
+};
+export const fxMirrorState = () => FX_BASES.map((b) => ({ base: b, ...(mirrors.get(b) ?? { fails: 0, until: 0 }) }));
+
+/** GET `path` from the first mirror that answers. 404/429/5xx/timeouts are retried with jittered backoff;
+ *  `{ status: 404 }` only when every try on every mirror said 404. */
+async function fxGet(path: string): Promise<Response> {
+  let last: unknown = null, all404 = true;
+  for (const base of mirrorOrder()) {
+    for (let i = 0; i < FX_TRIES; i++) {
+      try {
+        const r = await netFetch(base + path, { headers: { "User-Agent": "ai-news-crawler/1.0", Accept: "application/json" }, signal: AbortSignal.timeout(FX_TIMEOUT) });
+        if (r.ok || r.status === 204) { mark(base, true); return r; }
+        last = r; await r.body?.cancel().catch(() => {});
+        if (r.status !== 404) all404 = false;
+        if (![404, 429, 500, 502, 503, 504].includes(r.status)) { mark(base, true); return r; } // a real answer (e.g. 400)
+        if (i < FX_TRIES - 1) await sleep(retryAfter(r) ?? backoff(i, 800, 8000));
+      } catch (e) {
+        last = e; all404 = false;
+        if (i < FX_TRIES - 1) await sleep(backoff(i, 800, 8000));
+      }
     }
-    await sleep(1000 * (i + 1));
+    mark(base, false);
   }
-  if (last instanceof Response) throw new Error(`FxEmbed HTTP ${last.status}`);
-  throw last ?? new Error("FxEmbed failed");
+  if (all404) return new Response(null, { status: 404 });
+  if (last instanceof Response) throw new FetchError(`FxEmbed HTTP ${last.status}`, last.status === 429 ? "rate_limit" : "http");
+  throw last instanceof Error ? new FetchError(`FxEmbed ${errMsg(last)}`, kindOf(last)) : new FetchError("FxEmbed failed", "other");
 }
 
 function xItem(text: string, url: string, id: string, author: string, ts: number | null, links: string[]): FetchedItem {
@@ -129,7 +156,7 @@ function xItem(text: string, url: string, id: string, author: string, ts: number
 }
 
 export async function fxProfile(handle: string): Promise<any | null> {
-  const r = await fxGet(`${FX}/profile/${encodeURIComponent(handle)}`);
+  const r = await fxGet(`/profile/${encodeURIComponent(handle)}`);
   if (r.status === 404) return null;
   if (!r.ok) throw new Error(`FxEmbed HTTP ${r.status}`);
   return ((await r.json()) as any).user ?? null;
@@ -137,11 +164,17 @@ export async function fxProfile(handle: string): Promise<any | null> {
 
 export async function fetchX(src: Src): Promise<FetchedItem[]> {
   const handle = src.username!;
-  const r = await fxGet(`${FX}/profile/${encodeURIComponent(handle)}/statuses?count=20`);
+  const r = await fxGet(`/profile/${encodeURIComponent(handle)}/statuses?count=20`);
   if (r.status === 204) return [];
-  if (r.status === 404) throw new Error("FxEmbed 404（连续 5 次，账号可能不存在）");
-  if (!r.ok) throw new Error(`FxEmbed HTTP ${r.status}`);
-  const d = (await r.json()) as any;
+  if (r.status === 404) {
+    // FxEmbed's 404 is often false: ask the profile endpoint whether the account exists
+    const prof = await fxProfile(handle).catch(() => undefined);
+    if (prof === null) throw new FetchError(`X 账号 @${handle} 不存在（FxEmbed 资料页也是 404）`, "not_found");
+    throw new FetchError("FxEmbed 伪 404（账号存在，时间线暂时取不到）", "false_404");
+  }
+  if (!r.ok) throw new FetchError(`FxEmbed HTTP ${r.status}`, "http");
+  let d: any;
+  try { d = await r.json(); } catch { throw new FetchError("FxEmbed 返回的不是 JSON", "parse"); }
   const out: FetchedItem[] = [];
   for (const p of d.results ?? []) {
     const author: string = p.author?.screen_name ?? "";
@@ -156,9 +189,8 @@ export async function fetchX(src: Src): Promise<FetchedItem[]> {
 
 // ---------------------------------------------------------------- X list via syndication (undocumented, ~30 calls / 15 min / IP)
 export async function syndicationList(listId: string) {
-  const r = await fetch(`https://syndication.twitter.com/srv/timeline-list/list-id/${listId}`, {
-    headers: { "User-Agent": UA }, signal: AbortSignal.timeout(20000) });
-  if (!r.ok) throw new Error(`syndication HTTP ${r.status}`);
+  const r = await httpGet(`https://syndication.twitter.com/srv/timeline-list/list-id/${listId}`, { headers: { "User-Agent": UA }, timeout: 20000, tries: 2 });
+  if (!r.ok) throw new FetchError(`syndication HTTP ${r.status}`, r.status === 429 ? "rate_limit" : "http");
   const html = await r.text();
   const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
   if (!m) throw new Error("syndication 响应里没有 __NEXT_DATA__");

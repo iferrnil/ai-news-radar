@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SourceType } from "./types";
 import { decode } from "./util";
+import { HEALTH_SCHEMA } from "./health";
 import { legacyKey, migrateSections, seedTarget } from "./sections";
 
 const DB_PATH = process.env.NEWS_DB ?? path.join(/*turbopackIgnore: true*/ process.cwd(), "data", "news.db");
@@ -40,6 +41,7 @@ DROP INDEX IF EXISTS items_src;
 CREATE TABLE IF NOT EXISTS tcache(h TEXT PRIMARY KEY, t TEXT, s TEXT, ts REAL NOT NULL) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS deleted_seeds(name TEXT PRIMARY KEY, ts REAL NOT NULL) WITHOUT ROWID; -- tombstones: built-ins the user deleted
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS read_items(item_id INTEGER PRIMARY KEY, ts REAL NOT NULL); -- read state, only with read sync (desktop / READ_SYNC=1)
 CREATE TABLE IF NOT EXISTS sections(key TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, icon TEXT, in_all INTEGER NOT NULL DEFAULT 1, pos INTEGER NOT NULL DEFAULT 0, created REAL) WITHOUT ROWID; -- user-created sidebar sections
 `;
 
@@ -100,6 +102,7 @@ export function getDb(): Database.Database {
     db.pragma("temp_store = MEMORY");
     db.pragma("journal_size_limit = 4194304"); // cap the WAL file at 4 MB after checkpoints
     db.exec(SCHEMA);
+    db.exec(HEALTH_SCHEMA);
     // translation columns (NULL = not processed yet, '' = no translation needed)
     const cols = new Set((db.prepare("PRAGMA table_info(items)").all() as { name: string }[]).map((c) => c.name));
     const scols = new Set((db.prepare("PRAGMA table_info(sources)").all() as { name: string }[]).map((c) => c.name));

@@ -45,6 +45,19 @@ mkdir -p "$CACHE/prebuilds" && mv "$B/prebuilds/"*.node "$CACHE/prebuilds/"
 rm -rf "$RES/server/node_modules/@img" "$RES/server/node_modules/sharp"   # next/image is not used; sharp is linux-only native code
 if find "$RES/server" -name '*.node' | grep -q .; then echo "unexpected native addons:"; find "$RES/server" -name '*.node'; exit 1; fi
 
+echo "== 2b. slim the server (nothing here is loaded by \`next start\`)"
+S="$RES/server"; before=$(du -sk "$S" | cut -f1)
+# source maps, typings, docs (licenses stay)
+find "$S" -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.tsbuildinfo' \
+  -o -iname 'README*' -o -iname 'CHANGELOG*' -o -iname 'HISTORY*' -o -name '*.md' -o -name '*.markdown' \) -delete
+# Next: the experimental (PPR / React canary) runtimes and dev-only refresh/mock helpers are never used by a production build
+rm -f "$S/node_modules/next/dist/compiled/next-server/"*experimental*
+rm -rf "$S/node_modules/next/dist/compiled/@next/react-refresh-utils" "$S/node_modules/next/dist/compiled/@mswjs"
+# fonts: drop Cyrillic/Greek/Vietnamese subsets of the UI/mono fonts (the app is zh/en; CSS just skips missing ranges)
+find "$S/next-dist/static/media" -type f \( -name '*-cyrillic*' -o -name '*-greek*' -o -name '*-vietnamese*' \) -delete
+find "$S" -type d -empty -delete
+echo "server: $((before / 1024)) MB -> $(( $(du -sk "$S" | cut -f1) / 1024 )) MB"
+
 echo "== 3. per-arch Node $NODE_VERSION + better-sqlite3 $BSQ_VERSION prebuilds"
 for P in ${PLATFORMS//,/ }; do
   OS="${P%/*}"; A="${P#*/}"
@@ -56,6 +69,11 @@ for P in ${PLATFORMS//,/ }; do
     fetch "$NODE_BASE/$NODE_VERSION/node-$NODE_VERSION-$OS-$NA.tar.gz" "$TGZ"
     D="$RES/$OS-$ARCH"; mkdir -p "$D/node/bin"
     tar -xzf "$TGZ" -C "$D/node/bin" --strip-components=2 "node-$NODE_VERSION-$OS-$NA/bin/node"
+    # strip the symbol table (~15% of the binary; mygo signs the result). Mach-O needs Apple's strip, so only on macOS.
+    n0=$(wc -c < "$D/node/bin/node")
+    if [ "$OS" = darwin ] && [ "$(uname)" = Darwin ]; then strip -x "$D/node/bin/node"
+    elif [ "$OS" = linux ] && command -v strip >/dev/null; then strip -s "$D/node/bin/node"; fi
+    echo "node $OS-$ARCH: $((n0 / 1048576)) MB -> $(( $(wc -c < "$D/node/bin/node") / 1048576 )) MB"
     # prebuilt addon for this platform (darwin: under resources/darwin so the universal app carries both arches' files untouched)
     PD="$RES/$OS-$ARCH/server/node_modules/better-sqlite3/prebuilds"; [ "$OS" = darwin ] && PD="$RES/darwin/server/node_modules/better-sqlite3/prebuilds"
     mkdir -p "$PD"; cp "$CACHE/prebuilds/$OS-$NA.node" "$PD/"

@@ -45,7 +45,7 @@ xattr -dr com.apple.quarantine "AI News Radar.app"
 工作流：[`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml)。发布新版本：
 
 ```bash
-git tag desktop-v0.1.0 && git push origin desktop-v0.1.0
+git tag desktop-v0.2.0 && git push origin desktop-v0.2.0
 ```
 
 推送 `desktop-v*` 标签（或 Actions › desktop-release › Run workflow，可选 tag / 草稿）后，在 `macos-latest` 上分别构建 arm64 和 x64 两个 .dmg（版本号取自标签），校验签名后生成 `SHA256SUMS` 和发布说明，创建（或更新）对应的 GitHub Release。
@@ -53,6 +53,22 @@ git tag desktop-v0.1.0 && git push origin desktop-v0.1.0
 - 没有配置签名 secrets：ad-hoc 签名（按上面“首次打开”处理）；
 - 配置了以下 secrets：用 Developer ID 签名并公证（无需任何首次打开操作）：
   `MACOS_CERTIFICATE`（.p12 的 base64）、`MACOS_CERTIFICATE_PASSWORD`、`MACOS_SIGNING_IDENTITY`（如 `Developer ID Application: Name (TEAMID)`）、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`（App 专用密码）。
+
+## 自动更新
+
+App 使用 MyGo 更新器：启动后及每 12 小时检查 GitHub Releases 上的 `update-darwin-<arch>.json`，也可在菜单「检查更新…」手动检查；下载的更新包（完整 `.tar.gz` 或增量 `.delta`）经 ed25519 签名校验后替换 App 并重启。更新签名与 Apple 签名无关，ad-hoc 签名的版本同样可以自动更新。
+
+- 公钥在 `mygo.json` 的 `updates.publicKey`；私钥只保存在仓库 secret `MYGO_UPDATER_PRIVATE_KEY`（和维护者本机备份）中，丢失后已安装的 App 将无法再验证新版本。
+- 发布前在 `CHANGELOG.md` 写好 `## [x.y.z]` 小节，更新窗口会显示它。
+- 0.1.0 没有更新器，需要手动安装一次 0.2.0。
+
+## 通知
+
+新的 P0 动态由 App 以系统通知推送（合并成批、至少间隔 1 分钟，启动时的积压不通知），点击通知打开对应条目。在 App 的「设置 › 通知」里开关或选择分区；首次通知时 macOS 会请求通知权限。
+
+## 安装包瘦身
+
+`package.sh` 的「2b. slim」步骤会去掉 source map、类型声明、文档、Next 的实验运行时与 React Refresh、非中英字体子集，并 strip Node 符号表。
 
 ## 开发 / 测试
 

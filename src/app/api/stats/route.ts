@@ -1,5 +1,7 @@
 import { getDb, RETENTION_HOURS } from "@/lib/db";
 import { schedulerState } from "@/lib/scheduler";
+import { fxMirrorState } from "@/lib/fetchers";
+import { notifyState } from "@/lib/notify";
 export const dynamic = "force-dynamic";
 
 export function GET() {
@@ -9,5 +11,6 @@ export function GET() {
   const sources = db.prepare(`SELECT COUNT(*) total, COALESCE(SUM(enabled AND supported),0) active, COALESCE(SUM(supported=0),0) unsupported,
     COALESCE(SUM(last_error IS NOT NULL AND enabled AND supported),0) errors,
     COALESCE(SUM(last_fetched IS NOT NULL AND enabled AND supported),0) fetched FROM sources`).get();
-  return Response.json({ items, sources, retentionHours: RETENTION_HOURS, scheduler: schedulerState() });
+  return Response.json({ items, sources, retentionHours: RETENTION_HOURS, scheduler: schedulerState(),
+    fx: fxMirrorState(), notify: { ...notifyState(), recent: undefined } });
 }

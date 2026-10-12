@@ -38,14 +38,16 @@ export function parseDate(v: unknown): number | null {
   return Number.isNaN(t) ? null : Math.floor(t / 1000);
 }
 
-export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export { sleep } from "./net";
+import { backoff, netFetch, retryAfter, sleep } from "./net";
 
+/** GET with a per-attempt timeout; 429/5xx and network errors are retried with jittered exponential backoff (Retry-After wins). */
 export async function httpGet(url: string, opts: { timeout?: number; tries?: number; headers?: Record<string, string> } = {}) {
   const tries = opts.tries ?? 3;
   let last: unknown;
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url, {
+      const r = await netFetch(url, {
         headers: {
           "User-Agent": UA,
           Accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/html;q=0.8, application/json;q=0.8, */*;q=0.5",
@@ -56,13 +58,14 @@ export async function httpGet(url: string, opts: { timeout?: number; tries?: num
         signal: AbortSignal.timeout(opts.timeout ?? 15000),
       });
       if ([429, 500, 502, 503, 504].includes(r.status) && i < tries - 1) {
-        await sleep(2000 * (i + 1));
+        await r.body?.cancel().catch(() => {});
+        await sleep(retryAfter(r) ?? backoff(i, 1500));
         continue;
       }
       return r;
     } catch (e) {
       last = e;
-      if (i < tries - 1) await sleep(1500 * (i + 1));
+      if (i < tries - 1) await sleep(backoff(i, 1500));
     }
   }
   throw last instanceof Error ? last : new Error(String(last));

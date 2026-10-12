@@ -16,10 +16,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toaster } from "@/components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DOCS, docHref } from "@/lib/docs-registry";
-import { type Filters, countOf, p0For, parseFilters, setP0For, toQuery, viewKey } from "./filters";
+import { type Filters, countOf, p0For, parseFilters, setP0For, setUnreadPref, toQuery, unreadPref, viewKey } from "./filters";
+import * as rs from "./read-store";
+import { initReadSync, useReadVersion } from "./read-store";
+import { handleBatch } from "./notify-client";
 import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
 import { secIcon } from "./section-icon";
+import { HealthDot, healthOf, healthText } from "./source-health";
 import { type SectionApiRow, type Section, type SourceRow, allSections, api, inAll, secZh, sectionOf, setSections } from "./common";
 import { Languages, MinusCircle } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -42,7 +46,7 @@ type Ctx = {
   f: Filters; setF: (p: Partial<Filters>) => void;
   /** Switch the feed view (section / source), keeping the P0 toggle. */
   navigate: (p: Partial<Filters>) => void;
-  facet: ItemOut[]; setFacet: (i: ItemOut[]) => void; isRead: (id: number) => boolean; markRead: (id: number) => void; sources: SourceRow[]; reloadSources: () => Promise<void>;
+  facet: ItemOut[]; setFacet: (i: ItemOut[]) => void; isRead: (id: number) => boolean; markRead: (id: number) => void; markManyRead: (ids: number[]) => boolean; markManyUnread: (ids: number[]) => void; readVer: number; sources: SourceRow[]; reloadSources: () => Promise<void>;
   live: boolean; setLive: (b: boolean) => void; open: ItemOut | null; setOpen: (i: ItemOut | null) => void;
   sections: Section[]; // built-in + user-created (re-render trigger; read via allSections()/secZh too)
   setPalette: (b: boolean) => void; addOpen: boolean; setAddOpen: (b: boolean) => void;
@@ -70,7 +74,7 @@ function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo
   return (
     <>
     <div className={cn("group/src relative flex h-7 items-center rounded-md transition-colors duration-150 ease-out", active ? "bg-sidebar-accent text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground", confirm && "bg-hover text-foreground")}>
-      <button onClick={onGo} title={s.last_error ?? s.name} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 type-caption outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+      <button onClick={onGo} title={[s.name, healthText(s), s.last_error].filter(Boolean).join("\n")} data-health={healthOf(s).level} className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 type-caption outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
         <StatusDot s={s} />
         <span className="flex-1 truncate text-left">{label}</span>
         <span className={cn("font-mono type-meta tabular-nums text-faint transition-opacity duration-150 group-hover/src:opacity-0 group-focus-within/src:opacity-0 [@media(hover:none)]:hidden", confirm && "opacity-0")}>{s.item_count || ""}</span>
@@ -108,28 +112,30 @@ function ThemeToggle() {
   );
 }
 
-export function StatusDot({ s }: { s: Pick<SourceRow, "enabled" | "supported" | "last_error" | "last_fetched"> }) {
-  const c = !s.supported || !s.enabled ? "bg-faint/50" : s.last_error ? "bg-red-500 shadow-[0_0_6px_var(--color-red-500)]" : s.last_fetched ? "bg-emerald-500/90" : "bg-amber-400";
-  return <span className={cn("inline-block size-1.5 shrink-0 rounded-full", c)} />;
+export function StatusDot({ s }: { s: SourceRow }) {
+  const h = healthOf(s);
+  return <HealthDot level={h.level === "unknown" && s.last_fetched && !s.last_error ? "ok" : h.level} />;
 }
 
-function NavItem({ active, icon: Icon, label, count, onClick, className }: { active: boolean; icon: React.ElementType; label: string; count?: number; onClick: () => void; className?: string }) {
+function NavItem({ active, icon: Icon, label, count, unread, onClick, className }: { active: boolean; icon: React.ElementType; label: string; count?: number; unread?: number; onClick: () => void; className?: string }) {
   return (
     <button onClick={onClick} className={cn("group relative flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 type-body font-medium tracking-[-0.005em] transition-colors duration-150 ease-out outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
       active ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]" : "text-muted-foreground hover:bg-hover hover:text-foreground", !active && count === 0 && "opacity-60", className)}>
       {active && <span className="absolute -left-2.5 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
       <Icon className={cn("size-4 transition-colors duration-150 ease-out", active ? "text-brand" : "text-faint group-hover:text-foreground")} />
       <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-      {count != null && <span className={cn("font-mono type-meta tabular-nums", count === 0 ? "text-faint/60" : "text-faint")}>{count}</span>}
+      {/* unread count (brand) while there is something unread, else the total */}
+      {count != null && (unread ? <span data-testid="unread-count" title={`未读 ${unread} / 共 ${count}`} className="font-mono type-meta font-medium tabular-nums text-brand">{unread}</span>
+        : <span title={unread === 0 && count ? `全部已读 · 共 ${count}` : undefined} className={cn("font-mono type-meta tabular-nums", count === 0 ? "text-faint/60" : "text-faint")}>{count}</span>)}
     </button>
   );
 }
 
 /** Sidebar section row: a plain filter row; every section gets a hover/focus ⚙ that opens 管理分区 on /sources. */
-function SecNav({ s, active, count, onClick, onManage }: { s: Section; active: boolean; count: number; onClick: () => void; onManage: () => void }) {
+function SecNav({ s, active, count, unread, onClick, onManage }: { s: Section; active: boolean; count: number; unread?: number; onClick: () => void; onManage: () => void }) {
   return (
     <div className="group/sec relative">
-      <NavItem active={active} icon={secIcon(s)} label={s.zh} count={count} onClick={onClick} />
+      <NavItem active={active} icon={secIcon(s)} label={s.zh} count={count} unread={unread} onClick={onClick} />
       <Button variant="ghost" size="icon-xs" aria-label={`管理分区「${s.zh}」`} onClick={onManage}
         className="absolute right-1.5 top-1 z-10 bg-sidebar text-faint opacity-0 transition-opacity duration-150 hover:text-foreground group-hover/sec:opacity-100 focus-visible:opacity-100">
         <Settings2 />
@@ -215,19 +221,22 @@ function GroupLink({ on, icon: Icon, children, onClick }: { on: boolean; icon?: 
 }
 
 export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
-  const { f, navigate, sources, facet, sections } = useApp();
+  const { f, navigate, sources, facet, sections, isRead } = useApp();
   const router = useRouter(); const path = usePathname();
   const active = sources.filter((s) => s.enabled && s.supported);
   const feed = path === "/";
   const count = (section: Filters["section"]) => facet.length ? countOf(facet, { section, source: null, p0: p0For(section || "all") })
     : active.filter((s) => { const k = sectionOf({ ...s, is_x: s.type.startsWith("x") }); return section ? k === section : inAll(k); }).reduce((a, s) => a + s.item_count, 0);
+  // unread per view (same filter as the feed, incl. that view's 仅 P0); null until items are loaded
+  const unread = (section: Filters["section"]) => facet.length ? countOf(facet, { section, source: null, p0: p0For(section || "all"), unread: true }, isRead) : undefined;
   const go = (p: Partial<Filters>) => { navigate({ section: "", source: null, ...p }); onNavigate?.(); };
   const on = (section: Filters["section"]) => feed && f.source == null && f.section === section;
   const errs = active.filter((s) => s.last_error).length;
+  const weak = active.filter((s) => { const l = healthOf(s).level; return l === "degraded" || l === "open"; }).length;
   const manage = () => { router.push("/sources?sections=1"); onNavigate?.(); };
   const [closed, toggleFolder] = useClosedFolders();
   const listOf = (k: string) => active.filter((s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }) === k);
-  const sec = (s: Section) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} onClick={() => go({ section: s.key })} onManage={manage} />;
+  const sec = (s: Section) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} unread={unread(s.key)} onClick={() => go({ section: s.key })} onManage={manage} />;
   const outside = sections.filter((s) => !inAll(s.key));
   return (
     <div className="flex h-full flex-col">
@@ -243,7 +252,7 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-0.5 px-2.5 pb-3">
           <SectionLabel first>信息流</SectionLabel>
-          <NavItem active={on("")} icon={Inbox} label="全部" count={count("")} onClick={() => go({})} />
+          <NavItem active={on("")} icon={Inbox} label="全部" count={count("")} unread={unread("")} onClick={() => go({})} />
           {sections.filter((s) => inAll(s.key)).map(sec)}
           {/* sections outside 全部 (e.g. 娱乐) sit below a divider */}
           {outside.length > 0 && <div className="mx-2 my-2 h-px bg-border" role="separator" title="不计入「全部」" />}
@@ -267,7 +276,7 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border p-3 type-meta text-faint">
-        <div className="flex h-5 items-center gap-2 tabular-nums"><Activity className="size-3.5" />{active.length} 个源在线{errs ? <span className="text-red-500">· {errs} 报错</span> : null}</div>
+        <div className="flex h-5 items-center gap-2 tabular-nums"><Activity className="size-3.5" />{active.length} 个源在线{errs ? <span className="text-red-500">· {errs} 报错</span> : null}{weak ? <span className="text-amber-500" title="成功率低于 90% 或已熔断">· {weak} 不稳定</span> : null}</div>
       </div>
     </div>
   );
@@ -279,15 +288,11 @@ function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const f = useMemo(() => parseFilters(new URLSearchParams(sp.toString())), [sp]);
   const [facet, setFacet] = useState<ItemOut[]>([]);
-  const [read, setRead] = useState<Set<number>>(new Set());
-  useEffect(() => { try { setRead(new Set(JSON.parse(localStorage.getItem("read.ids") ?? "[]"))); } catch {} }, []);
-  const markRead = useCallback((id: number) => setRead((cur) => {
-    if (cur.has(id)) return cur;
-    const n = new Set(cur); n.add(id);
-    localStorage.setItem("read.ids", JSON.stringify([...n].slice(-3000)));
-    return n;
-  }), []);
-  const isRead = useCallback((id: number) => read.has(id), [read]);
+  // read state: see read-store.ts (localStorage + optional server mirror); readVer bumps on every change
+  const readVer = useReadVersion();
+  const markRead = useCallback((id: number) => { rs.markRead([id]); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- new identity per read change, so memoized consumers re-render
+  const isRead = useCallback((id: number) => rs.isRead(id), [readVer]);
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [live, setLive] = useState(false);
   const [zh, setZhState] = useState(true);
@@ -319,8 +324,9 @@ function Shell({ children }: { children: React.ReactNode }) {
     const es = new EventSource("/api/stream");
     es.onopen = () => setLive(true);
     es.onerror = () => setLive(false);
-    for (const ev of ["item", "update", "removed", "sources"]) es.addEventListener(ev, (e) => {
+    for (const ev of ["item", "update", "removed", "sources", "notify"]) es.addEventListener(ev, (e) => {
       const d = JSON.parse((e as MessageEvent).data); listeners.current.forEach((fn) => fn(ev, d));
+      if (ev === "notify" && d.batch) handleBatch(d.batch, (id) => openByIdRef.current(id));
       if (ev === "item") reloadSourcesRef.current?.();
       if (ev === "sources") reloadNowRef.current?.();
     });
@@ -328,17 +334,28 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, []);
   const fRef = useRef(f);
   useEffect(() => { fRef.current = f; }, [f]);
+  // open an item by id from anywhere (notification click, desktop shell via window.__radarOpenItem): the Feed reads ?item=
+  const openByIdRef = useRef((id: number) => { const q = toQuery({ ...fRef.current }); router.push(`${q}${q.includes("?") ? "&" : "?"}item=${id}`, { scroll: false }); });
+  useEffect(() => {
+    const w = window as unknown as { __radarOpenItem?: (id: number) => void };
+    w.__radarOpenItem = (id) => openByIdRef.current(Number(id));
+    const t = setTimeout(() => { void initReadSync(); }, 1500); // off the critical path
+    return () => { clearTimeout(t); delete w.__radarOpenItem; };
+  }, []);
   // switching view restores that view's own 仅 P0; toggling P0 stores it for the current view only
   const navigate = useCallback((p: Partial<Filters>) => {
     const next = { ...fRef.current, ...p };
     if ("p0" in p) setP0For(viewKey(next), !!p.p0); else next.p0 = p0For(viewKey(next));
+    if ("unread" in p) setUnreadPref(!!p.unread);
     router.push(toQuery(next), { scroll: false });
   }, [router]);
   const setF = navigate;
   // first load without ?p0: apply the stored value for this view
   useEffect(() => {
-    if (path !== "/" || new URLSearchParams(window.location.search).has("p0")) return;
-    if (p0For(viewKey(fRef.current))) router.replace(toQuery({ ...fRef.current, p0: true }), { scroll: false });
+    const qs = new URLSearchParams(window.location.search);
+    if (path !== "/" || qs.has("item")) return;
+    const p0 = qs.has("p0") ? fRef.current.p0 : p0For(viewKey(fRef.current)), unread = qs.has("unread") ? !!fRef.current.unread : unreadPref();
+    if (p0 !== fRef.current.p0 || unread !== !!fRef.current.unread) router.replace(toQuery({ ...fRef.current, p0, unread }), { scroll: false });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [sections, setSectionList] = useState<Section[]>(() => allSections());
   const reloadSources = useCallback(async () => {
@@ -354,8 +371,10 @@ function Shell({ children }: { children: React.ReactNode }) {
     const h = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPalette((p) => !p); } };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, []);
-  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, sources, reloadSources, sections, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, zh, setZh }),
-    [f, setF, navigate, facet, isRead, markRead, sources, reloadSources, sections, live, open, setOpen, addOpen, onStream, zh, setZh]);
+  const markManyRead = useCallback((ids: number[]) => rs.markRead(ids), []);
+  const markManyUnread = useCallback((ids: number[]) => rs.markUnread(ids), []);
+  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, zh, setZh }),
+    [f, setF, navigate, facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, open, setOpen, addOpen, onStream, zh, setZh]);
   const title = path === "/sources" ? "数据源" : path === "/settings" ? "设置" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
     : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
 

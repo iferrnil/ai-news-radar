@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 )
 
 //go:embed resources/tray.png
@@ -24,6 +25,9 @@ var trayIcon []byte
 const appName = "AI News Radar"
 
 func main() {
+	// Sparkle-style updates from GitHub Releases (desktop-v* tags, ed25519-signed archives, see mygo.json "updates"):
+	// a background check twice a day (first ~10 s after launch when due) + 检查更新… in the app and tray menus.
+	mygo.Use(updater.New(updater.Options{Interval: 12 * time.Hour, Language: "zh-Hans"}))
 	if !mygo.App.RequestSingleInstanceLock() {
 		return // the running instance gets OnSecondInstance and comes to the front
 	}
@@ -71,7 +75,8 @@ func main() {
 			}
 		})
 
-		srv, err = StartServer(ServerConfig{Node: node, AppDir: app, DataDir: data, Log: lw})
+		srv, err = StartServer(ServerConfig{Node: node, AppDir: app, DataDir: data, Log: lw, Port: PreferredPort,
+			ExtraEnv: []string{"AI_RADAR_VERSION=" + mygo.App.Version()}})
 		if err != nil {
 			fatal("启动内置服务失败", err)
 			return
@@ -84,6 +89,7 @@ func main() {
 				return
 			}
 			win.Page().LoadURL(srv.URL + "/")
+			go watchNotifications(appCtx, srv.URL, func(b notifyBatch) { notifyP0(win, srv.URL, b, show) })
 		}()
 		go func() { // the server died on its own: tell the user instead of a blank window
 			<-srv.Done()
@@ -119,6 +125,7 @@ func main() {
 				}},
 				{Label: "刷新", Accelerator: "CmdOrCtrl+R", Click: func(*mygo.MenuItem, *mygo.Window) { show(); win.Page().Reload() }},
 				{Label: "打开数据目录", Click: func(*mygo.MenuItem, *mygo.Window) { go mygo.Shell.OpenPath(data) }},
+				{Label: "检查更新…", Click: func(*mygo.MenuItem, *mygo.Window) { updater.CheckForUpdates() }},
 				mygo.Separator(),
 				{Label: "退出 " + appName, Accelerator: "CmdOrCtrl+Q", Click: func(*mygo.MenuItem, *mygo.Window) { quit() }},
 			}
@@ -136,7 +143,7 @@ func main() {
 
 	// graceful shutdown: stop node (SIGTERM -> it closes SQLite) before the process exits
 	// any quit (menu, Cmd+Q, Dock, SIGTERM) must let the window really close instead of hiding
-	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { quitting.Store(true) })
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { quitting.Store(true); stopApp() })
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { quitting.Store(true); stopServer(srv) })
 	mygo.App.OnQuit(func() { stopServer(srv) })
 	if err := mygo.App.Run(); err != nil {
@@ -147,6 +154,32 @@ func main() {
 }
 
 var quitting atomic.Bool
+
+// appCtx ends when the app quits (stops the notification stream before the server goes away).
+var appCtx, stopApp = context.WithCancel(context.Background())
+
+// notifyP0 shows one native notification per batch; a click brings the window up and opens the (first) item.
+func notifyP0(win *mygo.Window, base string, b notifyBatch, show func()) {
+	if !mygo.NotificationsSupported() {
+		return
+	}
+	title, body := batchText(b)
+	// one ID: a newer batch replaces the previous one instead of piling up in Notification Center
+	n := mygo.NewNotification(mygo.NotificationOptions{ID: "ai-radar-p0", Title: title, Body: body, Group: "p0"})
+	id := b.Items[0].ID
+	n.OnClick(func() {
+		show()
+		go func() {
+			ok, err := win.Page().Eval(fmt.Sprintf("typeof window.__radarOpenItem === 'function' ? (window.__radarOpenItem(%d), true) : false", id))
+			if err != nil || ok != true {
+				_ = win.Page().LoadURL(fmt.Sprintf("%s/?item=%d", base, id))
+			}
+		}()
+	})
+	if err := n.Show(); err != nil {
+		log.Println("notification:", err) // e.g. mygo.ErrNotificationsDenied
+	}
+}
 
 func quit() { quitting.Store(true); mygo.App.Quit() }
 

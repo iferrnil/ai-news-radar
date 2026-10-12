@@ -58,6 +58,7 @@ import { EmptyState } from "./empty-state";
 import { useApp } from "./app-shell";
 import { type SectionKey, TYPE, type SourceRow, ago, api, bj, allSections, sourceSection, secZh } from "./common";
 import { SourceAvatar } from "./source-avatar";
+import { HealthBadge } from "./source-health";
 
 type StatusKey = "active" | "err" | "off" | "paused" | "all";
 // 在线 = enabled & fetchable · 报错 = 在线 with last_error · 停用 = switched off · 暂停 = enabled but not fetchable (unsupported)
@@ -238,13 +239,14 @@ export default function Sources() {
               <TableHead className="hidden sm:table-cell">频率</TableHead>
               <TableHead className="hidden lg:table-cell">最近抓取</TableHead>
               <TableHead className="hidden text-right md:table-cell">条目</TableHead>
+              <TableHead className="hidden sm:table-cell">健康</TableHead>
               <TableHead>状态</TableHead>
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 && Array.from({ length: 8 }, (_, i) => (
-              <TableRow key={i}><TableCell colSpan={9}><Skeleton className="h-7 w-full" /></TableCell></TableRow>
+              <TableRow key={i}><TableCell colSpan={10}><Skeleton className="h-7 w-full" /></TableCell></TableRow>
             ))}
             {view.map((s) => (
               <TableRow key={s.id} className={cn(!s.enabled && "opacity-60")}>
@@ -276,6 +278,7 @@ export default function Sources() {
                 </TableCell>
                 <TableCell className="hidden font-mono type-caption text-muted-foreground lg:table-cell" title={bj(s.last_fetched)}>{ago(s.last_fetched)}</TableCell>
                 <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">{s.item_count}</TableCell>
+                <TableCell className="hidden sm:table-cell"><HealthBadge s={s} /></TableCell>
                 <TableCell><StatusBadge s={s} /></TableCell>
                 <TableCell className="pr-3">
                   <DropdownMenu>
@@ -294,7 +297,7 @@ export default function Sources() {
                 </TableCell>
               </TableRow>
             ))}
-            {rows.length > 0 && view.length === 0 && <TableRow className="hover:bg-transparent"><TableCell colSpan={9} className="p-0">
+            {rows.length > 0 && view.length === 0 && <TableRow className="hover:bg-transparent"><TableCell colSpan={10} className="p-0">
               <EmptyState icon={SearchX} title="没有匹配的来源" hint="调整搜索词或筛选条件后重试。">
                 <Button variant="outline" size="sm" onClick={() => { setQ(""); setFs("all"); setFsec("all"); setFt("all"); }}>清除筛选</Button>
               </EmptyState></TableCell></TableRow>}

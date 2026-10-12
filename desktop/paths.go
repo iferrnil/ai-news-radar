@@ -7,8 +7,10 @@ import (
 )
 
 // bundleLayout resolves the runtime inside the app's resources directory:
-//   <res>/node/bin/node            (per-arch, merged by mygo for darwin/universal)
-//   <res>/server/server.js …       (Next standalone + static + public + sources)
+//
+//	<res>/node/bin/node            (per-arch, merged by mygo for darwin/universal)
+//	<res>/server/server.js …       (Next standalone + static + public + sources)
+//
 // AI_RADAR_NODE / AI_RADAR_SERVER override them (development, tests).
 func bundleLayout(res string) (node, app string) {
 	exe := "node"

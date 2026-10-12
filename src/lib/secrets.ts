@@ -1,6 +1,7 @@
 // Runtime DeepSeek configuration. Precedence: in-app setting (0600 JSON file next to the DB) > env vars.
 // The key never leaves the server: APIs only report `configured` + its source; never logged, never exported.
 // SETTINGS_LOCKED=1 makes the in-app setting read-only (public deployments; the Docker image defaults to it).
+import { netFetch } from "./net";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -67,7 +68,7 @@ export function updateDeepseek(p: { key?: string | null; clearKey?: boolean; bas
 export async function testDeepseek(key = deepseekKey(), base = deepseekBase()): Promise<{ ok: boolean; status?: number; error?: string }> {
   if (!key) return { ok: false, error: "未配置 API key" };
   try {
-    const r = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15_000) });
+    const r = await netFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15_000) });
     if (r.ok) return { ok: true, status: r.status };
     return { ok: false, status: r.status, error: r.status === 401 ? "API key 无效（401）" : r.status === 402 ? "余额不足（402）" : `HTTP ${r.status}` };
   } catch (e) { return { ok: false, error: `连接失败：${(e as Error).name === "TimeoutError" ? "超时" : (e as Error).message.replace(key, "***")}` }; }

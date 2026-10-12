@@ -1,6 +1,7 @@
 import { jsonResponse } from "@/lib/http";
 import { NextRequest } from "next/server";
 import { getDb, intervalFor } from "@/lib/db";
+import { HEALTH_COLS } from "@/lib/health";
 import { detect } from "@/lib/fetchers";
 import { pollOne } from "@/lib/scheduler";
 import { errMsg } from "@/lib/util";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 // Polled by every tab (sidebar every 20 s): gzip + drop nulls, 161 KB -> ~20 KB on the wire.
 export function GET(req: NextRequest) {
   const rows = getDb().prepare(`SELECT s.*, (SELECT COUNT(*) FROM items i WHERE i.source_id=s.id AND i.hidden=0) item_count, (SELECT COUNT(*) FROM items i WHERE i.source_id=s.id AND i.hidden=1) hidden_count,
-    (SELECT MAX(published) FROM items i WHERE i.source_id=s.id) latest FROM sources s
+    (SELECT MAX(published) FROM items i WHERE i.source_id=s.id) latest, ${HEALTH_COLS} FROM sources s LEFT JOIN source_health h ON h.source_id=s.id
     ORDER BY s.enabled DESC, s.supported DESC, COALESCE(s.priority,'P9'), s.category, s.name`).all();
   const body = JSON.stringify(rows, (_k, v) => (v === null ? undefined : v));
   return jsonResponse(req, body);

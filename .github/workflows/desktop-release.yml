@@ -28,14 +28,14 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # tags for the changelog
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: desktop/go.mod
           cache-dependency-path: desktop/go.sum
@@ -78,6 +78,8 @@ jobs:
           jq --arg v "$ver" '.version = $v' desktop/mygo.json > "$RUNNER_TEMP/m.json" && mv "$RUNNER_TEMP/m.json" desktop/mygo.json
           echo "tag=$tag" >> "$GITHUB_OUTPUT"; echo "ver=$ver" >> "$GITHUB_OUTPUT"
       - name: Build (Next standalone + Node + MyGo, darwin/arm64 + darwin/amd64)
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }} # ed25519 update signing (independent of Apple signing)
         run: desktop/scripts/package.sh darwin/arm64,darwin/amd64
       - name: Verify + collect
         env:
@@ -90,8 +92,13 @@ jobs:
             codesign --verify --deep --strict --verbose=2 "$app"
             dmg=$(ls "$d"/*.dmg | head -1); hdiutil verify "$dmg"
             cp "$dmg" "dist/AI-News-Radar-$VER-macos-${a##*:}.dmg"
+            # auto-update files keep MyGo's names: the manifest refers to them by name
+            ls "$d"/update-darwin-*.json >/dev/null 2>&1 || { echo "no update manifest in $d (MYGO_UPDATER_PRIVATE_KEY missing?)"; exit 1; }
+            cp "$d"/update-darwin-*.json "$d"/*-darwin-*.tar.gz dist/
+            cp "$d"/*.delta dist/ 2>/dev/null || true
           done
-          (cd dist && shasum -a 256 *.dmg > SHA256SUMS && cat SHA256SUMS)
+          ls -la dist
+          (cd dist && shasum -a 256 *.dmg *.tar.gz > SHA256SUMS && cat SHA256SUMS)
       - name: Release notes
         env:
           TAG: ${{ steps.ver.outputs.tag }}
@@ -113,11 +120,14 @@ jobs:
               echo "也可以执行：\`xattr -dr com.apple.quarantine \"/Applications/AI News Radar.app\"\`"
             fi
             echo
+            notes=$(awk -v v="$VER" '$0 ~ "^## \\[?"v"\\]?" {on=1; next} /^## / {on=0} on' CHANGELOG.md)
+            if [ -n "$notes" ]; then echo "### 更新内容"; echo "$notes"; echo; fi
+            echo "已安装 0.2.0 及以上版本的 App 会自动检查更新（菜单「检查更新…」）；0.1.0 需手动安装本版本一次。"
+            echo
             echo "DeepSeek 翻译：在 App 内 **设置** 页填写 API key（保存在本机数据目录，权限 0600）。"
             echo
             echo "校验：\`shasum -a 256 -c SHA256SUMS\`"
             echo
-            if [ -n "$prev" ]; then echo "### 变更（$prev → $TAG）"; git log --no-merges --pretty='- %s' "$prev..HEAD" -- . | head -50; fi
           } > dist/NOTES.md
           cat dist/NOTES.md
       - name: Publish GitHub Release
@@ -128,10 +138,10 @@ jobs:
           DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/*.dmg dist/SHA256SUMS --clobber
+            gh release upload "$TAG" dist/*.dmg dist/*.tar.gz dist/update-darwin-*.json $(ls dist/*.delta 2>/dev/null) dist/SHA256SUMS --clobber
             gh release edit "$TAG" --notes-file dist/NOTES.md
           else
             flags=(--title "AI News Radar $VER (macOS)" --notes-file dist/NOTES.md --target "$GITHUB_SHA")
             [ "$DRAFT" = true ] && flags+=(--draft)
-            gh release create "$TAG" dist/*.dmg dist/SHA256SUMS "${flags[@]}"
+            gh release create "$TAG" dist/*.dmg dist/*.tar.gz dist/update-darwin-*.json $(ls dist/*.delta 2>/dev/null) dist/SHA256SUMS "${flags[@]}"
           fi

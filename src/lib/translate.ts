@@ -1,6 +1,7 @@
 // Fetch-time translation of non-Chinese titles/summaries via DeepSeek (OpenAI-compatible chat API).
 // Disabled unless a key is configured (in-app 设置 or DEEPSEEK_API_KEY, see secrets.ts); can be switched off with TRANSLATE_ENABLED=0 or the UI setting (DB `settings`).
 // Cost controls: only items that look non-Chinese, title + summary (capped), batched, cached by content hash, never twice.
+import { netFetch } from "./net";
 import { createHash } from "node:crypto";
 import { getDb } from "./db";
 import { publish } from "./bus";
@@ -72,7 +73,7 @@ async function callApi(batch: { i: number; t: string; s: string }[]) {
     st.calls++;
     let res: Response;
     try {
-      res = await fetch(chatUrl(), {
+      res = await netFetch(chatUrl(), {
         method: "POST", signal: AbortSignal.timeout(90_000),
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${deepseekKey()}` },
         body: JSON.stringify({ model: deepseekModel(), temperature: 0.2, response_format: { type: "json_object" }, max_tokens: 6000,

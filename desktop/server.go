@@ -27,16 +27,17 @@ type ServerConfig struct {
 	Log      io.Writer
 	Grace    time.Duration // SIGTERM -> kill
 	ExtraEnv []string
+	Port     int // preferred port (0 = any free one)
 }
 
 type Server struct {
-	cfg  ServerConfig
-	cmd  *exec.Cmd
-	Port int
-	URL  string
-	done chan struct{}
-	err  error
-	once sync.Once
+	cfg   ServerConfig
+	cmd   *exec.Cmd
+	Port  int
+	URL   string
+	done  chan struct{}
+	err   error
+	once  sync.Once
 	stdin io.WriteCloser
 }
 
@@ -46,6 +47,21 @@ const bye = () => process.exit(0);
 process.stdin.on("end", bye); process.stdin.on("close", bye); process.stdin.on("error", bye);
 process.stdin.resume();
 `
+
+// PreferredPort is tried first so the page keeps the same origin (http://127.0.0.1:47821) between launches:
+// localStorage (theme, read state, sidebar) belongs to the origin. Taken -> a random free port.
+const PreferredPort = 47821
+
+// PickPort returns preferred when it is free on 127.0.0.1, else a free port from the OS.
+func PickPort(preferred int) (int, error) {
+	if preferred > 0 {
+		if l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", preferred)); err == nil {
+			l.Close()
+			return preferred, nil
+		}
+	}
+	return FreePort()
+}
 
 // FreePort asks the OS for an unused TCP port on 127.0.0.1.
 func FreePort() (int, error) {
@@ -98,7 +114,7 @@ func StartServer(cfg ServerConfig) (*Server, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, err
 	}
-	port, err := FreePort()
+	port, err := PickPort(cfg.Port)
 	if err != nil {
 		return nil, err
 	}

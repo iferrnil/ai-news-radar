@@ -51,6 +51,8 @@ export type SourceRow = {
   id: number; name: string; type: string; username: string | null; category: string | null; region: string | null; url: string; homepage: string | null;
   enabled: number; supported: number; unsupported_reason: string | null; priority: string | null; poll_interval: number; grp: string | null; section: string | null;
   last_fetched: number | null; last_error: string | null; last_new: number; origin: string; item_count: number; latest: number | null;
+  /** fetch health (source_health): runs = last 20 outcomes "1"/"0"; open = circuit breaker cool-down end */
+  h_runs?: string; h_last_ok?: number; h_err_at?: number; h_kind?: string; h_consec?: number; h_lat?: number; h_open?: number;
   hidden_count?: number; f_include?: string | null; f_exclude?: string | null; f_scope?: "title" | "all" | null; f_cs?: number;
 };
 

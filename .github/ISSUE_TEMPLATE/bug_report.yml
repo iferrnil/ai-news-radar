@@ -1,0 +1,36 @@
+name: 问题反馈 / Bug report
+description: 报告错误或异常行为
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 实际行为与期望行为
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: "1. 打开…\n2. 点击…"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: 运行方式
+      options: [Docker, 本地 Node, macOS 桌面版]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / 提交
+      placeholder: "desktop 0.2.0 或 commit abc1234"
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 请先删除日志中的 API key 等敏感信息
+      render: text

@@ -10,7 +10,10 @@ const HOVER_Q = "(hover: hover) and (pointer: fine)";
 function useCanHover() {
   return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
 }
-import { ArrowUp, ArrowUpRight, Inbox, RefreshCw, WifiOff } from "lucide-react";
+import { ArrowUp, ArrowUpRight, CheckCheck, CircleDot, Inbox, RefreshCw, WifiOff } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
+import { markOnHover } from "./read-store";
 import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -49,14 +52,14 @@ const BLEED = "-mx-4 px-4 sm:-mx-6 sm:px-6 xl:-mx-8 xl:px-8 2xl:-mx-10 2xl:px-10
 const CARD_H = "h-[216px]";
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
-const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; hover: boolean }) {
+const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onPreview, hover }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; onPreview: (it: ItemOut) => void; hover: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (active) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [active]);
   const x = !!it.is_x, h = x ? handleOf(it) : null, t = x ? xText(it) : "";
   const linkOnly = x && /^https?:\/\//.test(t);
   const dek = x ? "" : dekText(it.summary);
   const card = (
-    <Card ref={ref} size="sm" onClick={() => onOpen(it)} data-active={active} data-read={read} role="button" tabIndex={-1}
+    <Card ref={ref} size="sm" onClick={() => onOpen(it)} data-active={active} data-read={read} data-item={it.id} role="button" tabIndex={-1}
       className={cn(CARD_H, "group/item cursor-pointer gap-0 py-0 shadow-card ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
         "hover:-translate-y-px hover:ring-foreground/[0.16] hover:shadow-raised",
         "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/60", fresh && "fresh-row")}>
@@ -67,7 +70,8 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
         {x && <Twitter className="size-2.5 shrink-0 text-faint" />}
         {it.priority === "P0" && <Badge size="sm" variant="brand" className="px-1 font-mono font-semibold tracking-[0.02em]">P0</Badge>}
         {it.tr && <TrBadge />}
-        <time className="ml-auto shrink-0 font-mono type-meta tabular-nums text-faint" title={`北京时间 ${bj(it.published)}`}>{ago(it.published, true)}</time>
+        {!read && <span data-testid="unread-dot" aria-label="未读" title="未读" className="ml-auto size-1.5 shrink-0 rounded-full bg-brand" />}
+        <time className={cn("shrink-0 font-mono type-meta tabular-nums text-faint", read && "ml-auto")} title={`北京时间 ${bj(it.published)}`}>{ago(it.published, true)}</time>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden px-4">
         {x ? (
@@ -97,7 +101,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
   );
   if (!hover) return card;
   return (
-    <HoverCard>
+    <HoverCard onOpenChange={(o) => { if (o) onPreview(it); }}>
       <HoverCardTrigger delay={450} closeDelay={150} render={<div className="min-w-0" />}>{card}</HoverCardTrigger>
       <HoverCardContent side="right" align="start" sideOffset={8} className="w-[min(420px,calc(100vw-24px))] overflow-hidden p-0 shadow-pop ring-border">
         <ItemPreview it={it} />
@@ -107,7 +111,8 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
 });
 
 export default function Feed() {
-  const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, zh, sections } = useApp();
+  const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, markRead, markManyRead, markManyUnread, zh, sections } = useApp();
+  const sp = useSearchParams(); const router = useRouter();
   const secReady = sections.length > 0 || sectionsReady(); // 全部 must know which sections are excluded before rendering
   const [raw, setItems] = useState<ItemOut[]>([]);
   // hide items of sources that were unsubscribed (sidebar / sources page / another tab) without a refetch
@@ -150,8 +155,32 @@ export default function Feed() {
   }), [onStream]);
   useEffect(() => { const h = () => setShowTop(window.scrollY > 900); window.addEventListener("scroll", h, { passive: true }); return () => window.removeEventListener("scroll", h); }, []);
 
-  const view = useMemo(() => items.filter((it) => passes(it, f)), [items, f]);
-  const pend = useMemo(() => pending.filter((it) => passes(it, f)), [pending, f]);
+  // 只看未读 hides what was read BEFORE this view was opened (snapshot), so cards read while browsing stay put until the view changes
+  const [epoch, setEpoch] = useState(0); const loaded = raw.length > 0;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- snapshot on purpose: only view changes / mark-all refresh it
+  const snap = useMemo(() => { const s = new Set<number>(); for (const it of raw) if (isRead(it.id)) s.add(it.id); return s; }, [f, epoch, loaded]);
+  const hide = useCallback((id: number) => snap.has(id), [snap]);
+  const view = useMemo(() => items.filter((it) => passes(it, f, hide)), [items, f, hide]);
+  const pend = useMemo(() => pending.filter((it) => passes(it, f, hide)), [pending, f, hide]);
+  // the same view without 只看未读: what 全部标为已读 applies to
+  const scope = useMemo(() => (f.unread ? items.filter((it) => passes(it, { ...f, unread: false })) : view), [items, f, view]);
+  const unreadN = useMemo(() => scope.reduce((n, it) => n + (isRead(it.id) ? 0 : 1), 0), [scope, isRead]);
+  const markAll = () => {
+    const ids = scope.filter((it) => !isRead(it.id)).map((it) => it.id);
+    if (!ids.length || !markManyRead(ids)) return;
+    toast.success(`已将 ${ids.length} 条标为已读`, { action: { label: "撤销", onClick: () => { markManyUnread(ids); setEpoch((e) => e + 1); } } });
+    if (f.unread) setEpoch((e) => e + 1);
+  };
+  const onPreview = useCallback((it: ItemOut) => { if (markOnHover()) markRead(it.id); }, [markRead]);
+  // ?item=<id> (notification click / desktop shell): open that item, then drop the param
+  const itemParam = Number(sp.get("item")) || 0;
+  useEffect(() => {
+    if (!itemParam || loading) return;
+    const strip = () => { const q = new URLSearchParams(sp.toString()); q.delete("item"); const s = q.toString(); router.replace(s ? `/?${s}` : "/", { scroll: false }); };
+    const hit = items.find((x) => x.id === itemParam);
+    if (hit) { setOpen(hit); strip(); return; }
+    api<ItemOut[]>(`/api/items?id=${itemParam}${zh ? "&zh=1" : ""}`).then((r) => { if (r[0]) setOpen(zh ? localize(r[0]) : r[0]); else toast("这条内容已不在 48 小时窗口内"); }).catch(() => {}).finally(strip);
+  }, [itemParam, loading]); // eslint-disable-line react-hooks/exhaustive-deps
   // render in pages of 60 cards; an IntersectionObserver sentinel reveals more while scrolling
   const [shown, setShown] = useState(60);
   useEffect(() => { setShown(60); }, [f]);
@@ -193,7 +222,7 @@ export default function Feed() {
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   });
 
-  const p0n = countOf(items, { ...f, p0: true });
+  const p0n = countOf(items, { ...f, p0: true, unread: false });
   const lastFetch = Math.max(0, ...sources.filter((s) => s.enabled).map((s) => s.last_fetched ?? 0));
 
   return (
@@ -211,6 +240,17 @@ export default function Feed() {
           className="gap-1.5 type-caption text-muted-foreground aria-pressed:border-brand/40 aria-pressed:bg-brand-soft aria-pressed:text-brand">
           仅 P0<Badge size="sm" variant="muted" className="px-1 font-mono tabular-nums text-faint">{p0n}</Badge>
         </Toggle>
+        <Toggle variant="outline" pressed={!!f.unread} onPressedChange={(v) => setF({ unread: v })} aria-label="只看未读"
+          className="gap-1.5 type-caption text-muted-foreground aria-pressed:border-brand/40 aria-pressed:bg-brand-soft aria-pressed:text-brand">
+          <CircleDot className="size-3.5" /><span className="hidden sm:inline">只看未读</span><span className="sm:hidden">未读</span>
+          <Badge size="sm" variant="muted" data-testid="unread-total" className="px-1 font-mono tabular-nums text-faint">{unreadN}</Badge>
+        </Toggle>
+        <Tooltip>
+          <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={markAll} disabled={!unreadN} aria-label="全部标为已读" className="px-1.5 type-caption font-normal text-faint" />}>
+            <CheckCheck className="size-3.5" /><span className="hidden md:inline">全部已读</span>
+          </TooltipTrigger>
+          <TooltipContent>将当前视图（{f.source != null ? "此来源" : f.section ? "此分区" : "全部"}{f.p0 ? " · 仅 P0" : ""}）的 {unreadN} 条标为已读</TooltipContent>
+        </Tooltip>
         <div className="ml-auto flex items-center gap-3 type-meta text-faint">
           <span className="hidden items-center gap-1 xl:flex">
             {[["J", "K", "移动"], ["↵", "", "打开"], ["N", "", "新内容"], ["G", "", "顶部"]].map(([a, b, l]) => (
@@ -233,8 +273,9 @@ export default function Feed() {
         <div className={cn(GRID, "mt-4")}>{Array.from({ length: 12 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>
       ) : view.length === 0 ? (
         <EmptyState icon={Inbox} className="mt-6 rounded-xl border border-dashed py-14"
-          title={f.p0 ? "这里 48 小时内没有 P0 内容" : f.section || f.source != null ? "这里 48 小时内还没有内容" : "这里暂时很安静"}
-          hint={f.section || f.source != null || f.p0 ? "新内容会实时推送到这里。" : "首次启动需要等待一轮抓取，新内容会实时推送到这里。"}>
+          title={f.unread && scope.length ? "全部读完了" : f.p0 ? "这里 48 小时内没有 P0 内容" : f.section || f.source != null ? "这里 48 小时内还没有内容" : "这里暂时很安静"}
+          hint={f.unread && scope.length ? "新内容会实时推送到这里。" : f.section || f.source != null || f.p0 ? "新内容会实时推送到这里。" : "首次启动需要等待一轮抓取，新内容会实时推送到这里。"}>
+          {f.unread && <Button variant="outline" size="sm" onClick={() => setF({ unread: false })}>显示已读</Button>}
           {f.p0 && <Button variant="outline" size="sm" onClick={() => setF({ p0: false })}>取消仅 P0</Button>}
           {(f.section || f.source != null) && <Button variant="ghost" size="sm" onClick={() => setF({ section: "", source: null })}>查看全部</Button>}
         </EmptyState>
@@ -247,7 +288,7 @@ export default function Feed() {
             <div className={GRID}>
               {g.items.map((it) => {
                 const i = idx.get(it.id)!;
-                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={openItem} hover={canHover && !open} />;
+                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={openItem} onPreview={onPreview} hover={canHover && !open} />;
               })}
             </div>
           </section>

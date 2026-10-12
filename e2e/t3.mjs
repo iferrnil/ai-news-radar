@@ -1,0 +1,18 @@
+import { launch, rec, results, openImport, waitPlan, setMode, applyImport, exportFile } from "./lib.mjs";
+import fs from "fs";
+const { br, page, errors } = await launch(true);
+const fits = async (loc) => { const b = await loc.boundingBox(); return b && b.x >= 0 && b.y >= 0 && b.x + b.width <= 390.5 && b.y + b.height <= 844.5 ? "ok" : JSON.stringify(b); };
+const f = await exportFile(page, "全部来源", "json");
+rec("mobile: export JSON works", JSON.parse(f.text).sources.length === 22, f.name);
+await page.getByRole("button", { name: "导出" }).click(); const m = page.getByRole("menu"); await m.waitFor();
+let r = await fits(m); rec("mobile: export menu fits", r === "ok", r); await page.keyboard.press("Escape");
+let dlg = await openImport(page, "/tmp/ext.opml"); await waitPlan(dlg);
+r = await fits(dlg); const sw = await dlg.evaluate((e) => e.scrollWidth <= e.clientWidth + 1);
+rec("mobile: import dialog fits (no h-overflow)", r === "ok" && sw, r);
+await page.screenshot({ path: "/tmp/mobile-import.png" });
+await setMode(dlg, "覆盖"); await applyImport(dlg);
+const ad = page.getByRole("alertdialog"); await ad.waitFor(); r = await fits(ad);
+rec("mobile: overwrite confirm fits", r === "ok", r);
+await ad.getByRole("button", { name: "取消" }).click();
+rec("mobile: no console errors", errors.length === 0, errors.join(" | ").slice(0, 300));
+await br.close(); fs.writeFileSync("/tmp/r3.json", JSON.stringify(results));
