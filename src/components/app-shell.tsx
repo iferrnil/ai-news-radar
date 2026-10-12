@@ -373,7 +373,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   // inline script in layout.tsx, so a collapsed sidebar never flashes open; CSS in globals.css does the animation.
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { setCollapsed(document.documentElement.dataset.sidebar === "collapsed"); }, []);
-  const lastToggle = useRef(0);
+  const lastToggle = useRef(-Infinity); // not 0: performance.now() starts near 0 on every page load
   const toggleSidebar = useCallback(() => {
     // the desktop menu accelerator and the page keydown may both fire for one ⌘B: count it once
     const now = performance.now(); if (now - lastToggle.current < 250) return; lastToggle.current = now;

@@ -13,6 +13,8 @@ const aside = page.locator("#app-sidebar");
 const width = () => aside.evaluate((e) => e.getBoundingClientRect().width);
 const cols = () => page.locator("main [data-slot=card]").evaluateAll((cs) => new Set(cs.slice(0, 12).map((c) => Math.round(c.getBoundingClientRect().left))).size);
 const settle = () => page.waitForTimeout(450);
+// wait until the sidebar width settles at w (slow CI runners)
+const widthIs = (w) => page.waitForFunction((w) => document.getElementById("app-sidebar").getBoundingClientRect().width === w, w, { timeout: 5000 }).then(() => true, () => false);
 
 await page.goto(B + "/"); await page.waitForSelector("main [data-slot=card]"); await settle();
 const toggle = page.getByTestId("sidebar-toggle");
@@ -42,13 +44,15 @@ await page.reload(); await page.waitForSelector("main [data-slot=card]");
 const first = await page.evaluate(() => document.documentElement.dataset.sidebar);
 rec("persisted across reload, no flash", first === "collapsed" && (await width()) === 0);
 
-await page.keyboard.press("Control+b"); await settle();
-rec("Ctrl+B expands", (await width()) === 244 && (await page.evaluate(() => localStorage.getItem("sidebar.collapsed"))) === "0");
-await page.keyboard.press("Meta+b"); await settle();
-rec("⌘B collapses", (await width()) === 0);
+await page.waitForFunction(() => typeof window.__radarCmd === "function");
+await page.keyboard.press("Control+b");
+rec("Ctrl+B expands", (await widthIs(244)) && (await page.evaluate(() => localStorage.getItem("sidebar.collapsed"))) === "0");
+await page.waitForTimeout(300); await page.keyboard.press("Meta+b");
+rec("⌘B collapses", await widthIs(0));
 // one ⌘B reaching both the menu accelerator and the page counts once
-await page.evaluate(() => { window.__radarCmd("sidebar"); document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true })); }); await settle();
-rec("menu + key for one press toggles once", (await width()) === 244);
+await page.waitForTimeout(300);
+await page.evaluate(() => { window.__radarCmd("sidebar"); document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true })); });
+rec("menu + key for one press toggles once", (await widthIs(244)) && (await page.waitForTimeout(400), (await width()) === 244));
 // ⌘B in an input still toggles (no contenteditable), ⌘F stays native in the browser
 await page.keyboard.press("Control+f"); await page.waitForTimeout(300);
 rec("browser: Ctrl+F not intercepted", !(await page.getByRole("dialog").isVisible().catch(() => false)));
