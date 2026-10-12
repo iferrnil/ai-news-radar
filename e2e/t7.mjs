@@ -125,6 +125,6 @@ const retry = async (fn) => { for (let k = 0; ; k++) { try { return await fn(); 
 const tm2 = (await retry(srcs)).find((s) => s.name === "Techmeme"); const sc2 = await retry(() => api("/api/sections"));
 rec("custom section + seed source assignment survive restart (seed sync)", tm2.section === c.key && sc2.some((x) => x.key === c.key));
 await fetch(B + `/api/sections/${c.key}?moveTo=media`, { method: "DELETE" });
-const errs = errors.filter((e) => !/status of (400|409)|ERR_INCOMPLETE_CHUNKED_ENCODING|ERR_CONNECTION_REFUSED|Failed to fetch/.test(e)); // SSE / in-flight requests cut by the deliberate server restart
+const errs = errors.filter((e) => !/status of (400|409)|ERR_INCOMPLETE_CHUNKED_ENCODING|ERR_CONNECTION_(REFUSED|RESET|CLOSED)|ERR_EMPTY_RESPONSE|Failed to fetch/.test(e)); // SSE / in-flight requests cut by the deliberate server restart
 rec("no console errors (t7, except expected 400/409)", errs.length === 0, errs.slice(0, 2).join(" | "));
 await br.close();
