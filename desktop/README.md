@@ -42,13 +42,10 @@ xattr -dr com.apple.quarantine "AI News Radar.app"
 
 ## GitHub Actions / Releases
 
-工作流在 `desktop/ci/desktop-release.yml`（推送 `.github/workflows/` 需要 token 的 `workflow` 权限，当前 token 只有 `gist, read:org, repo`）。启用步骤：
+工作流：[`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml)。发布新版本：
 
 ```bash
-gh auth refresh -h github.com -s workflow
-mkdir -p .github/workflows && git mv desktop/ci/desktop-release.yml .github/workflows/desktop-release.yml
-git commit -m "ci: desktop release workflow" && git push
-git tag desktop-v0.1.0 && git push --tags
+git tag desktop-v0.1.0 && git push origin desktop-v0.1.0
 ```
 
 推送 `desktop-v*` 标签（或 Actions › desktop-release › Run workflow，可选 tag / 草稿）后，在 `macos-latest` 上分别构建 arm64 和 x64 两个 .dmg（版本号取自标签），校验签名后生成 `SHA256SUMS` 和发布说明，创建（或更新）对应的 GitHub Release。

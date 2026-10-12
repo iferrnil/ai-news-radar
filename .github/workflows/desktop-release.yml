@@ -4,7 +4,7 @@
 # and publishes a GitHub Release with notes. Without signing secrets the app is signed ad hoc
 # (Gatekeeper asks on first open, see README). With MACOS_CERTIFICATE, MACOS_CERTIFICATE_PASSWORD,
 # MACOS_SIGNING_IDENTITY (+ APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD) it is Developer ID signed and notarized.
-# Install: needs a token with the `workflow` scope → move this file to .github/workflows/desktop-release.yml.
+# Manual runs default to a draft release.
 name: desktop-release
 on:
   push:
