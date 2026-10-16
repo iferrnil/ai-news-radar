@@ -18,7 +18,7 @@ export type BriefOut = {
 };
 
 const TR_KEY = "brief-translate";
-const fmt = (ms: number) => ms ? new Date(ms).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+const fmt = (sec: number) => sec ? new Date(sec * 1000).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 
 /** Inline markdown: [text](url), **bold**. */
 function Inline({ text }: { text: string }) {

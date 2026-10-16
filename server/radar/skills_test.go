@@ -168,3 +168,12 @@ func TestSkillsWebDisabled(t *testing.T) {
 		t.Fatal("skills on web", r.Status)
 	}
 }
+
+func TestBriefTimeAndTruncate(t *testing.T) {
+	if got := fmtBriefTime(1792149123); got != "10/16 19:12" { // published is in seconds (Beijing time)
+		t.Fatalf("fmtBriefTime = %q", got)
+	}
+	if got := oneLine(strings.Repeat("词", 300)); len([]rune(got)) != briefSumLine || !strings.HasSuffix(got, "…") {
+		t.Fatalf("oneLine truncation: %d", len([]rune(got)))
+	}
+}

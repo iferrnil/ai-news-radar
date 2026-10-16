@@ -19,7 +19,7 @@ const (
 	briefMaxSrc    = 12
 	briefMaxItems  = 40
 	briefCacheTTL  = 5 * time.Minute
-	briefSumLine   = 100
+	briefSumLine   = 160
 )
 
 type briefOut struct {
@@ -63,8 +63,8 @@ func envIntDef(k string, def int) int {
 
 func oneLine(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if len([]rune(s)) > briefSumLine {
-		return string([]rune(s)[:briefSumLine])
+	if r := []rune(s); len(r) > briefSumLine {
+		return strings.TrimRight(string(r[:briefSumLine-1]), " ,.;:，。、") + "…"
 	}
 	return s
 }
@@ -164,7 +164,7 @@ func (s *Store) buildRuleBrief(scope string, tr bool) (*briefOut, error) {
 				order, groups, meta = pickBrief(rs)
 			}
 		} else if len(need) > 0 {
-			trNote = "未配置可用的 DeepSeek key，仅使用已有译文（" + reason + "）"
+			trNote = "未配置可用的 DeepSeek key，仅使用已有译文"
 		}
 	}
 
@@ -211,11 +211,11 @@ func (s *Store) buildRuleBrief(scope string, tr bool) (*briefOut, error) {
 	return res, nil
 }
 
-func fmtBriefTime(ms float64) string {
+func fmtBriefTime(ms float64) string { // published is in seconds
 	if ms <= 0 {
 		return ""
 	}
-	return time.UnixMilli(int64(ms)).In(time.FixedZone("CST", 8*3600)).Format("1/2 15:04")
+	return time.Unix(int64(ms), 0).In(time.FixedZone("CST", 8*3600)).Format("1/2 15:04")
 }
 
 // briefMarkdown mirrors the dialog layout: group header → per item a title heading, a summary paragraph and a
