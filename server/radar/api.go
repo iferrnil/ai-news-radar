@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -46,6 +47,16 @@ func (s *Store) Handler() http.Handler {
 	m.HandleFunc("POST /api/sources/rule-check", s.hRuleCheck)
 	m.HandleFunc("POST /api/sources/test", s.hSourceTest)
 	m.HandleFunc("GET /api/brief", s.hBrief)
+	m.HandleFunc("GET /api/translate/progress", s.hTranslateProgress)
+	m.HandleFunc("GET /api/skills", s.hSkillsList)
+	m.HandleFunc("GET /api/skills/{name}", s.hSkillGet)
+	m.HandleFunc("POST /api/skills/install", s.hSkillInstall)
+	m.HandleFunc("POST /api/skills/upload", s.hSkillUpload)
+	m.HandleFunc("PATCH /api/skills/active", s.hSkillActive)
+	m.HandleFunc("DELETE /api/skills/{name}", s.hSkillDelete)
+	m.HandleFunc("GET /api/desktop/notify", s.hDesktopNotifyStatus)
+	m.HandleFunc("POST /api/desktop/notify-open-settings", s.hDesktopNotifyOpen)
+	m.HandleFunc("POST /api/desktop/open-data", s.hDesktopOpenData)
 	m.HandleFunc("GET /api/stats", s.hStats)
 	m.HandleFunc("GET /api/stream", s.hStream)
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -386,6 +397,9 @@ func (s *Store) settingsOut(w http.ResponseWriter) {
 	out.Set("deepseek", s.deepseekPublic())
 	out.Set("notify", s.NotifyPrefs())
 	out.Set("desktop", s.Cfg.Desktop)
+	if s.Cfg.Desktop {
+		out.Set("dataDir", filepath.Dir(s.Cfg.DBPath))
+	}
 	if s.Cfg.Version != "" {
 		out.Set("version", s.Cfg.Version)
 	} else {
@@ -466,10 +480,8 @@ func (s *Store) hSettingsPatch(w http.ResponseWriter, r *http.Request) {
 			detail(w, 400, "translate 需为 { scope: all|section|source, key, on }")
 			return
 		}
-		if SettingsLocked() {
-			detail(w, 403, "设置已锁定（SETTINGS_LOCKED=1）")
-			return
-		}
+		// the per-view switches are the user's own control (no SETTINGS_LOCKED check); without a key they stay
+		// stored but nothing is translated (the popover explains why)
 		if !s.setTrScope(scope, t["key"], on) {
 			if scope == "section" {
 				detail(w, 404, "分区不存在")
@@ -521,6 +533,16 @@ func (s *Store) hSettingsTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Store) hNotifyTest(w http.ResponseWriter, r *http.Request) {
+	// desktop: show a native banner directly (independent of the notify switches) and report the permission
+	if DesktopHooks.NotifyTest != nil {
+		st, err := DesktopHooks.NotifyTest()
+		if err != nil {
+			writeJSON(w, 200, obj("ok", false, "status", st, "error", err.Error()))
+			return
+		}
+		writeJSON(w, 200, obj("ok", true, "status", st, "count", 1))
+		return
+	}
 	if SettingsLocked() {
 		detail(w, 403, "设置已锁定（SETTINGS_LOCKED=1）")
 		return

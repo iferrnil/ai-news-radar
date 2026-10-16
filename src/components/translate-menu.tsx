@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Languages, SlidersHorizontal } from "lucide-react";
+import { Languages, Loader2, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,14 +14,26 @@ import { type TrInfo, api, secZh } from "./common";
 // ONE control: translation is switched on per VIEW — 「全部」, a section, or a single source (stored server-side; see lib/translate.ts).
 // The page's state is effective = 全部 OR its section OR its source; a broader scope is named and can be turned off from here.
 type Scope = { scope: "all" | "section" | "source"; key?: string | number; label: string };
+type Progress = { total: number; translated: number; pending: number; skipped: number; inQueue: number; queued: number; running: number; done: number; failed: number; lastError: string | null; available: boolean; reason: string | null };
 export default function TranslateMenu({ defaultOpen = false }: { defaultOpen?: boolean }) {
-  const { f, sources, tr, settingsLocked, reloadTr, trView } = useApp();
+  const { f, sources, tr, reloadTr, trView, onStream } = useApp();
   const [open, setOpen] = useState(defaultOpen);
   const [busy, setBusy] = useState(false);
+  const [p, setP] = useState<Progress | null>(null);
+  const q = f.source != null ? `source=${f.source}` : f.section ? `section=${encodeURIComponent(f.section)}` : "";
+  const loadP = useCallback(async () => { try { setP(await api<Progress>(`/api/translate/progress?${q}`)); } catch { /* keep last */ } }, [q]);
+  // live: the server publishes a (throttled) SSE "translate" event whenever the queue moves; item updates also count
+  const tm = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!open) return;
-    void reloadTr(); const t = setInterval(() => void reloadTr(), 3000); return () => clearInterval(t);
-  }, [open, reloadTr]);
+    void reloadTr(); void loadP();
+    const off = onStream((ev) => {
+      if (ev !== "translate" && ev !== "update" && ev !== "item") return;
+      if (tm.current) return;
+      tm.current = setTimeout(() => { tm.current = null; void loadP(); void reloadTr(); }, 400);
+    });
+    return () => { off(); if (tm.current) { clearTimeout(tm.current); tm.current = null; } };
+  }, [open, reloadTr, loadP, onStream]);
 
   const src = f.source != null ? sources.find((s) => s.id === f.source) : undefined;
   const secKey = src ? src.section : f.section || null;
@@ -33,14 +45,15 @@ export default function TranslateMenu({ defaultOpen = false }: { defaultOpen?: b
     ...(here.scope !== "all" && s.all ? [{ scope: "all" as const, label: "「全部」" }] : []),
     ...(here.scope === "source" && secKey && s.sections.includes(secKey) ? [{ scope: "section" as const, key: secKey, label: `「${secZh(secKey)}」分区` }] : []),
   ];
-  const disabled = !tr || !tr.available || settingsLocked;
-  const why = !tr ? "读取中…" : !tr.available ? `${tr.reason ?? "翻译不可用"}。` : settingsLocked ? "设置已锁定（SETTINGS_LOCKED=1），无法切换翻译。" : null;
+  // the switch is the user's own; the only blocker is a missing / rejected DeepSeek key (reason shown)
+  const disabled = !tr || !tr.available;
+  const why = !tr ? "读取中…" : !tr.available ? `无法翻译：${tr.reason ?? "翻译不可用"}。` : null;
 
   const set = async (sc: Scope, on: boolean) => {
     setBusy(true);
     try {
       const r = await api<{ translate: TrInfo }>("/api/settings", { method: "PATCH", body: JSON.stringify({ translate: { scope: sc.scope, key: sc.key, on } }) });
-      await reloadTr();
+      await reloadTr(); void loadP();
       toast.success(on ? `已开启${sc.label}的翻译` : `已关闭${sc.label}的翻译`, { description: on && r.translate.queued ? `正在翻译 ${r.translate.queued} 条外文内容…` : undefined });
     } catch (e) { toast.error((e as Error).message); }
     finally { setBusy(false); }
@@ -65,17 +78,31 @@ export default function TranslateMenu({ defaultOpen = false }: { defaultOpen?: b
             {broader.map((b) => <Button key={b.scope} variant="outline" size="sm" disabled={busy} onClick={() => set(b, false)} data-testid={`tr-off-${b.scope}`}>关闭{b.label}的翻译</Button>)}
           </div>
         )}
-        {tr && tr.available && (tr.queued > 0 || tr.done > 0 || tr.failed > 0 || tr.lastError) && (
+        {p && !disabled && (
           <>
             <Separator className="bg-border/50" />
-            <div className="px-4 py-2.5 type-caption text-muted-foreground" data-testid="tr-stats">
-              已译 {tr.done}（缓存 {tr.cached}）· 排队 {tr.queued}{tr.failed ? ` · 失败 ${tr.failed}` : ""}
-              {tr.lastError && <div className="mt-1 type-meta text-red-500">{tr.lastError}</div>}
+            <div className="space-y-2 px-4 py-3" data-testid="tr-stats">
+              <div className="flex items-baseline justify-between type-caption text-muted-foreground">
+                <span>本页 {p.total} 条 · 已译 <b className="font-medium text-foreground tabular-nums" data-testid="tr-done-scope">{p.translated}</b></span>
+                <span className="tabular-nums" data-testid="tr-pending">待翻译 {p.pending}</span>
+              </div>
+              {p.total - p.skipped > 0 && (
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={p.total - p.skipped} aria-valuenow={p.translated}>
+                  <div className="h-full rounded-full bg-brand transition-[width] duration-300" style={{ width: `${Math.round((p.translated / Math.max(1, p.total - p.skipped)) * 100)}%` }} />
+                </div>
+              )}
+              <div className="grid grid-cols-4 gap-1 text-center type-meta text-muted-foreground" data-testid="tr-queue">
+                {([["排队", p.queued], ["进行中", p.running], ["已完成", p.done], ["失败", p.failed]] as const).map(([k, v]) => (
+                  <div key={k} className={k === "失败" && v ? "text-red-500" : ""}><div className="type-caption font-medium tabular-nums text-foreground">{k === "进行中" && v ? <Loader2 className="mx-auto my-0.5 size-3 animate-spin" /> : v}</div>{k}</div>
+                ))}
+              </div>
+              {p.skipped > 0 && <p className="type-meta text-faint">{p.skipped} 条已是中文，无需翻译</p>}
+              {p.lastError && <p className="type-meta text-red-500">{p.lastError}</p>}
             </div>
           </>
         )}
         <Separator className="bg-border/50" />
-        <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-2.5 type-caption text-muted-foreground hover:bg-hover hover:text-foreground"><SlidersHorizontal className="size-3.5" />DeepSeek 设置…</Link>
+        <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-2.5 type-caption text-muted-foreground hover:bg-hover hover:text-foreground"><Settings className="size-3.5" />DeepSeek 设置…</Link>
       </PopoverContent>
     </Popover>
   );

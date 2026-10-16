@@ -102,7 +102,7 @@ const c2 = await br.newContext(); await c2.addInitScript(() => { window.__notes 
 const p2 = await c2.newPage();
 await p2.goto(B + "/settings"); await p2.getByTestId("notify-card").waitFor(); await p2.waitForTimeout(800);
 const card = await p2.getByTestId("notify-card").innerText();
-rec("desktop: settings show native-notification text, version and 检查更新", /系统通知/.test(card) && await p2.getByTestId("notify-perm").count() === 0 && await p2.getByText("v9.9.9").count() === 1 && await p2.getByText(/检查更新/).count() >= 1);
+rec("desktop: settings show native-notification text, permission status, version and 检查更新", /系统通知/.test(card) && /不支持/.test(await p2.getByTestId("notify-perm").innerText()) && await p2.getByText("v9.9.9").count() >= 1 && await p2.getByText(/检查更新/).count() >= 1);
 const ds = await (await fetch(B + "/api/settings")).json();
 rec("desktop: prefs on the server (default on)", ds.desktop === true && ds.notify.enabled === true);
 await p2.goto(B + "/"); await p2.waitForTimeout(2500);

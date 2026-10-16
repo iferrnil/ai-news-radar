@@ -74,12 +74,12 @@ func FreePort() (int, error) {
 
 // desktopEnv is applied to our own process before the backend starts (it reads tunables from the environment):
 // anything secret or conflicting is removed, plus the desktop settings. The DeepSeek key is never taken from
-// the env and translation defaults to off; the user sets both in 设置, which stores the key in
+// the env; the user sets it in 设置 and switches translation per view (top-right toggle), which stores the key in
 // <dataDir>/secrets.json (0600). In-app settings are never locked here.
 var desktopDrop = []string{"DEEPSEEK_API_KEY", "TRANSLATE_ENABLED", "PORT", "HOSTNAME", "NEWS_DB", "SOURCES_JSON", "SETTINGS_LOCKED", "SECRETS_FILE", "UPSTREAM_MOCK", "DISABLE_POLLER"}
 
 func desktopEnv(version string) map[string]string {
-	return map[string]string{"TRANSLATE_ENABLED": "0", "AI_RADAR_DESKTOP": "1", "AI_RADAR_VERSION": version}
+	return map[string]string{"AI_RADAR_DESKTOP": "1", "AI_RADAR_VERSION": version}
 }
 
 func applyEnv(version string) {

@@ -5,7 +5,7 @@ import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, BookOpen, ChevronRight, Command as CommandIcon, Database, Inbox, Menu, Moon,
-  PanelLeft, Radio, SlidersHorizontal, Search, Settings2, Sun,
+  PanelLeft, Radio, Search, Settings, Settings2, Sun,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -273,7 +273,7 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
               );
             })}
           </NavGroup>
-          <NavItem active={path === "/settings"} icon={SlidersHorizontal} label="设置" onClick={() => { router.push("/settings"); onNavigate?.(); }} />
+          <NavItem active={path === "/settings"} icon={Settings} label="设置" onClick={() => { router.push("/settings"); onNavigate?.(); }} />
           <NavGroup icon={BookOpen} label="文档" storageKey={DOCS_KEY} current={path === "/docs"} inside={path.startsWith("/docs")} onHeader={() => { router.push("/docs"); onNavigate?.(); }}>
             {DOCS.map((d) => <GroupLink key={d.slug} on={path === docHref(d)} onClick={() => { router.push(docHref(d)); onNavigate?.(); }}>{d.title}</GroupLink>)}
           </NavGroup>

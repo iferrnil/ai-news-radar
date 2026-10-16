@@ -70,6 +70,8 @@ func main() {
 			}
 		})
 
+		nt := newNotifier(data)
+		nt.install(show, data)
 		srv, err = StartServer(ServerConfig{DataDir: data, Log: lw, Port: PreferredPort, Version: mygo.App.Version()})
 		if err != nil {
 			fatal("启动内置服务失败", err)
@@ -98,7 +100,7 @@ func main() {
 				}()
 			})
 			win.Page().LoadURL(srv.URL + "/")
-			go watchNotifications(appCtx, srv.URL, func(b notifyBatch) { notifyP0(win, srv.URL, b, show) })
+			go watchNotifications(appCtx, srv.URL, func(b notifyBatch) { notifyP0(nt, win, srv.URL, b, show) })
 		}()
 		go func() { // the server died on its own: tell the user instead of a blank window
 			<-srv.Done()
@@ -170,15 +172,10 @@ var quitting atomic.Bool
 var appCtx, stopApp = context.WithCancel(context.Background())
 
 // notifyP0 shows one native notification per batch; a click brings the window up and opens the (first) item.
-func notifyP0(win *mygo.Window, base string, b notifyBatch, show func()) {
-	if !mygo.NotificationsSupported() {
-		return
-	}
+func notifyP0(nt *notifier, win *mygo.Window, base string, b notifyBatch, show func()) {
 	title, body := batchText(b)
-	// one ID: a newer batch replaces the previous one instead of piling up in Notification Center
-	n := mygo.NewNotification(mygo.NotificationOptions{ID: "ai-radar-p0", Title: title, Body: body, Group: "p0"})
 	id := b.Items[0].ID
-	n.OnClick(func() {
+	_ = nt.show(title, body, func() {
 		show()
 		go func() {
 			ok, err := win.Page().Eval(fmt.Sprintf("typeof window.__radarOpenItem === 'function' ? (window.__radarOpenItem(%d), true) : false", id))
@@ -187,9 +184,6 @@ func notifyP0(win *mygo.Window, base string, b notifyBatch, show func()) {
 			}
 		}()
 	})
-	if err := n.Show(); err != nil {
-		log.Println("notification:", err) // e.g. mygo.ErrNotificationsDenied
-	}
 }
 
 func quit() { quitting.Store(true); mygo.App.Quit() }

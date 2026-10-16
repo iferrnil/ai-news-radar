@@ -88,18 +88,26 @@ http.createServer((req, res) => {
     const data = { props: { pageProps: { headerProps: { listName: "Mock list" }, timeline: { entries: [] } } } };
     return send(res, 200, `<html><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(data)}</script></html>`, "text/html");
   }
+  // 简报 Skill install from URL (t19)
+  if (host === "skills.mock-ai.com") {
+    if (u.pathname.endsWith("/SKILL.md")) return send(res, 200, "---\nname: E2E 编辑部\ndescription: e2e skill\n---\n# E2E 编辑部\n\nSKILL-E2E-MARKER-42：每条只保留一句话。\n", "text/markdown");
+    return send(res, 200, "<!DOCTYPE html><html><body>not a skill</body></html>", "text/html");
+  }
   // fake DeepSeek-compatible translator (t17): echoes every title/summary prefixed with 【译】
   if (host === "ds.mock-ai.com" && u.pathname.endsWith("/chat/completions")) {
     let b = ""; req.on("data", (c) => (b += c)).on("end", () => {
       try {
-        const content = JSON.parse(b).messages.at(-1).content;
+        const msgs = JSON.parse(b).messages;
+        const content = msgs.at(-1).content;
+        const sys = msgs[0]?.role === "system" ? msgs[0].content : "";
+        const skill = (/<skill>([\s\S]*?)<\/skill>/.exec(sys)?.[1] ?? "").replace(/\s+/g, " ").trim();
         try {
           const items = JSON.parse(content);
           const r = items.map((x) => ({ i: x.i, t: "【译】" + x.t, s: x.s ? "【译】" + x.s : "" }));
           send(res, 200, { choices: [{ message: { content: JSON.stringify({ r }) } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
         } catch {
           // brief AI 润色: user content is Markdown, not a translate batch
-          send(res, 200, { choices: [{ message: { content: "# 【润色】\n\n" + content } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+          send(res, 200, { choices: [{ message: { content: "# 【润色】\n\n> SKILL: " + skill.slice(0, 300) + "\n\n" + content } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
         }
       } catch { send(res, 400, { error: "bad request" }); }
     });

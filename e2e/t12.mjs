@@ -41,7 +41,7 @@ const rt = await fetch(B + "/api/settings/test", { method: "POST", headers: { "c
 rec("locked: test with typed key refused", rt.status === 403, `${rt.status}`);
 ({ br, page, errors } = await launch(false));
 await page.goto(B + "/settings"); await page.waitForTimeout(1200);
-rec("locked: UI shows notice, inputs/save disabled", await page.getByText("设置已锁定").count() === 1 && await page.locator("#ds-key").isDisabled() && await page.getByRole("button", { name: "保存" }).isDisabled());
+rec("locked: UI shows notice, inputs/save disabled", await page.getByText("密钥由部署方配置").count() === 1 && await page.locator("#ds-key").isDisabled() && await page.getByRole("button", { name: "保存" }).isDisabled());
 await page.screenshot({ path: SHOT("settings_locked.png") });
 rec("no console errors (t12)", errors.filter((e) => !/status of (400|401|403)/.test(e)).length === 0, errors.join("|").slice(0, 200));
 await br.close(); execSync("bash " + RESTART + "");

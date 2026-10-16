@@ -28,17 +28,17 @@ type translator struct {
 	tokIn, tokOut                        int
 	lastError                            any
 	authFailed, backfilled               bool
+	progressPending                      bool
 }
 
 func newTranslator(s *Store) *translator { return &translator{s: s, queued: map[int64]bool{}} }
 
 func (t *translator) resetAuth() { t.mu.Lock(); t.authFailed = false; t.lastError = nil; t.mu.Unlock() }
 
-// unavailableReason: why translation can't run right now ("" = it can): TRANSLATE_ENABLED=0 / no key / rejected key.
+// unavailableReason: why translation can't run right now ("" = it can): no key / rejected key.
+// Translation is switched on and off by the user per view (the top-right toggle); the server only needs a key.
+// TRANSLATE_ENABLED is informational now (reported as `env`), it no longer blocks the user's switches.
 func (s *Store) unavailableReason() string {
-	if os.Getenv("TRANSLATE_ENABLED") == "0" {
-		return "翻译已被服务端关闭（TRANSLATE_ENABLED=0）"
-	}
 	if s.deepseekKey() == "" {
 		return "未配置 DeepSeek API key，翻译不可用"
 	}
@@ -194,7 +194,25 @@ func (t *translator) enqueue(ids []int64) {
 		}
 	}
 	t.mu.Unlock()
+	t.notifyProgress()
 	t.pump()
+}
+
+// notifyProgress publishes a throttled SSE "translate" event (queue / progress changed), at most every 700 ms.
+func (t *translator) notifyProgress() {
+	t.mu.Lock()
+	if t.progressPending {
+		t.mu.Unlock()
+		return
+	}
+	t.progressPending = true
+	t.mu.Unlock()
+	time.AfterFunc(700*time.Millisecond, func() {
+		t.mu.Lock()
+		t.progressPending = false
+		t.mu.Unlock()
+		t.s.Bus.Publish(Msg{Event: "translate"})
+	})
 }
 
 // backfill queues every retained item that still lacks a translation (once per process / when re-enabled).
@@ -249,6 +267,7 @@ func (t *translator) pump() {
 				delete(t.queued, i)
 			}
 			t.mu.Unlock()
+			t.notifyProgress()
 			t.pump()
 		}()
 	}
@@ -340,10 +359,15 @@ func (t *translator) callAPI(batch []trIn) ([]trOut, error) {
 }
 
 func (t *translator) run(ids []int64) error {
-	db := t.s.DB
 	if ids = t.translatableIDs(ids); len(ids) == 0 { // the switch may have been turned off while queued
 		return nil
 	}
+	return t.runIDs(ids)
+}
+
+// runIDs translates the given items regardless of the view switches (the brief's 「翻译」 option uses it directly).
+func (t *translator) runIDs(ids []int64) error {
+	db := t.s.DB
 	capN := envInt("TRANSLATE_SUMMARY_CHARS", 1500)
 	args := make([]any, len(ids))
 	for i, id := range ids {

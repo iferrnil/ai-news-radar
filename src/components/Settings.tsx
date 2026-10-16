@@ -1,7 +1,9 @@
 "use client";
-// 设置: DeepSeek key (write-only, masked), optional base URL / model, translation toggle; P0 通知, 阅读, desktop updates (settings-extra.tsx).
+// 设置, grouped cards: 常规 · 通知 · 翻译 / AI (DeepSeek key, base URL, model, test) · 简报 Skill (desktop) · 更新 (desktop) · 数据 · 关于.
 import { useEffect, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, KeyRound, Languages, Loader2, Lock, PlugZap, Trash2, XCircle } from "lucide-react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
+import { BookOpen, CheckCircle2, Database, Eye, EyeOff, FileJson, FileUp, FolderOpen, ExternalLink, Info, Languages, Loader2, Lock, PlugZap, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,13 +12,16 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type TrScopes, api, secZh } from "./common";
-import { DesktopCard, NotifyCard, ReadingCard, type NotifyPrefs } from "./settings-extra";
+import { type TrScopes, allSections, api, secZh, sourceSection } from "./common";
+import { useApp } from "./app-shell";
+import { GeneralCard, NotifyCard, UpdateCard, type NotifyPrefs } from "./settings-extra";
+const SkillCard = dynamic(() => import("./settings-skill"), { ssr: false });
+const ImportDialog = dynamic(() => import("./import-dialog"), { ssr: false });
 
 type DS = { configured: boolean; source: "app" | "env" | null; baseUrl: string; model: string; baseUrlCustom: boolean; modelCustom: boolean; locked: boolean };
 type TR = { available: boolean; reason: string | null; scopes: TrScopes; done: number; queued: number; failed: number; lastError: string | null };
 const trScopeText = (sc: TrScopes) => [sc.all && "全部", ...sc.sections.map((k) => `分区「${secZh(k)}」`), sc.sources.length && `${sc.sources.length} 个来源`].filter(Boolean).join("、") || "无";
-type S = { deepseek: DS; translate: TR; notify: NotifyPrefs; desktop: boolean; version?: string | null };
+type S = { deepseek: DS; translate: TR; notify: NotifyPrefs; desktop: boolean; version?: string | null; dataDir?: string };
 type Test = { ok: boolean; error?: string } | null;
 
 export default function Settings() {
@@ -45,22 +50,28 @@ export default function Settings() {
   return (
     <div className="mx-auto w-full max-w-[760px] px-3 pb-20 pt-6 sm:px-6">
       <h1 className="type-h1 font-semibold tracking-tight">设置</h1>
-      <p className="mt-0.5 type-body text-muted-foreground">DeepSeek 翻译、P0 通知与阅读。API key 只保存在服务器端（本机数据目录，权限 0600），不会出现在任何接口返回、日志或导出文件中。</p>
 
-      {locked && <Alert className="mt-4"><Lock /><AlertTitle>设置已锁定</AlertTitle><AlertDescription>这个部署设置了 SETTINGS_LOCKED=1，只能通过环境变量（DEEPSEEK_API_KEY 等）配置。</AlertDescription></Alert>}
+      <GeneralCard />
+      <NotifyCard desktop={!!s?.desktop} server={s?.notify ?? null} locked={locked} onSaved={(n) => setS((cur) => (cur ? { ...cur, notify: n } : cur))} />
 
-      <Card className="mt-4">
+      <Card className="mt-4" data-testid="ai-card">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><KeyRound className="size-4 text-faint" />DeepSeek API</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Languages className="size-4 text-faint" />翻译 / AI</CardTitle>
           <CardDescription>
             {!ds ? "读取中…" : ds.configured
               ? <span className="inline-flex flex-wrap items-center gap-1.5"><Badge variant="success" data-testid="key-status">已配置</Badge>{ds.source === "env" ? "来自环境变量 DEEPSEEK_API_KEY" : "保存在应用内"}</span>
-              : <span className="inline-flex items-center gap-1.5"><Badge variant="secondary" data-testid="key-status">未配置</Badge>填写后即可开启抓取时翻译</span>}
+              : <span className="inline-flex items-center gap-1.5"><Badge variant="secondary" data-testid="key-status">未配置</Badge>填写 DeepSeek API key 后可翻译与 AI 润色</span>}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+          {locked && <Alert><Lock /><AlertTitle>密钥由部署方配置</AlertTitle><AlertDescription>此部署锁定了 DeepSeek 配置（SETTINGS_LOCKED=1）；翻译开关仍可在页面右上角自行切换。</AlertDescription></Alert>}
+          <div className="type-caption text-muted-foreground" data-testid="settings-translate">
+            翻译在页面右上角的 <Languages className="inline size-3 align-[-1px]" /> 按钮里按当前视图开启（「全部」、分区或单个来源）。
+            {s && (s.translate.available ? ` 已开启：${trScopeText(s.translate.scopes)} · 已译 ${s.translate.done} · 排队 ${s.translate.queued}${s.translate.failed ? ` · 失败 ${s.translate.failed}` : ""}` : ` 当前不可用：${s.translate.reason ?? "未配置"}。`)}
+            {s?.translate.lastError && <div className="mt-1 type-meta text-red-500">{s.translate.lastError}</div>}
+          </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="ds-key">API key</Label>
+            <Label htmlFor="ds-key">API key <span className="font-normal text-faint">· 只保存在本机服务端（0600），不会出现在接口、日志或导出中</span></Label>
             <InputGroup>
               <InputGroupInput id="ds-key" type={show ? "text" : "password"} autoComplete="off" spellCheck={false} disabled={locked}
                 placeholder={ds?.configured ? "已配置（出于安全不显示）· 输入新 key 可替换" : "sk-…"} value={key} onChange={(e) => setKey(e.target.value)} />
@@ -90,22 +101,64 @@ export default function Settings() {
         </CardFooter>
       </Card>
 
-      <Card className="mt-4">
-        <CardContent>
-          <div data-testid="settings-translate">
-            <div className="type-ui font-medium">翻译</div>
-            <div className="mt-0.5 type-caption text-muted-foreground">
-              在页面右上角的翻译按钮（<Languages className="inline size-3 align-[-1px]" />）里按当前视图开启：「全部」、某个分区或单个来源。
-              {s && (s.translate.available ? ` 已开启：${trScopeText(s.translate.scopes)} · 已译 ${s.translate.done} · 排队 ${s.translate.queued}${s.translate.failed ? ` · 失败 ${s.translate.failed}` : ""}` : ` ${s.translate.reason ?? "翻译不可用"}。`)}
-            </div>
-            {s?.translate.lastError && <div className="mt-1 type-meta text-red-500">{s.translate.lastError}</div>}
-          </div>
-        </CardContent>
-      </Card>
-
-      <NotifyCard desktop={!!s?.desktop} server={s?.notify ?? null} locked={locked} onSaved={(n) => setS((cur) => (cur ? { ...cur, notify: n } : cur))} />
-      <ReadingCard />
-      {s?.desktop && <DesktopCard version={s.version ?? null} />}
+      {s?.desktop && <SkillCard />}
+      {s?.desktop && <UpdateCard version={s.version ?? null} />}
+      <DataCard dataDir={s?.dataDir} />
+      <AboutCard version={s?.version ?? null} desktop={!!s?.desktop} />
     </div>
+  );
+}
+
+function DataCard({ dataDir }: { dataDir?: string }) {
+  const { sources, reloadSources, tr } = useApp();
+  const [imp, setImp] = useState(false);
+  const exp = async (fmt: "json" | "opml") => {
+    const list = sources.filter((r) => r.type !== "html").map((r) => ({ ...r, section: sourceSection(r) }));
+    if (!list.length) { toast.error("没有可导出的来源"); return; }
+    const custom = allSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false, translate: !!c.translate }));
+    const d = new Date();
+    const { buildJson, buildOpml, exportFileName } = await import("@/lib/portable-export");
+    const body = fmt === "json" ? buildJson(list as never, d, custom, !!tr?.scopes.all) : buildOpml(list as never, d, custom, !!tr?.scopes.all);
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([body], { type: fmt === "json" ? "application/json" : "text/x-opml" })), download: exportFileName(fmt, d) });
+    document.body.append(a); a.click(); a.remove();
+    toast.success(`已导出 ${list.length} 个来源`);
+  };
+  const openDir = async () => { try { await api("/api/desktop/open-data", { method: "POST" }); } catch (e) { toast.error((e as Error).message); } };
+  return (
+    <Card className="mt-4" data-testid="data-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Database className="size-4 text-faint" />数据</CardTitle>
+        <CardDescription>订阅（来源、分区、过滤规则、翻译开关）可导出为 JSON / OPML，或从文件导入。</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setImp(true)}><FileUp />导入订阅…</Button>
+          <Button variant="outline" onClick={() => exp("json")}><FileJson />导出 JSON</Button>
+          <Button variant="outline" onClick={() => exp("opml")}><FileJson />导出 OPML</Button>
+        </div>
+        {dataDir && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted px-3 py-2">
+            <div className="min-w-0 flex-1"><div className="type-caption text-muted-foreground">数据目录（数据库、密钥、Skill、日志）</div><div className="truncate font-mono text-[12px]" title={dataDir}>{dataDir}</div></div>
+            <Button size="sm" variant="outline" onClick={openDir}><FolderOpen />在访达中打开</Button>
+          </div>
+        )}
+      </CardContent>
+      {imp && <ImportDialog open={imp} onOpenChange={setImp} onDone={reloadSources} />}
+    </Card>
+  );
+}
+
+function AboutCard({ version, desktop }: { version: string | null; desktop: boolean }) {
+  return (
+    <Card className="mt-4" data-testid="about-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Info className="size-4 text-faint" />关于</CardTitle>
+        <CardDescription>AI News Radar{version ? <span className="font-mono"> v{version}</span> : null}{desktop ? " · 桌面版" : ""} — 聚合 AI 实验室、媒体与 X 动态的新闻雷达。</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" render={<Link href="/docs" />}><BookOpen />使用文档</Button>
+        <Button variant="outline" size="sm" render={<a href="https://github.com/iferrnil/ai-news-radar" target="_blank" rel="noreferrer" />}><ExternalLink />GitHub</Button>
+      </CardContent>
+    </Card>
   );
 }

@@ -18,12 +18,12 @@ func TestApplyEnvDropsSecrets(t *testing.T) {
 	t.Setenv("SETTINGS_LOCKED", "1")
 	t.Setenv("NEWS_DB", "/x")
 	applyEnv("1.2.3")
-	for _, k := range []string{"DEEPSEEK_API_KEY", "SETTINGS_LOCKED", "NEWS_DB"} {
+	for _, k := range []string{"DEEPSEEK_API_KEY", "SETTINGS_LOCKED", "NEWS_DB", "TRANSLATE_ENABLED"} {
 		if _, ok := os.LookupEnv(k); ok {
 			t.Fatalf("%s still set", k)
 		}
 	}
-	for k, want := range map[string]string{"TRANSLATE_ENABLED": "0", "AI_RADAR_DESKTOP": "1", "AI_RADAR_VERSION": "1.2.3"} {
+	for k, want := range map[string]string{"AI_RADAR_DESKTOP": "1", "AI_RADAR_VERSION": "1.2.3"} {
 		if os.Getenv(k) != want {
 			t.Fatalf("%s=%q", k, os.Getenv(k))
 		}

@@ -107,21 +107,36 @@ t0 = await tr();
 rec("import (update) restores source + 全部 flags", imp.applied && t0.scopes.sources.includes(lab.id) && t0.scopes.all, JSON.stringify(imp).slice(0, 120));
 await setScope("all", null, false); await setScope("source", lab.id, false); await setScope("section", "media", false);
 
-// unavailable: TRANSLATE_ENABLED=0 / no key / SETTINGS_LOCKED → disabled with the reason
-execSync(`bash ${RESTART} DISABLE_POLLER=1 ${dsEnv()} TRANSLATE_ENABLED=0`);
+// round 5: the switches are the user's; only a missing key blocks. TRANSLATE_ENABLED / SETTINGS_LOCKED no longer do.
+execSync(`bash ${RESTART} DISABLE_POLLER=1 ${dsEnv()} DEEPSEEK_BASE_URL=https://ds.mock-ai.com/v1 TRANSLATE_ENABLED=0`);
 t0 = await tr();
-rec("TRANSLATE_ENABLED=0 → unavailable with reason", !t0.available && /TRANSLATE_ENABLED=0/.test(t0.reason ?? ""));
+rec("TRANSLATE_ENABLED=0 no longer blocks (key set → available)", t0.available && !t0.reason);
 await view(""); await openMenu();
-rec("…toggle disabled, reason shown", await page.getByRole("switch", { name: "翻译「全部」" }).isDisabled() && (await page.getByTestId("tr-hint").innerText()).includes("TRANSLATE_ENABLED=0"));
-await page.getByTestId("tr-menu").screenshot({ path: SHOT("r3_menu_disabled.png") });
+rec("…toggle enabled", !(await page.getByRole("switch", { name: "翻译「全部」" }).isDisabled()));
+await page.keyboard.press("Escape");
 execSync(`bash ${RESTART} DISABLE_POLLER=1 TRANSLATE_ENABLED=1`);
 t0 = await tr();
 rec("no key → unavailable", !t0.available && /API key/.test(t0.reason ?? ""));
-execSync(`bash ${RESTART} DISABLE_POLLER=1 ${dsEnv()} TRANSLATE_ENABLED=1 SETTINGS_LOCKED=1`);
-rec("SETTINGS_LOCKED → PATCH 403", (await setScope("all", null, true)).status === 403);
 await view(""); await openMenu();
-rec("…toggle disabled with 设置已锁定", await page.getByRole("switch", { name: "翻译「全部」" }).isDisabled() && (await page.getByTestId("tr-hint").innerText()).includes("设置已锁定"));
+rec("…toggle disabled, reason shown", await page.getByRole("switch", { name: "翻译「全部」" }).isDisabled() && /无法翻译.*API key/.test(await page.getByTestId("tr-hint").innerText()));
+await page.getByTestId("tr-menu").screenshot({ path: SHOT("r5_menu_nokey.png") });
 await page.keyboard.press("Escape");
+execSync(`bash ${RESTART} DISABLE_POLLER=1 ${dsEnv()} DEEPSEEK_BASE_URL=https://ds.mock-ai.com/v1 SETTINGS_LOCKED=1`);
+const lk = await setScope("section", "media", true);
+rec("SETTINGS_LOCKED: scope PATCH allowed (user control)", lk.status === 200);
+await view("?section=media"); await openMenu();
+rec("…toggle enabled + on", await page.getByRole("switch", { name: /^翻译「/ }).first().isChecked() && !(await page.getByRole("switch", { name: /^翻译「/ }).first().isDisabled()));
+// progress counts for the current scope, live
+let pg = null;
+for (let i = 0; i < 40; i++) { pg = await api("/api/translate/progress?section=media"); if (pg.pending === 0 && pg.queued === 0 && pg.running === 0) break; await sleep(250); }
+rec("progress: scope counts add up, queue drained", pg.total > 0 && pg.translated + pg.pending + pg.skipped === pg.total && pg.pending === 0 && pg.translated > 0, JSON.stringify(pg));
+await sleep(1200);
+const statsTxt = await page.getByTestId("tr-stats").innerText();
+rec("popover shows 本页/已译/待翻译 + queue 排队/进行中/已完成/失败", /本页 \d+ 条/.test(statsTxt) && /待翻译 0/.test(statsTxt) && /排队/.test(statsTxt) && /进行中/.test(statsTxt) && /已完成/.test(statsTxt) && /失败/.test(statsTxt), statsTxt.replace(/\s+/g, " "));
+rec("popover count matches API", (await page.getByTestId("tr-done-scope").innerText()) === String(pg.translated));
+await page.getByTestId("tr-menu").screenshot({ path: SHOT("r5_menu_progress.png") });
+await page.keyboard.press("Escape");
+await setScope("section", "media", false);
 
 // web icons + manifest (the desktop app icon)
 const man = await (await fetch(B + "/manifest.webmanifest")).json().catch(() => null);

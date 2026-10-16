@@ -90,7 +90,7 @@ desktop/scripts/package.sh darwin/arm64      # 构建界面 + Go，产物在 des
 | `DEEPSEEK_API_KEY` | （空） | 可选。设置后在抓取时用 DeepSeek 把外文标题/摘要译成中文；不设置则翻译功能自动关闭 |
 | `SETTINGS_LOCKED` | 本地 `0`；**Docker 镜像/compose 默认 `1`** | `1` = 锁定站内设置：不能在网页里保存/清除/测试新 key（防止公网访客设置 key），只能用环境变量；私有部署可设 `0` |
 | `SECRETS_FILE` | `<NEWS_DB 所在目录>/secrets.json` | 站内保存的 DeepSeek 设置文件（0600） |
-| `TRANSLATE_ENABLED` | `1` | 抓取时翻译的服务端默认值（站内开关保存在数据库，优先级更高） |
+| `TRANSLATE_ENABLED` | `1` | 仅作信息展示；翻译由页面右上角按视图开关控制，只要配置了 DeepSeek key 即可使用 |
 | `DEEPSEEK_MODEL` / `TRANSLATE_BATCH` / `TRANSLATE_CONCURRENCY` / `TRANSLATE_SUMMARY_CHARS` | `deepseek-chat` / `10` / `2` / `1500` | 模型、每批条数、并发、摘要截断长度 |
 | `PORT` | 3000 | 服务端口 |
 | `NEWS_DB` | `./data/news.db` | SQLite 路径 |
@@ -115,7 +115,7 @@ desktop/scripts/package.sh darwin/arm64      # 构建界面 + Go，产物在 des
 
 - 在 **设置** 页（侧栏「设置」或 ⌘K）填写 DeepSeek API key（可选 Base URL / 模型，带“测试连接”），立即生效、无需重启；key 只存服务器端 `data/secrets.json`（权限 0600），任何接口/导出/日志都只显示“已配置”。也可用环境变量 `DEEPSEEK_API_KEY`（见 `.env.example`；本地放 `.env.local`；切勿提交），站内保存的 key 优先。配置后，新抓到的**非中文**条目会在入库后异步翻译**标题和摘要**（中文为主的条目直接跳过）。
 - 省钱设计：每批 10 条 JSON 进出、并发 2、超时 90 s、429/5xx 指数退避重试；按内容哈希缓存（重复内容不再翻译），每条只翻译一次；摘要最多 1500 字。原文与译文分开存（`title_zh` / `summary_zh`）。
-- 顶栏「文 A」按钮：**翻译成中文**（浏览器端显示开关，译文标「译」，悬停卡片和详情中可看原文）；**抓取时翻译**（服务端开关，存数据库，可覆盖 `TRANSLATE_ENABLED`）。关闭显示时列表接口不返回译文字段。
+- 顶栏「文 A」按钮：按当前视图（全部 / 分区 / 来源）开启翻译，面板显示本页已译 / 待翻译与队列进度（SSE 实时）；只有未配置 DeepSeek key 时禁用并说明原因（`SETTINGS_LOCKED` 只锁定 key 配置，不锁定开关）。
 - 实测：3 条标题+摘要约 290 token；按 DeepSeek flash 价目，翻译 500 条约 $0.1–0.3。
 
 ### 通知
