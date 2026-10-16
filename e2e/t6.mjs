@@ -36,7 +36,7 @@ await p.getByRole("button", { name: "切换主题" }).click(); await p.waitForTi
 rec("theme toggle switches dark/light", before !== await p.evaluate(() => document.documentElement.classList.contains("dark")));
 // hover card
 await p.locator("[data-slot=card]").nth(1).hover(); await p.waitForTimeout(1300);
-rec("hover card appears", await p.locator("[data-slot=hover-card-content]").count() > 0);
+rec("hover card appears", await p.locator("[data-testid=hover-preview]").count() > 0);
 await p.mouse.move(5, 790);
 // drawer via click (lazy)
 await p.locator("[data-slot=card]").nth(0).click(); await p.waitForTimeout(1200);

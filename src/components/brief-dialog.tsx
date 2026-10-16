@@ -15,6 +15,7 @@ export type BriefOut = {
   markdown: string; title: string; scope: string; scopeLabel: string; groups: BriefGroup[] | null;
   count: number; sources: number; generatedAt: number; ai: boolean; cached: boolean;
   aiAvailable: boolean; aiReason: string | null; translate: boolean; translateNote?: string; skill?: string;
+  verified?: boolean; noFullText?: { n: number; title: string; source: string; url: string; status: string; reason: string }[];
 };
 
 const TR_KEY = "brief-translate";
@@ -121,6 +122,17 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel 
         <div className="relative min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {err && !b && <p className="type-body text-destructive" data-testid="brief-error">{err}</p>}
           {busy && !b && <div className="flex items-center gap-2 type-body text-muted-foreground"><Loader2 className="size-4 animate-spin" />{trOn && tr?.available ? "生成并翻译中…" : "生成中…"}</div>}
+          {b?.ai && (b.noFullText?.length ?? 0) > 0 && (
+            <details className="mb-3 rounded-md bg-muted px-3 py-2 type-caption text-muted-foreground" data-testid="brief-nofull">
+              <summary className="cursor-pointer select-none">{b.noFullText!.length} 条未取到原文全文，只按标题 / 摘要写{b.verified ? " · 已核对事实" : ""}</summary>
+              <ul className="mt-1.5 space-y-0.5">
+                {b.noFullText!.map((m) => (
+                  <li key={m.n} className="truncate"><span className="font-mono text-faint">[{m.n}]</span> <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">{m.title}</a> <span className="text-faint">· {m.source} · {m.reason}</span></li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {b?.ai && b.verified && !(b.noFullText?.length) && <p className="mb-3 type-meta text-faint" data-testid="brief-verified">已抓取全部原文并核对事实</p>}
           {b?.translateNote && <p className="mb-3 rounded-md bg-muted px-3 py-2 type-caption text-muted-foreground" data-testid="brief-tr-note">{b.translateNote}</p>}
           {b && (editing
             ? <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} aria-label="编辑简报" data-testid="brief-editor"

@@ -77,12 +77,3 @@ func TestDigestText(t *testing.T) {
 	}
 }
 
-func TestAppleScriptArgsNoInterpolation(t *testing.T) {
-	a := appleScriptArgs(`标题 "x"`, `正文 & "y"`)
-	if len(a) != 8 || a[6] != `标题 "x"` || a[7] != `正文 & "y"` || !strings.Contains(a[3], "display notification (item 2 of argv)") {
-		t.Fatalf("%q", a)
-	}
-	if !validMethod("auto") || !validMethod("applescript") || validMethod("x") {
-		t.Fatal("methods")
-	}
-}

@@ -1,15 +1,10 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -17,120 +12,147 @@ import (
 	"github.com/iferrnil/ai-news-radar/server/radar"
 )
 
-// notifier shows macOS banners and remembers what happened, so 设置 › 通知 can show it.
+// notifier shows macOS banners through UNUserNotificationCenter only, and remembers what happened so
+// 设置 › 通知 can show the permission and the last error.
 //
-// Root cause of "banners never appear" (≤0.5.1): the release builds are signed ad hoc (no Developer ID / Team ID).
-// MyGo v0.4.3 posts through UNUserNotificationCenter: the first Show calls requestAuthorization and then
-// addNotificationRequest. For an ad-hoc-signed bundle macOS commonly answers requestAuthorization with
-// granted=false *without showing the prompt* (and every auto-update changes the ad-hoc code signature, so a
-// grant does not carry over), after which addNotificationRequest fails with UNErrorDomain 1. MyGo ignores
-// the authorization callback's result and only returns ErrNotificationsDenied from Show; 0.5.x turned that
-// into a status word and logged the error to server.log, so nothing on screen explained it and no banner
-// was ever shown. (0.4.x additionally reused one request identifier, which made later batches silent updates.)
-//
-// Fix: method "auto" (default) tries the native center and falls back to AppleScript's `display notification`
-// (posted by the system-signed osascript, which works for unsigned apps); "applescript" always uses it,
-// "native" never falls back. Every attempt records the path taken and the exact error.
+// Why banners did not appear (≤0.6.0):
+//   - Upstream MyGo v0.4.3 only asks for permission lazily inside the first Show and ignores the answer, so the
+//     status was unknown until the first P0 batch and a refusal surfaced only as ErrNotificationsDenied.
+//     The vendored MyGo (third_party/mygo, notify_auth.go) adds RequestNotificationAuthorization /
+//     NotificationAuthorizationStatus: we ask once at launch (the system prompt appears then) and read the
+//     real status (getNotificationSettings) whenever the settings page asks.
+//   - The releases were signed ad hoc: the code signature — and so the identity macOS keys the notification
+//     permission to — changed with every update, so a permission given to one version did not carry over.
+//     From 0.7.0 the release workflow signs with a stable self-signed certificate (MACOS_CERTIFICATE secret),
+//     so the designated requirement stays the same across updates.
+//   - The delegate (installed by MyGo at launch, on the main thread) answers willPresent with
+//     banner | list | sound, so banners also show while the app is in the foreground; each banner has a
+//     unique identifier and replaces the previous one.
 type notifier struct {
 	mu        sync.Mutex
-	status    string // native permission: granted | denied | unknown | unsupported
-	method    string // auto | native | applescript
-	lastPath  string
+	status    string // granted | denied | unknown | unsupported
+	checked   time.Time
 	lastError string
 	lastAt    time.Time
 	prev      *mygo.Notification
 	seq       int
-	dir       string
 }
 
 const notifySettingsURL = "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
 
-func newNotifier(dataDir string) *notifier {
-	n := &notifier{status: "unknown", method: "auto", dir: dataDir}
-	if b, err := os.ReadFile(filepath.Join(dataDir, "notify-permission")); err == nil {
-		if s := strings.TrimSpace(string(b)); s == "granted" || s == "denied" {
-			n.status = s
-		}
-	}
-	if b, err := os.ReadFile(filepath.Join(dataDir, "notify-method")); err == nil {
-		if m := strings.TrimSpace(string(b)); validMethod(m) {
-			n.method = m
-		}
-	}
-	return n
-}
-
-func validMethod(m string) bool { return m == "auto" || m == "native" || m == "applescript" }
+func newNotifier() *notifier { return &notifier{status: "unknown"} }
 
 func nativeSupported() bool { return runtime.GOOS == "darwin" && mygo.NotificationsSupported() }
 
-func (n *notifier) State() radar.NotifyState {
+// queryStatus / requestAuth are vars so tests can stub the system.
+var (
+	queryStatus = mygo.NotificationAuthorizationStatus
+	requestAuth = mygo.RequestNotificationAuthorization
+)
+
+// start asks for permission once at launch when the user has not answered yet (shows the system prompt).
+func (n *notifier) start() {
+	if !nativeSupported() {
+		n.set("unsupported", nil)
+		return
+	}
+	go func() {
+		st := queryStatus()
+		if st == "unknown" {
+			ok, err := requestAuth()
+			if err != nil {
+				log.Println("notification authorization:", err)
+			}
+			st = queryStatus()
+			if st == "unknown" && ok {
+				st = "granted"
+			}
+		}
+		n.set(st, nil)
+	}()
+}
+
+func (n *notifier) set(st string, err error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	st := n.status
-	if !nativeSupported() {
-		st = "unsupported"
+	if st != "" {
+		n.status, n.checked = st, time.Now()
 	}
-	s := radar.NotifyState{Status: st, Method: n.method, LastPath: n.lastPath, LastError: n.lastError, AppleScript: appleScriptAvailable()}
+	if err != nil {
+		n.lastError = err.Error()
+	}
+}
+
+// refresh re-reads the system's status (the user may have changed it in System Settings), at most every 2 s.
+func (n *notifier) refresh() {
+	if !nativeSupported() {
+		n.set("unsupported", nil)
+		return
+	}
+	n.mu.Lock()
+	fresh := time.Since(n.checked) < 2*time.Second
+	n.mu.Unlock()
+	if !fresh {
+		n.set(queryStatus(), nil)
+	}
+}
+
+func (n *notifier) State() radar.NotifyState {
+	n.refresh()
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	s := radar.NotifyState{Status: n.status, LastError: n.lastError}
 	if !n.lastAt.IsZero() {
 		s.LastAt = n.lastAt.UnixMilli()
 	}
 	return s
 }
 
-func (n *notifier) SetMethod(m string) error {
-	if !validMethod(m) {
-		return errors.New("未知的通知方式")
-	}
+// show posts one banner with a fresh identifier and removes the previous one.
+func (n *notifier) show(title, body string, onClick func()) error {
+	err := n.post(title, body, onClick)
 	n.mu.Lock()
-	n.method = m
-	n.mu.Unlock()
-	return os.WriteFile(filepath.Join(n.dir, "notify-method"), []byte(m), 0o644)
-}
-
-func (n *notifier) setStatus(s string) {
-	n.mu.Lock()
-	changed := n.status != s
-	n.status = s
-	n.mu.Unlock()
-	if changed {
-		_ = os.WriteFile(filepath.Join(n.dir, "notify-permission"), []byte(s), 0o644)
-	}
-}
-
-func (n *notifier) record(path string, err error) {
-	n.mu.Lock()
-	n.lastPath, n.lastAt = path, time.Now()
-	n.lastError = ""
+	n.lastAt, n.lastError = time.Now(), ""
 	if err != nil {
 		n.lastError = err.Error()
 	}
 	n.mu.Unlock()
+	if err != nil {
+		log.Println("notification:", err)
+	}
+	return err
 }
 
-// showNative posts through UNUserNotificationCenter with a fresh identifier (the previous banner is removed).
-func (n *notifier) showNative(title, body string, onClick func()) error {
+func (n *notifier) post(title, body string, onClick func()) error {
 	if !nativeSupported() {
-		return errors.New("系统通知中心不可用（需要从打包后的 .app 运行）")
+		n.set("unsupported", nil)
+		return errors.New("系统通知不可用（需要从打包后的 .app 运行）")
 	}
 	n.mu.Lock()
+	st := n.status
 	n.seq++
 	id := fmt.Sprintf("ai-radar-%d-%d", time.Now().UnixMilli(), n.seq)
 	prev := n.prev
 	n.mu.Unlock()
+	if st == "unknown" {
+		if _, err := requestAuth(); err != nil {
+			log.Println("notification authorization:", err)
+		}
+		n.set(queryStatus(), nil)
+	}
 	nt := mygo.NewNotification(mygo.NotificationOptions{ID: id, Title: title, Body: body, Group: "ai-radar"})
 	if onClick != nil {
 		nt.OnClick(onClick)
 	}
 	err := nt.Show()
 	if errors.Is(err, mygo.ErrNotificationsDenied) {
-		n.setStatus("denied")
-		return errors.New("系统未允许本 App 发送通知（UNErrorDomain 1：未授权；未签名的 App 常被系统直接拒绝）")
+		n.set("denied", nil)
+		return errors.New("系统设置中未允许本 App 的通知")
 	}
 	if err != nil {
 		return fmt.Errorf("系统通知失败：%w", err)
 	}
-	n.setStatus("granted")
+	n.set("granted", nil)
 	if prev != nil {
 		prev.Close()
 	}
@@ -140,78 +162,12 @@ func (n *notifier) showNative(title, body string, onClick func()) error {
 	return nil
 }
 
-func appleScriptAvailable() bool {
-	if runtime.GOOS != "darwin" {
-		return false
-	}
-	_, err := exec.LookPath("osascript")
-	return err == nil
-}
-
-// appleScriptArgs passes title/body as argv (no string interpolation into the script).
-func appleScriptArgs(title, body string) []string {
-	return []string{"-e", "on run argv", "-e", `display notification (item 2 of argv) with title (item 1 of argv) sound name "default"`, "-e", "end run", title, body}
-}
-
-var runOsascript = func(ctx context.Context, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, "osascript", args...).CombinedOutput()
-}
-
-func (n *notifier) showAppleScript(title, body string) error {
-	if !appleScriptAvailable() {
-		return errors.New("osascript 不可用")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	out, err := runOsascript(ctx, appleScriptArgs(title, body)...)
-	if err != nil {
-		return fmt.Errorf("AppleScript 通知失败：%v %s", err, strings.TrimSpace(string(out)))
-	}
-	return nil
-}
-
-// show delivers one banner by the configured method; returns the path used.
-func (n *notifier) show(title, body string, onClick func()) (string, error) {
-	n.mu.Lock()
-	m := n.method
-	n.mu.Unlock()
-	var path string
-	var err error
-	switch m {
-	case "applescript":
-		path, err = "applescript", n.showAppleScript(title, body)
-	case "native":
-		path, err = "native", n.showNative(title, body, onClick)
-	default:
-		path, err = "native", n.showNative(title, body, onClick)
-		if err != nil {
-			log.Println("notification (native):", err, "→ AppleScript")
-			if e2 := n.showAppleScript(title, body); e2 == nil {
-				path, err = "applescript", nil
-				n.record(path, nil)
-				n.mu.Lock()
-				n.lastError = "系统通知中心不可用，已改用 AppleScript：" + err.Error()
-				n.mu.Unlock()
-				return path, nil
-			} else {
-				err = fmt.Errorf("%v；%v", err, e2)
-			}
-		}
-	}
-	if err != nil {
-		log.Println("notification:", err)
-	}
-	n.record(path, err)
-	return path, err
-}
-
 // install wires the radar server's desktop hooks (设置 › 通知 / 数据).
 func (n *notifier) install(show func(), dataDir string) {
 	radar.DesktopHooks = radar.DesktopHooksT{
-		NotifyState:     n.State,
-		SetNotifyMethod: n.SetMethod,
+		NotifyState: n.State,
 		NotifyTest: func() (radar.NotifyState, error) {
-			_, err := n.show("AI News Radar 测试通知", "看到这条横幅，说明系统通知工作正常。", show)
+			err := n.show("AI News Radar 测试通知", "看到这条横幅，说明系统通知工作正常。", show)
 			return n.State(), err
 		},
 		OpenNotifySettings: func() error { return mygo.Shell.OpenExternal(notifySettingsURL) },

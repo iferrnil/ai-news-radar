@@ -26,3 +26,5 @@ require (
 )
 
 replace github.com/iferrnil/ai-news-radar/server => ../server
+
+replace github.com/egoist/mygo => ./third_party/mygo

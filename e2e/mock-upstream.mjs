@@ -101,13 +101,20 @@ http.createServer((req, res) => {
         const content = msgs.at(-1).content;
         const sys = msgs[0]?.role === "system" ? msgs[0].content : "";
         const sm = /<skill name="([^"]*)">([\s\S]*?)<\/skill>/.exec(sys); const skill = (sm ? sm[1] + " " + sm[2] : "").replace(/\s+/g, " ").trim();
+        const reply = (c) => send(res, 200, { choices: [{ message: { content: c } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+        // brief pipeline stages: per-item summaries (JSON), then verification (returns the draft + a marker)
+        if (sys.includes("<stage>summarize</stage>")) {
+          const ns = [...content.matchAll(/<item n="(\d+)"[^>]*title="([^"]*)"/g)];
+          return reply(JSON.stringify({ items: ns.map((m) => ({ n: Number(m[1]), summary: "【摘要】" + m[2] })) }));
+        }
+        if (sys.includes("<stage>verify</stage>")) return reply((/<brief>\n?([\s\S]*?)\n?<\/brief>/.exec(content)?.[1] ?? "") + "\n\n> 【已核对】");
         try {
           const items = JSON.parse(content);
           const r = items.map((x) => ({ i: x.i, t: "【译】" + x.t, s: x.s ? "【译】" + x.s : "" }));
           send(res, 200, { choices: [{ message: { content: JSON.stringify({ r }) } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
         } catch {
           // brief AI 润色: user content is Markdown, not a translate batch
-          send(res, 200, { choices: [{ message: { content: "# 【润色】\n\n> SKILL: " + skill.slice(0, 300) + "\n\n" + content } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+          send(res, 200, { choices: [{ message: { content: "# 【润色】\n\n> SKILL: " + skill.slice(0, 2000) + "\n\n" + content } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
         }
       } catch { send(res, 400, { error: "bad request" }); }
     });

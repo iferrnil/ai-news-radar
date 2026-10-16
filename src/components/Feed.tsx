@@ -17,8 +17,8 @@ import { markOnHover } from "./read-store";
 import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { TrBadge, ItemPreview } from "./item-preview";
+import { HoverPreviewLayer, hoverPreview } from "./hover-preview";
+import { TrBadge } from "./item-preview";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -55,13 +55,8 @@ const BLEED = "-mx-4 px-4 sm:-mx-6 sm:px-6 xl:-mx-8 xl:px-8 2xl:-mx-10 2xl:px-10
 const CARD_H = "h-[208px]"; // slightly denser cards without redesign
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
-const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onPreview, hover }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; onPreview: (it: ItemOut) => void; hover: boolean }) {
+const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; hover: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [armed, setArmed] = useState(false); const [hcOpen, setHcOpen] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const arm = () => { setArmed(true); clearTimeout(timer.current); timer.current = setTimeout(() => { setHcOpen(true); onPreview(it); }, 450); };
-  const disarm = () => clearTimeout(timer.current);
-  useEffect(() => () => clearTimeout(timer.current), []);
   useEffect(() => { if (active) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [active]);
   const x = !!it.is_x, h = x ? handleOf(it) : null, t = x ? xText(it) : "";
   const linkOnly = x && /^https?:\/\//.test(t);
@@ -108,17 +103,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onPre
     </Card>
   );
   if (!hover) return card;
-  // HoverCard is mounted lazily on the first pointer enter (hundreds of cards → hundreds of hover-card roots otherwise);
-  // the first open after arming is timed here with the same 450 ms delay, later ones by the trigger itself.
-  if (!armed) return <div className="min-w-0" onPointerEnter={arm} onPointerLeave={disarm}>{card}</div>;
-  return (
-    <HoverCard open={hcOpen} onOpenChange={(o) => { setHcOpen(o); if (o) onPreview(it); }}>
-      <HoverCardTrigger delay={450} closeDelay={150} render={<div className="min-w-0" onPointerLeave={disarm} />}>{card}</HoverCardTrigger>
-      <HoverCardContent side="right" align="start" sideOffset={8} className="w-[min(420px,calc(100vw-24px))] overflow-hidden p-0 shadow-pop ring-border">
-        <ItemPreview it={it} />
-      </HoverCardContent>
-    </HoverCard>
-  );
+  return <div className="min-w-0" onPointerEnter={(e) => hoverPreview.enter(it, e.currentTarget)} onPointerMove={(e) => hoverPreview.enter(it, e.currentTarget)} onPointerLeave={() => hoverPreview.leave()} onPointerDown={() => hoverPreview.close()}>{card}</div>;
 });
 
 export default function Feed() {
@@ -236,7 +221,7 @@ export default function Feed() {
   const groups = useMemo(() => groupByDay(view.slice(0, shown)), [view, shown]);
   const dayCount = useMemo(() => { const m = new Map<string, number>(); for (const it of view) { const d = dayLabel(it.published); m.set(d, (m.get(d) ?? 0) + 1); } return m; }, [view]);
   const idx = useMemo(() => new Map(view.map((it, i) => [it.id, i])), [view]);
-  const openItem = useCallback((it: ItemOut) => { setCursor(idx.get(it.id) ?? -1); setOpen(it); }, [idx, setOpen]);
+  const openItem = useCallback((it: ItemOut) => { hoverPreview.close(); setCursor(idx.get(it.id) ?? -1); setOpen(it); }, [idx, setOpen]);
   useEffect(() => { document.title = (pend.length ? `(${pend.length}) ` : "") + "AI Radar · 国内外 AI 情报"; }, [pend.length]);
 
   const showPending = () => {
@@ -338,7 +323,7 @@ export default function Feed() {
             <div className={GRID}>
               {g.items.map((it) => {
                 const i = idx.get(it.id)!;
-                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={openItem} onPreview={onPreview} hover={canHover} />;
+                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={openItem} hover={canHover} />;
               })}
             </div>
           </section>
@@ -353,6 +338,7 @@ export default function Feed() {
             <ArrowUp className="size-4" />
           </button>
         )}
+        {canHover && <HoverPreviewLayer onOpen={onPreview} />}
         {briefOpen && briefScope && <BriefDialog open={briefOpen} onOpenChange={setBriefOpen} section={briefScope === "all" ? null : briefScope} sectionLabel={briefLabel} />}
     </div>
   );

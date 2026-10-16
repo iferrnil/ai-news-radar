@@ -142,7 +142,8 @@ func TestExtractArticle(t *testing.T) {
 // AI 润色 must send the active skill in the system prompt (built-in default when none is selected).
 func TestPolishUsesActiveSkill(t *testing.T) {
 	var mu sync.Mutex
-	var lastSys, lastURL string
+	var lastSys, lastURL, lastUser string
+	stages := map[string]string{} // stage → user content
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u := r.URL.Query().Get("u")
 		if strings.HasSuffix(u, "/SKILL.md") {
@@ -160,11 +161,23 @@ func TestPolishUsesActiveSkill(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(&body)
 		mu.Lock()
 		lastURL = u
-		if len(body.Messages) > 0 {
-			lastSys = body.Messages[0].Content
+		reply := "# 润色结果"
+		if len(body.Messages) > 1 {
+			sys, user := body.Messages[0].Content, body.Messages[1].Content
+			switch {
+			case strings.Contains(sys, "<stage>summarize</stage>"):
+				stages["summarize"] = user
+				reply = `{"items":[{"n":1,"summary":"SUM-ONE 事实摘要"}]}`
+			case strings.Contains(sys, "<stage>verify</stage>"):
+				stages["verify"] = user
+				reply = "# 核对后的简报\n\nVERIFIED-MARKER 正文 [[1]](https://e.com/1)"
+			default:
+				stages["brief"] = user
+				lastSys, lastUser = sys, user
+			}
 		}
 		mu.Unlock()
-		json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": "# 润色结果"}}}})
+		json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": reply}}}})
 	}))
 	defer mock.Close()
 	t.Setenv("DEEPSEEK_API_KEY", "sk-"+"unit"+"test0000")
@@ -179,14 +192,38 @@ func TestPolishUsesActiveSkill(t *testing.T) {
 	srv := httptest.NewServer(st.Server(nil))
 	defer srv.Close()
 
+	var sid int
+	st.DB.QueryRow("SELECT id FROM sources WHERE enabled=1 AND type NOT LIKE 'x%' ORDER BY id LIMIT 1").Scan(&sid)
+	if _, err := st.DB.Exec(`INSERT INTO items(uid,source_id,title,url,summary,published,fetched) VALUES('u1',?,'Test story','https://e.com/1','Feed summary of the story.',?,?)`, sid, now(), now()); err != nil {
+		t.Fatal(err)
+	}
+	var last briefOut
 	brief := func() {
 		r, err := http.Get(srv.URL + "/api/brief?section=all&ai=1")
 		if err != nil || r.StatusCode != 200 {
 			t.Fatalf("brief: %v %v", err, r.Status)
 		}
+		last = briefOut{}
+		json.NewDecoder(r.Body).Decode(&last)
 		r.Body.Close()
 	}
 	brief()
+	// pipeline: originals → factual summaries → Skill brief from the summaries → verification against sources
+	if !strings.Contains(stages["summarize"], `<item n="1"`) || !strings.Contains(lastUser, "SUM-ONE 事实摘要") || !strings.Contains(lastUser, "只用这些事实") ||
+		!strings.Contains(stages["verify"], "<brief>") || !strings.Contains(stages["verify"], `<source n="1">`) || !strings.Contains(stages["verify"], "SUM-ONE") {
+		t.Fatalf("pipeline stages wrong: %v / brief user %q", stages, jsSlice(lastUser, 200))
+	}
+	if !last.Verified || !strings.Contains(last.Markdown, "VERIFIED-MARKER") {
+		t.Fatalf("verified brief not used: %+v", last.Verified)
+	}
+	if len(last.NoFullText) == 0 || last.NoFullText[0].Reason == "" { // the mock serves no readable article pages
+		t.Fatalf("items without full text not reported: %+v", last.NoFullText)
+	}
+	for _, want := range []string{"逐字照抄", "原文未说明", "只写 <summary>"} {
+		if !strings.Contains(lastSys, want) {
+			t.Fatalf("factual rule %q missing from the brief prompt", want)
+		}
+	}
 	if strings.Contains(lastSys, "SKILL-MARKER") || !strings.Contains(lastSys, `<skill name="brief-polish">`) || !strings.Contains(lastSys, "简体中文") || !strings.Contains(lastURL, "/chat/completions") {
 		t.Fatalf("default skill missing from system prompt: %q", lastSys)
 	}

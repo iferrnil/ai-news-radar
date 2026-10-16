@@ -38,6 +38,23 @@ for (const desktop of [false, true]) {
   });
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   out[tag] = m; rec(`${tag}: scroll perf measured (4x CPU throttle)`, m.cards > 20, JSON.stringify(m));
+  // hover preview: one at a time, closes on scroll, never opens during scrolling
+  await p.evaluate(() => window.scrollTo(0, 0)); await sleep(400);
+  const hp = p.getByTestId("hover-preview"), cardsL = p.locator("[data-item]");
+  const centre = async (i) => { const b = await cardsL.nth(i).boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
+  let [x, y] = await centre(1); await p.mouse.move(x, y, { steps: 3 }); await sleep(250);
+  rec(`${tag}: no preview before ~400 ms`, await hp.count() === 0);
+  await sleep(450); rec(`${tag}: one preview after delay`, await hp.count() === 1);
+  await p.screenshot({ path: SHOT(`r7_hover_preview_${tag}.png`) });
+  for (const i of [2, 3, 5]) { [x, y] = await centre(i); await p.mouse.move(x, y, { steps: 4 }); await sleep(120); }
+  await sleep(600); rec(`${tag}: moving across cards never stacks previews (≤ 1)`, await hp.count() <= 1, String(await hp.count()));
+  await p.mouse.wheel(0, 300); await sleep(120);
+  rec(`${tag}: wheel/scroll closes the preview`, await hp.count() === 0);
+  for (let k = 0; k < 6; k++) { await p.mouse.wheel(0, 120); await sleep(90); }
+  rec(`${tag}: nothing opens while scrolling`, await hp.count() === 0);
+  await p.evaluate(() => window.scrollTo(0, 0)); await sleep(700); [x, y] = await centre(2); await p.mouse.move(x, y, { steps: 3 }); await sleep(800);
+  rec(`${tag}: after scroll ends hovering opens it again`, await hp.count() === 1);
+  await p.mouse.move(2, 880); await sleep(400);
   // back-to-top
   await p.evaluate(() => window.scrollTo(0, 3000)); await sleep(400);
   const btn = p.getByTestId("back-to-top");

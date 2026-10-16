@@ -26,8 +26,7 @@ const NATIVE: Record<string, { label: string; v: "success" | "destructive" | "se
   granted: { label: "系统已允许", v: "success" }, denied: { label: "系统已拒绝", v: "destructive" }, unknown: { label: "尚未询问", v: "secondary" }, unsupported: { label: "当前运行方式不支持", v: "warning" },
 };
 
-type NativeState = { status: string; method: string; lastPath: string; lastError: string; lastAt: number; appleScript: boolean };
-const PATH: Record<string, string> = { native: "系统通知中心", applescript: "AppleScript" };
+type NativeState = { status: string; lastError: string; lastAt: number };
 
 export function NotifyCard({ desktop, server, locked, onSaved }: { desktop: boolean; server: NotifyPrefs | null; locked: boolean; onSaved: (p: NotifyPrefs) => void }) {
   const { sections } = useApp();
@@ -38,7 +37,6 @@ export function NotifyCard({ desktop, server, locked, onSaved }: { desktop: bool
   const [testing, setTesting] = useState(false);
   useEffect(() => { setWeb(webPrefs()); setPerm(webNotifySupported() ? Notification.permission : "unsupported"); }, []);
   useEffect(() => { if (desktop) api<NativeState>("/api/desktop/notify").then(setNs).catch(() => {}); }, [desktop]);
-  const setMethod = async (m: string) => { try { setNs(await api<NativeState>("/api/desktop/notify", { method: "PATCH", body: JSON.stringify({ method: m }) })); } catch (e) { toast.error((e as Error).message); } };
   const p: NotifyPrefs = desktop ? server ?? { enabled: false, sections: [] } : web;
   const disabled = desktop ? locked || !server : perm === "unsupported";
 
@@ -63,7 +61,7 @@ export function NotifyCard({ desktop, server, locked, onSaved }: { desktop: bool
     try {
       const r = await api<{ ok: boolean; state?: NativeState; error?: string }>("/api/settings/notify-test", { method: "POST" });
       if (r.state) setNs(r.state);
-      if (r.ok) toast.success(desktop ? `已发送（${PATH[r.state?.lastPath ?? ""] ?? "系统通知"}）` : "已发送：切到其他标签页时会以系统通知显示");
+      if (r.ok) toast.success(desktop ? "已发送测试通知" : "已发送：切到其他标签页时会以系统通知显示");
       else toast.error(r.error ?? "发送失败");
     } catch (e) { toast.error((e as Error).message); }
     finally { setTesting(false); }
@@ -84,7 +82,7 @@ export function NotifyCard({ desktop, server, locked, onSaved }: { desktop: bool
       <CardContent className="grid gap-4">
         {desktop && native === "denied" && (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 type-caption" data-testid="notify-denied">
-            <span className="flex-1">系统未允许本 App 的通知{ns?.method !== "native" ? "，已改用 AppleScript 发送" : ""}。</span>
+            <span className="flex-1">系统未允许本 App 的通知，横幅不会出现。</span>
             <Button size="sm" variant="outline" onClick={openSys} data-testid="notify-open-sys"><ExternalLink />打开「系统设置 › 通知」</Button>
           </div>
         )}
@@ -109,19 +107,11 @@ export function NotifyCard({ desktop, server, locked, onSaved }: { desktop: bool
                 <label className="flex items-center gap-2 type-body"><RadioGroupItem value="all" aria-label="全部新内容" />全部新内容</label>
               </RadioGroup>
             </div>
-            <div className="grid gap-2" data-testid="notify-method">
-              <Label>发送方式</Label>
-              <RadioGroup value={ns?.method ?? "auto"} className="flex flex-wrap gap-4" onValueChange={(v) => void setMethod(String(v))}>
-                <label className="flex items-center gap-2 type-body"><RadioGroupItem value="auto" aria-label="自动" />自动</label>
-                <label className="flex items-center gap-2 type-body"><RadioGroupItem value="native" aria-label="系统通知中心" />系统通知中心</label>
-                <label className="flex items-center gap-2 type-body"><RadioGroupItem value="applescript" aria-label="AppleScript" />AppleScript</label>
-              </RadioGroup>
-              {ns?.lastAt ? (
-                <p className={`type-meta ${ns.lastError && !ns.lastError.startsWith("系统通知中心不可用") ? "text-red-500" : "text-faint"}`} data-testid="notify-last">
-                  上次 {new Date(ns.lastAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} · {PATH[ns.lastPath] ?? "—"}{ns.lastError ? ` · ${ns.lastError}` : " · 成功"}
-                </p>
-              ) : null}
-            </div>
+            {ns?.lastAt ? (
+              <p className={`type-meta ${ns.lastError ? "text-red-500" : "text-faint"}`} data-testid="notify-last">
+                上次 {new Date(ns.lastAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} · {ns.lastError || "已发送"}
+              </p>
+            ) : null}
           </>
         )}
         <div className="grid gap-2">
@@ -145,7 +135,7 @@ export function NotifyCard({ desktop, server, locked, onSaved }: { desktop: bool
       </CardContent>
       <CardFooter className="flex flex-wrap justify-end gap-2">
         {desktop && native !== "denied" && <Button variant="ghost" className="mr-auto text-muted-foreground" onClick={openSys}><SlidersHorizontal />系统通知设置</Button>}
-        <Button variant="outline" disabled={testing || (desktop ? native === "unsupported" && !ns?.appleScript : locked || !p.enabled)} onClick={test} data-testid="notify-test">{testing ? <Loader2 className="animate-spin" /> : <Send />}发送测试通知</Button>
+        <Button variant="outline" disabled={testing || (desktop ? native === "unsupported" : locked || !p.enabled)} onClick={test} data-testid="notify-test">{testing ? <Loader2 className="animate-spin" /> : <Send />}发送测试通知</Button>
       </CardFooter>
     </Card>
   );

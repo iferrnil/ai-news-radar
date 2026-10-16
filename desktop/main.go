@@ -60,6 +60,11 @@ func main() {
 			lw = io.MultiWriter(os.Stderr, logf)
 		}
 
+		// debug: `touch <data>/debug-webview-transparent` restores MyGo's upstream see-through WKWebView
+		// (drawsBackground=false) to compare scrolling; see third_party/mygo/PATCHES.md
+		if _, err := os.Stat(filepath.Join(data, "debug-webview-transparent")); err == nil {
+			os.Setenv("MYGO_WEBVIEW_TRANSPARENT", "1")
+		}
 		win = mygo.NewWindow(windowOptions())
 		win.Page().LoadHTML(splashHTML, "")
 		// closing the window hides it (the app keeps running in the tray); 退出 quits
@@ -70,8 +75,9 @@ func main() {
 			}
 		})
 
-		nt := newNotifier(data)
+		nt := newNotifier()
 		nt.install(show, data)
+		nt.start() // asks for notification permission once (system prompt), reads the real status
 		srv, err = StartServer(ServerConfig{DataDir: data, Log: lw, Port: PreferredPort, Version: mygo.App.Version()})
 		if err != nil {
 			fatal("启动内置服务失败", err)
@@ -175,7 +181,7 @@ var appCtx, stopApp = context.WithCancel(context.Background())
 func notifyP0(nt *notifier, win *mygo.Window, base string, b notifyBatch, show func()) {
 	title, body := batchText(b)
 	id := b.Items[0].ID
-	_, _ = nt.show(title, body, func() {
+	_ = nt.show(title, body, func() {
 		show()
 		go func() {
 			ok, err := win.Page().Eval(fmt.Sprintf("typeof window.__radarOpenItem === 'function' ? (window.__radarOpenItem(%d), true) : false", id))

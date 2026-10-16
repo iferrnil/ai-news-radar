@@ -67,8 +67,8 @@ const p = await ctx.newPage(); p.on("pageerror", (e) => errors.push(String(e)));
 await p.goto(B + "/settings"); await p.getByTestId("skill-card").waitFor({ timeout: 15000 }); await sleep(800);
 const titles = await p.locator("[data-slot=card-title]").allInnerTexts();
 rec("desktop settings: 常规 / 通知 / 翻译 / AI / 简报 Skill / 更新 / 数据 / 关于", titles.join(",") === "常规,通知,翻译 / AI,简报 Skill,更新,数据,关于", titles.join(","));
-rec("desktop: notify 发送方式 selector (自动/系统通知中心/AppleScript)", /自动[\s\S]*系统通知中心[\s\S]*AppleScript/.test(await p.getByTestId("notify-method").innerText()));
-{ const r = await (await fetchR(B + "/api/desktop/notify", { method: "PATCH", headers: J, body: JSON.stringify({ method: "bogus" }) })).status; rec("notify method: invalid rejected (404 without shell hooks)", r === 400 || r === 404, String(r)); }
+rec("desktop: no 发送方式 / AppleScript option (native only)", await p.getByTestId("notify-method").count() === 0 && !/AppleScript/.test(await p.getByTestId("notify-card").innerText()));
+{ const r = (await fetchR(B + "/api/desktop/notify", { method: "PATCH", headers: J, body: JSON.stringify({ method: "applescript" }) })).status; rec("notify method API removed", r === 405 || r === 404, String(r)); }
 rec("desktop: notification status + 发送测试通知 button", /不支持|尚未询问|已允许|已拒绝/.test(await p.getByTestId("notify-perm").innerText()) && await p.getByTestId("notify-test").count() === 1);
 rec("desktop: data dir shown, no import/export", (await p.getByTestId("data-card").getByRole("button").count()) === 1 && /打开数据目录/.test(await p.getByTestId("data-card").innerText()));
 rec("default skill active", (await p.getByTestId("skill-row").count()) === 1 && /brief-polish/.test(await p.getByTestId("skill-list").innerText()) && await p.getByTestId("skill-active").count() === 1);
@@ -104,12 +104,17 @@ rec("AI 润色 system prompt contains the active skill text", ai.ai === true && 
 await p.getByRole("button", { name: "删除 e2e-editors" }).click(); await sleep(700);
 rec("delete active → default active again", (await p.getByTestId("skill-row").count()) === 2 && /brief-polish/.test(await p.getByTestId("skill-row").filter({ has: p.getByTestId("skill-active") }).innerText()));
 const ai2 = await (await fetchR(B + "/api/brief?section=all&ai=1")).json();
+rec("pipeline: summaries → brief → verification; per-item fetch status", /【摘要】/.test(ai2.markdown) && /【已核对】/.test(ai2.markdown) && ai2.verified === true
+  && Array.isArray(ai2.noFullText) && ai2.groups.flatMap((g) => g.items).every((x) => x.fetch && x.fetch.status), JSON.stringify(ai2.noFullText?.[0] ?? null));
 rec("…and polishing uses the default skill", /SKILL: brief-polish .*始终用简体中文写/.test(ai2.markdown) && !/SKILL-E2E-MARKER-42/.test(ai2.markdown));
 // the AI brief renders in the dialog
 await p.goto(B + "/"); await p.locator("[data-slot=card]").first().waitFor({ timeout: 15000 }); await sleep(500);
 await p.getByTestId("brief-btn").click(); await p.getByTestId("brief-body").waitFor({ timeout: 15000 });
 await p.getByTestId("brief-ai").click(); await p.getByTestId("brief-rule").waitFor({ timeout: 15000 });
 rec("dialog: AI result rendered (skill named)", /AI 润色（brief-polish）/.test(await p.getByTestId("brief-dialog").innerText()));
+rec("dialog: lists items without full text", /未取到原文全文/.test(await p.getByTestId("brief-nofull").innerText().catch(() => "")));
+await p.getByTestId("brief-nofull").locator("summary").click().catch(() => {}); await sleep(200);
+await p.getByTestId("brief-dialog").screenshot({ path: SHOT("r7_brief_nofull.png") });
 await p.getByTestId("brief-dialog").screenshot({ path: SHOT("r5_brief_ai.png") });
 await ctx.close();
 fs.rmSync(f, { force: true }); fs.rmSync(dir, { recursive: true, force: true });

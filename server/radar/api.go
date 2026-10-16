@@ -55,7 +55,6 @@ func (s *Store) Handler() http.Handler {
 	m.HandleFunc("PATCH /api/skills/active", s.hSkillActive)
 	m.HandleFunc("DELETE /api/skills/{name}", s.hSkillDelete)
 	m.HandleFunc("GET /api/desktop/notify", s.hDesktopNotifyStatus)
-	m.HandleFunc("PATCH /api/desktop/notify", s.hDesktopNotifyPatch)
 	m.HandleFunc("POST /api/desktop/notify-open-settings", s.hDesktopNotifyOpen)
 	m.HandleFunc("POST /api/desktop/open-data", s.hDesktopOpenData)
 	m.HandleFunc("GET /api/stats", s.hStats)

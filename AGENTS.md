@@ -250,3 +250,8 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - Desktop: MyGo `PageOptions.PreloadScript` sets `window.__radarDesktop` (+ `__radarTitlebar` on macOS) and theme `system` if unset; the head script turns them into `html[data-desktop][data-titlebar]` (at document start there is no `<html>` yet). Chrome is `user-select: none`; header/sidebar brand are `--app-region: drag`; `--mygo-titlebar-inset-left` pads the brand / collapsed header. Menu items call `window.__radarCmd("sidebar"|"search"|"settings")`. `desktop/ui.go` = window options (`StateKey: "main"`, min 720×480, `TitleBarHiddenInset` + traffic lights at 18,21 on darwin) and menus.
 - Startup log line `startup: healthy=… dom=… content=…` (first card / empty state) in the shell's stderr. Never use endless CSS animations in always-visible chrome: in WebKit they keep the app repainting (the old Live ping cost ~17% CPU idle under Xvfb).
 - Tests: e2e t16; `go test` (`ui_test.go`); `/workspace`-side review helpers are not in the repo.
+
+## 0.7.0 notes
+- MyGo is vendored at `desktop/third_party/mygo` (v0.4.3 + patches, see its `PATCHES.md`): opaque WKWebView by default (debug: create `<data>/debug-webview-transparent` to restore the old see-through webview), plus notification authorization status/request APIs.
+- Notifications are native-only (UNUserNotificationCenter). Releases are signed with a stable self-signed identity (secrets `MACOS_CERTIFICATE*`, `MACOS_SIGNING_IDENTITY`, `MACOS_SELF_SIGNED=1`) so permissions survive updates.
+- Brief: `server/radar/briefpick.go` dedupes then picks ≤10 (4 oldest / 3 middle / 3 newest). AI polish = fetch full text → per-item summary → skill brief → verify (`BRIEF_VERIFY=0` skips).
