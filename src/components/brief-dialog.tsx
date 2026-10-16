@@ -140,7 +140,7 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel 
             : <div data-testid="brief-body" className={busy ? "opacity-60 transition-opacity" : undefined}><Markdown md={text} /></div>)}
         </div>
         <Separator />
-        <DialogFooter className="flex-row flex-wrap items-center gap-2 px-5 py-3 sm:justify-between">
+        <DialogFooter className="m-0 flex-row flex-wrap items-center gap-2 rounded-b-xl border-t-0 px-5 pt-3 pb-4 sm:justify-between">
           <div className="flex flex-wrap gap-2">
             <Button variant={editing ? "secondary" : "outline"} size="sm" disabled={!b || busy} onClick={() => setEditing(!editing)} aria-pressed={editing} data-testid="brief-edit">
               {editing ? <Eye className="size-3.5" /> : <Pencil className="size-3.5" />}{editing ? "预览" : "编辑"}

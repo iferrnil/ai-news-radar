@@ -255,3 +255,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - MyGo is vendored at `desktop/third_party/mygo` (v0.4.3 + patches, see its `PATCHES.md`): opaque WKWebView by default (debug: create `<data>/debug-webview-transparent` to restore the old see-through webview), plus notification authorization status/request APIs.
 - Notifications are native-only (UNUserNotificationCenter). Releases are signed with a stable self-signed identity (secrets `MACOS_CERTIFICATE*`, `MACOS_SIGNING_IDENTITY`, `MACOS_SELF_SIGNED=1`) so permissions survive updates.
 - Brief: `server/radar/briefpick.go` dedupes then picks ≤10 (4 oldest / 3 middle / 3 newest). AI polish = fetch full text → per-item summary → skill brief → verify (`BRIEF_VERIFY=0` skips).
+
+## 0.8.0 notes
+- Brief = one item per paragraph: `briefMarkdown` writes each item as its own paragraph; AI output goes through `onePerParagraph` (splits prose paragraphs after each `[[n]](url)` run). The built-in skill (v1.1) says the same.
+- Scroll perf: `src/lib/font-warm.ts` preloads LXGW WenKai unicode-range slices for loaded items at idle (slices loading mid-scroll caused full relayouts). The scrolling flag is `.feed-list[data-scrolling]` (not on `<html>`). Feed cards are plain divs (no shadcn Card `:has()` selectors) with `shadow-feed`.

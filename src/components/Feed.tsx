@@ -1,4 +1,5 @@
 "use client";
+import { warmFonts } from "@/lib/font-warm";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -16,7 +17,6 @@ import { toast } from "sonner";
 import { markOnHover } from "./read-store";
 import { XLogo as Twitter } from "./x-logo";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { HoverPreviewLayer, hoverPreview } from "./hover-preview";
 import { TrBadge } from "./item-preview";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -62,8 +62,8 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
   const linkOnly = x && /^https?:\/\//.test(t);
   const dek = x ? "" : dekText(it.summary);
   const card = (
-    <Card ref={ref} size="sm" onClick={() => onOpen(it)} data-active={active} data-read={read} data-item={it.id} role="button" tabIndex={-1}
-      className={cn(CARD_H, "feed-card group/item cursor-pointer gap-0 py-0 shadow-card ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
+    <div ref={ref} data-slot="card" data-size="sm" onClick={() => onOpen(it)} data-active={active} data-read={read} data-item={it.id} role="button" tabIndex={-1}
+      className={cn(CARD_H, "feed-card group/item flex flex-col overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 cursor-pointer gap-0 py-0 shadow-feed ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
         "hover:-translate-y-px hover:ring-foreground/[0.14] hover:shadow-raised",
         "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/55", fresh && "fresh-row")}>
       <div className="flex h-10 shrink-0 items-center gap-2 px-3.5 pt-0.5 type-caption leading-4">
@@ -100,7 +100,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
           <ArrowUpRight className="size-3.5" />
         </a>
       </div>
-    </Card>
+    </div>
   );
   if (!hover) return card;
   return <div className="min-w-0" onPointerEnter={(e) => hoverPreview.enter(it, e.currentTarget)} onPointerMove={(e) => hoverPreview.enter(it, e.currentTarget)} onPointerLeave={() => hoverPreview.leave()} onPointerDown={() => hoverPreview.close()}>{card}</div>;
@@ -121,6 +121,7 @@ export default function Feed() {
     const vis = enabledIds ? raw.filter((it) => enabledIds.has(it.source_id)) : raw;
     return vis.map(loc); // translation shown where its view scope (全部 / section / source) is switched on
   }, [raw, loc, enabledIds]);
+  useEffect(() => { warmFonts(items.flatMap((it) => [it.title, it.summary ?? "", it.source])); }, [items]);
   const [pending, setPending] = useState<ItemOut[]>([]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -170,16 +171,22 @@ export default function Feed() {
       }
     });
   }, [onStream]);
-  // one passive, rAF-coalesced scroll listener: back-to-top visibility + html[data-scrolling] (drops hover effects / pointer
+  // one passive, rAF-coalesced scroll listener: back-to-top visibility + .feed-list[data-scrolling] (drops hover effects / pointer
   // events on cards while scrolling, so WKWebView doesn't restyle hundreds of cards and open hover cards mid-scroll)
+  // The flag sits on the feed list only (one element; pointer-events inherits on Chrome/WebKit's fast path) instead of
+  // html — toggling an html attribute matched by `.feed-card` selectors restyled every card at each scroll start/stop.
+  const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    let raf = 0, idle: ReturnType<typeof setTimeout> | undefined; const d = document.documentElement;
+    let raf = 0, idle: ReturnType<typeof setTimeout> | undefined, top = false, on = false;
     const h = () => {
-      if (!raf) raf = requestAnimationFrame(() => { raf = 0; setShowTop(window.scrollY > 900); if (!d.dataset.scrolling) d.dataset.scrolling = "1"; });
-      clearTimeout(idle); idle = setTimeout(() => { delete d.dataset.scrolling; }, 140);
+      if (!raf) raf = requestAnimationFrame(() => {
+        raf = 0; const t = window.scrollY > 900; if (t !== top) { top = t; setShowTop(t); }
+        if (!on) { on = true; listRef.current?.setAttribute("data-scrolling", ""); }
+      });
+      clearTimeout(idle); idle = setTimeout(() => { on = false; listRef.current?.removeAttribute("data-scrolling"); }, 140);
     };
     window.addEventListener("scroll", h, { passive: true });
-    return () => { window.removeEventListener("scroll", h); cancelAnimationFrame(raf); clearTimeout(idle); delete d.dataset.scrolling; };
+    return () => { window.removeEventListener("scroll", h); cancelAnimationFrame(raf); clearTimeout(idle); };
   }, []);
 
   // 只看未读 hides what was read BEFORE this view was opened (snapshot), so cards read while browsing stay put until the view changes
@@ -208,15 +215,15 @@ export default function Feed() {
     if (hit) { setOpen(loc(hit)); strip(); return; }
     api<ItemOut[]>(`/api/items?id=${itemParam}&zh=1`).then((r) => { if (r[0]) setOpen(loc(r[0])); else toast("这条内容已不在 48 小时窗口内"); }).catch(() => {}).finally(strip);
   }, [itemParam, loading]); // eslint-disable-line react-hooks/exhaustive-deps
-  // render in pages of 60 cards; an IntersectionObserver sentinel reveals more while scrolling
+  // render in pages of 30 cards (shorter commits while scrolling); an IntersectionObserver sentinel reveals more while scrolling
   const [shown, setShown] = useState(30);
   useEffect(() => { setShown(30); }, [f]);
   const sentinel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = sentinel.current; if (!el) return;
-    const io = new IntersectionObserver((es) => { if (es[0].isIntersecting) setShown((n) => n + 60); }, { rootMargin: "800px" });
+    const io = new IntersectionObserver((es) => { if (es[0].isIntersecting) setShown((n) => n + 30); }, { rootMargin: "1400px" });
     io.observe(el); return () => io.disconnect();
-  });
+  }, [loading, shown, view.length]);
   useEffect(() => { if (cursor >= shown - 3) setShown((n) => n + 60); }, [cursor, shown]);
   const groups = useMemo(() => groupByDay(view.slice(0, shown)), [view, shown]);
   const dayCount = useMemo(() => { const m = new Map<string, number>(); for (const it of view) { const d = dayLabel(it.published); m.set(d, (m.get(d) ?? 0) + 1); } return m; }, [view]);
@@ -315,7 +322,7 @@ export default function Feed() {
           {(f.section || f.source != null) && <Button variant="ghost" size="sm" onClick={() => setF({ section: "", source: null })}>查看全部</Button>}
         </EmptyState>
       ) : (
-        groups.map((g, gi) => (
+        <div ref={listRef} className="feed-list">{groups.map((g, gi) => (
           <section key={g.day}>
             <div className={cn("sticky top-14 z-10 flex items-center gap-2 bg-background pb-3 type-caption font-medium text-muted-foreground", gi === 0 ? "pt-4" : "pt-7", BLEED)}>
               {g.day}<Badge size="sm" variant="muted" className="font-mono tabular-nums text-faint">{dayCount.get(g.day) ?? g.items.length}</Badge><Separator className="flex-1 bg-border/60" />
@@ -327,7 +334,7 @@ export default function Feed() {
               })}
             </div>
           </section>
-        ))
+        ))}</div>
       )}
       {!loading && shown < view.length && <div ref={sentinel} className={cn(GRID, "mt-3 @2xl:mt-4 @5xl:mt-5 @7xl:mt-6")}>{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>}
 

@@ -273,10 +273,10 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
               );
             })}
           </NavGroup>
-          <NavItem active={path === "/settings"} icon={Settings} label="设置" onClick={() => { router.push("/settings"); onNavigate?.(); }} />
           <NavGroup icon={BookOpen} label="文档" storageKey={DOCS_KEY} current={path === "/docs"} inside={path.startsWith("/docs")} onHeader={() => { router.push("/docs"); onNavigate?.(); }}>
             {DOCS.map((d) => <GroupLink key={d.slug} on={path === docHref(d)} onClick={() => { router.push(docHref(d)); onNavigate?.(); }}>{d.title}</GroupLink>)}
           </NavGroup>
+          <NavItem active={path === "/settings"} icon={Settings} label="设置" onClick={() => { router.push("/settings"); onNavigate?.(); }} />
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border p-3 type-meta text-faint">
@@ -429,7 +429,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </aside>
         {navUsed && <MobileNav open={mobileNav} onOpenChange={setMobileNav} />}
         <div className="glow flex min-w-0 flex-1 flex-col">
-          <header className="app-header sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
+          <header className="app-header sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/95 px-3 sm:px-5">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNav(true)} aria-label="菜单"><Menu className="size-4" /></Button>
             <Tooltip>
               <TooltipTrigger render={<Button variant="ghost" size="icon" className="-ml-1 hidden lg:inline-flex" onClick={toggleSidebar} aria-label={collapsed ? "显示侧边栏" : "隐藏侧边栏"} aria-controls="app-sidebar" data-state={collapsed ? "collapsed" : "expanded"} data-testid="sidebar-toggle" />}>

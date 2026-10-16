@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,9 +16,9 @@ import (
 // Section brief (分区简报): always-available rule-based digest + optional DeepSeek "AI 润色".
 
 const (
-	briefMaxItems  = 40
-	briefCacheTTL  = 5 * time.Minute
-	briefSumLine   = 160
+	briefMaxItems = 40
+	briefCacheTTL = 5 * time.Minute
+	briefSumLine  = 160
 )
 
 type briefOut struct {
@@ -237,7 +238,7 @@ func sentence(it briefItem) string {
 	return end(it.Title) + " " + end(it.Summary)
 }
 
-// briefMarkdown: prose, one paragraph per source; every item ends with a small numbered link [[n]](url), and the
+// briefMarkdown: prose, one paragraph per item (grouped under a heading per source); every item ends with a small numbered link [[n]](url), and the
 // links are listed again under 「原文链接」 (footnote style). The dialog shows and edits exactly this text.
 func briefMarkdown(b *briefOut) string {
 	var w strings.Builder
@@ -255,18 +256,15 @@ func briefMarkdown(b *briefOut) string {
 			tag = " · P0"
 		}
 		fmt.Fprintf(&w, "## %s%s\n\n", g.Source, tag)
-		var para []string
 		for _, it := range g.Items {
 			n++
-			para = append(para, fmt.Sprintf("%s [[%d]](%s)", sentence(it), n, it.URL))
+			fmt.Fprintf(&w, "%s [[%d]](%s)\n\n", sentence(it), n, it.URL)
 			meta := it.Source
 			if t := fmtBriefTime(it.Published); t != "" {
 				meta += " · " + t
 			}
 			fmt.Fprintf(&refs, "%d. [%s](%s) · %s\n", n, strings.NewReplacer("[", "【", "]", "】").Replace(it.Title), it.URL, meta)
 		}
-		w.WriteString(strings.Join(para, " "))
-		w.WriteString("\n\n")
 	}
 	w.WriteString("## 原文链接\n\n")
 	w.WriteString(refs.String())
@@ -286,7 +284,7 @@ func (s *Store) briefSystemPrompt() (string, string) {
 	if len(sk.Scripts) > 0 {
 		fmt.Fprintf(&w, "\n<unavailable>此环境不执行脚本，以下文件不可用：%s。不要假设它们的输出。</unavailable>\n", strings.Join(sk.Scripts, "、"))
 	}
-	w.WriteString("\n输出要求：用简体中文写（英文原文要译成中文，专有名词保留原文）；只输出改写后的 Markdown 简报；成段叙述，不用列表；保留每条的 [[n]](url) 链接与末尾的「原文链接」列表。")
+	w.WriteString("\n输出要求：用简体中文写（英文原文要译成中文，专有名词保留原文）；只输出改写后的 Markdown 简报；每条新闻单独成段（一条一段，段与段之间空一行；同一来源的多条也不要合并成一段），不用列表；保留每条的 [[n]](url) 链接与末尾的「原文链接」列表。")
 	w.WriteString("\n事实要求（最高优先级）：只写 <summary> 与 <source> 里明确出现的事实；数字、日期、金额、人名、公司名、产品名、版本号逐字照抄，不换算、不四舍五入；资料没说的不要补充、不要推测原因或影响；资料不全的条目只写确定的部分，必要时注明「原文未说明」；不要编造引语。")
 	return w.String(), sk.Name
 }
@@ -345,7 +343,7 @@ const sumSystem = `<stage>summarize</stage>
 const verifySystem = `<stage>verify</stage>
 你是事实核查编辑。用户消息给出一篇简报草稿 <brief> 和每条新闻的资料 <source n>。
 逐句检查草稿：凡是资料里找不到依据的说法（数字、日期、人名、机构、因果、评价、引语）都删掉或改成资料里的原话；
-数字和专名必须与资料一致；不要增加新内容；保持原有的段落、语气、[[n]](url) 链接和「原文链接」列表不变。
+数字和专名必须与资料一致；不要增加新内容；保持原有的分段（一条新闻一段）、语气、[[n]](url) 链接和「原文链接」列表不变。
 只输出核查后的完整 Markdown 简报（简体中文），不要解释。`
 
 // polishBrief: fetch the originals → factual per-item summaries → the Skill writes the brief from them →
@@ -449,9 +447,7 @@ func (s *Store) polishBrief(rule *briefOut) (*briefOut, error) {
 			md, out.Verified = v, true
 		}
 	}
-	if !strings.HasSuffix(md, "\n") {
-		md += "\n"
-	}
+	md = onePerParagraph(md)
 	out.Markdown = md
 	out.AI = true
 	out.Cached = false
@@ -539,3 +535,39 @@ func (s *Store) hBrief(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, 200, out)
 }
+
+// briefRefEnd: a [[n]](url) link (or a run of adjacent ones for one story) plus trailing punctuation.
+var briefRefEnd = regexp.MustCompile(`(?:\s*\[\[\d+\]\]\(\S+?\))+[。．.！!？?；;，,）)」”"]*`)
+
+// onePerParagraph enforces "one item = one paragraph" on an AI-written brief: a prose paragraph that carries
+// several items' links is split after each link run; headings, lists and quotes are left alone.
+func onePerParagraph(md string) string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n") {
+		t := strings.TrimSpace(line)
+		if t == "" || strings.HasPrefix(t, "#") || strings.HasPrefix(t, ">") || listLine.MatchString(t) {
+			out = append(out, strings.TrimRight(line, " \t"))
+			continue
+		}
+		last := 0
+		var parts []string
+		for _, m := range briefRefEnd.FindAllStringIndex(t, -1) {
+			if p := strings.TrimSpace(t[last:m[1]]); p != "" {
+				parts = append(parts, p)
+			}
+			last = m[1]
+		}
+		if rest := strings.TrimSpace(t[last:]); rest != "" {
+			if len(parts) > 0 && len([]rune(rest)) < 8 { // stray tail ("。") stays with the previous item
+				parts[len(parts)-1] += rest
+			} else {
+				parts = append(parts, rest)
+			}
+		}
+		out = append(out, "", strings.Join(parts, "\n\n"), "")
+	}
+	s := regexp.MustCompile(`\n{3,}`).ReplaceAllString(strings.Join(out, "\n"), "\n\n")
+	return strings.TrimSpace(s) + "\n"
+}
+
+var listLine = regexp.MustCompile(`^(?:[-*]|\d+\.)\s`)

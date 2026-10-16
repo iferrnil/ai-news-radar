@@ -37,6 +37,7 @@
   --sidebar-border: oklch(0.2 0.02 75 / 0.08);
   --sidebar-ring: oklch(0.55 0.19 282 / 0.55);
   --shadow-card: 0 1px 2px oklch(0.2 0.02 75 / 0.05), 0 0 0 1px oklch(0.2 0.02 75 / 0.07);
+  --shadow-feed: var(--shadow-card);
   --glow: radial-gradient(900px 420px at 30% -160px, oklch(0.75 0.09 282 / 0.12), transparent 70%);
 }
 .dark {
@@ -72,6 +73,7 @@
   --sidebar-border: oklch(1 0 0 / 0.06);
   --sidebar-ring: oklch(0.72 0.15 282 / 0.6);
   --shadow-card: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 0 0 1px oklch(1 0 0 / 0.07), 0 8px 24px -12px oklch(0 0 0 / 0.5);
+  --shadow-feed: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 0 0 1px oklch(1 0 0 / 0.07); /* feed cards: no blurred layer (cheap to paint while scrolling) */
   --glow: radial-gradient(1000px 460px at 35% -200px, oklch(0.55 0.14 282 / 0.16), transparent 70%), radial-gradient(600px 320px at 95% -120px, oklch(0.6 0.08 230 / 0.06), transparent 70%);
 }
 
@@ -128,6 +130,7 @@
   --color-hover: var(--hover);
   --color-selected: var(--selected);
   --shadow-card: var(--shadow-card);
+  --shadow-feed: var(--shadow-feed);
   --color-brand-soft: var(--brand-soft);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -228,5 +231,5 @@ html[data-titlebar] .app-sidebar .app-brand { --app-region: drag; padding-left: 
 }
 
 /* long feeds: skip layout/paint of off-screen cards; no hover restyles or hover cards while scrolling */
-.feed-card { content-visibility: auto; contain-intrinsic-size: auto 208px; }
-html[data-scrolling] .feed-card { pointer-events: none; transition: none; }
+.feed-card { content-visibility: auto; contain-intrinsic-size: auto 208px; contain: layout style; }
+.feed-list[data-scrolling] { pointer-events: none; }
