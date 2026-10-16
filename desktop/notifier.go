@@ -172,5 +172,6 @@ func (n *notifier) install(show func(), dataDir string) {
 		},
 		OpenNotifySettings: func() error { return mygo.Shell.OpenExternal(notifySettingsURL) },
 		OpenDataDir:        func() error { return mygo.Shell.OpenPath(dataDir) },
+		OpenPath:           func(p string) error { return mygo.Shell.OpenPath(p) },
 	}
 }

@@ -270,7 +270,7 @@ func TestPolishUsesActiveSkill(t *testing.T) {
 	if r, _ := http.DefaultClient.Do(req); r.StatusCode != 200 {
 		t.Fatal("delete", r.Status)
 	}
-	if n := st.activeSkill().Name; n != DefaultSkillName {
+	if n := st.activeSkill("brief").Name; n != DefaultSkillName {
 		t.Fatalf("after delete active=%q", n)
 	}
 }

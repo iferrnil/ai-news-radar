@@ -11,7 +11,7 @@ const HOVER_Q = "(hover: hover) and (pointer: fine)";
 function useCanHover() {
   return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
 }
-import { ArrowUp, ArrowUpRight, CheckCheck, CircleDot, FileText, Inbox, RefreshCw, WifiOff } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, CheckCheck, CircleDot, FileText, Inbox, ListChecks, PenLine, RefreshCw, WifiOff, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { markOnHover } from "./read-store";
@@ -25,6 +25,9 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
 import dynamic from "next/dynamic";
 const BriefDialog = dynamic(() => import("./brief-dialog"), { ssr: false });
+const ArticleDialog = dynamic(() => import("./article-dialog"), { ssr: false });
+const PICK_MAX = 10; // 手动简报 / 生成文章
+const isDesktop = () => typeof window !== "undefined" && !!(window as unknown as { __radarDesktop?: boolean }).__radarDesktop;
 import type { ItemOut } from "@/lib/types";
 import { useApp } from "./app-shell";
 import { sectionsReady, ago, api, bj, dekText, handleOf, sectionOf, srcName, xText } from "./common";
@@ -55,7 +58,8 @@ const BLEED = "-mx-4 px-4 sm:-mx-6 sm:px-6 xl:-mx-8 xl:px-8 2xl:-mx-10 2xl:px-10
 const CARD_H = "h-[208px]"; // slightly denser cards without redesign
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
-const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; hover: boolean }) {
+const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover, pick = 0 }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; hover: boolean; pick?: 0 | 1 | 2 | 3 }) {
+  // pick: 0 not selecting · 1 selectable · 2 selected · 3 selection full
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (active) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [active]);
   const x = !!it.is_x, h = x ? handleOf(it) : null, t = x ? xText(it) : "";
@@ -63,9 +67,16 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
   const dek = x ? "" : dekText(it.summary);
   const card = (
     <div ref={ref} data-slot="card" data-size="sm" onClick={() => onOpen(it)} data-active={active} data-read={read} data-item={it.id} role="button" tabIndex={-1}
-      className={cn(CARD_H, "feed-card group/item flex flex-col overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 cursor-pointer gap-0 py-0 shadow-feed ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
+      data-picked={pick === 2 || undefined} aria-pressed={pick ? pick === 2 : undefined}
+      className={cn(CARD_H, "feed-card group/item relative flex flex-col overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 cursor-pointer gap-0 py-0 shadow-feed ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
         "hover:-translate-y-px hover:ring-foreground/[0.14] hover:shadow-raised",
-        "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/55", fresh && "fresh-row")}>
+        "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/55", fresh && "fresh-row",
+        pick === 2 && "ring-2 ring-brand", pick === 3 && "opacity-50")}>
+      {pick > 0 && (
+        <span data-testid="pick-mark" className={cn("absolute bottom-2 right-2.5 z-10 grid size-5 place-items-center rounded-full border shadow-sm", pick === 2 ? "border-brand bg-brand text-white" : "border-border bg-background")}>
+          {pick === 2 && <Check className="size-3" />}
+        </span>
+      )}
       <div className="flex h-10 shrink-0 items-center gap-2 px-3.5 pt-0.5 type-caption leading-4">
         <SourceAvatar name={it.source} username={h} homepage={it.homepage} url={it.url} x={x} className="size-5" />
         <span className={cn("min-w-0 truncate font-medium", x ? "text-foreground/85" : "text-muted-foreground")}>{x ? srcName(it).replace(/^@/, "") : it.source}</span>
@@ -102,17 +113,41 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
       </div>
     </div>
   );
-  if (!hover) return card;
+  if (!hover || pick) return card;
   return <div className="min-w-0" onPointerEnter={(e) => hoverPreview.enter(it, e.currentTarget)} onPointerMove={(e) => hoverPreview.enter(it, e.currentTarget)} onPointerLeave={() => hoverPreview.leave()} onPointerDown={() => hoverPreview.close()}>{card}</div>;
 });
 
 export default function Feed() {
   const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, markRead, markManyRead, markManyUnread, loc, sections } = useApp();
   const [briefOpen, setBriefOpen] = useState(false);
+  // 手动简报 / 生成文章: pick up to PICK_MAX cards of this view
+  const [pickMode, setPickMode] = useState<null | "brief" | "article">(null);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [briefIds, setBriefIds] = useState<number[] | undefined>(undefined);
+  const [articleOpen, setArticleOpen] = useState(false);
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => { setDesktop(isDesktop()); }, []);
   // brief is for a section page or 全部 (not a single-source page)
   const briefScope = f.source != null ? null : (f.section || "all");
   const briefLabel = briefScope === "all" ? "全部" : briefScope ? (sections.find((s) => s.key === briefScope)?.zh ?? briefScope) : "";
   const sp = useSearchParams(); const router = useRouter();
+  // a brief / article / selection belongs to one view: switching view (sidebar, ⌘K, notification) ends them, so a
+  // dialog can never show the previous section's result
+  const viewId = `${briefScope}`;
+  useEffect(() => { setBriefOpen(false); setArticleOpen(false); setPickMode(null); setPicked([]); }, [viewId]);
+  const togglePick = useCallback((it: ItemOut) => {
+    setPicked((p) => {
+      if (p.includes(it.id)) return p.filter((x) => x !== it.id);
+      if (p.length >= PICK_MAX) { toast(`最多选 ${PICK_MAX} 条`); return p; }
+      return [...p, it.id];
+    });
+  }, []);
+  const autoBrief = () => { setBriefIds(undefined); setBriefOpen(true); };
+  const startPick = (m: "brief" | "article") => { hoverPreview.close(); setPickMode((cur) => (cur === m ? null : m)); };
+  const runPick = () => {
+    if (!picked.length) return;
+    if (pickMode === "brief") { setBriefIds([...picked]); setBriefOpen(true); } else setArticleOpen(true);
+  };
   const secReady = sections.length > 0 || sectionsReady(); // 全部 must know which sections are excluded before rendering
   const [raw, setItems] = useState<ItemOut[]>([]);
   // hide items of sources that were unsubscribed (sidebar / sources page / another tab) without a refetch
@@ -229,6 +264,9 @@ export default function Feed() {
   const dayCount = useMemo(() => { const m = new Map<string, number>(); for (const it of view) { const d = dayLabel(it.published); m.set(d, (m.get(d) ?? 0) + 1); } return m; }, [view]);
   const idx = useMemo(() => new Map(view.map((it, i) => [it.id, i])), [view]);
   const openItem = useCallback((it: ItemOut) => { hoverPreview.close(); setCursor(idx.get(it.id) ?? -1); setOpen(it); }, [idx, setOpen]);
+  const pickSet = useMemo(() => new Set(picked), [picked]);
+  const onCard = pickMode ? togglePick : openItem;
+  const pickOf = (id: number): 0 | 1 | 2 | 3 => (!pickMode ? 0 : pickSet.has(id) ? 2 : picked.length >= PICK_MAX ? 3 : 1);
   useEffect(() => { document.title = (pend.length ? `(${pend.length}) ` : "") + "AI Radar · 国内外 AI 情报"; }, [pend.length]);
 
   const showPending = () => {
@@ -245,6 +283,7 @@ export default function Feed() {
     const h = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.closest("input,textarea,[role=dialog]") || e.metaKey || e.ctrlKey || e.altKey || open) return;
+      if (e.key === "Escape" && pickMode) { setPickMode(null); e.preventDefault(); return; }
       if (e.key === "j" || e.key === "ArrowRight") setCursor((c) => Math.min(c + 1, view.length - 1));
       else if (e.key === "k" || e.key === "ArrowLeft") setCursor((c) => Math.max(c - 1, 0));
       else if ((e.key === "Enter" || e.key === "o") && cursor >= 0 && view[cursor]) setOpen(view[cursor]);
@@ -286,12 +325,28 @@ export default function Feed() {
           <TooltipContent>将当前视图（{f.source != null ? "此来源" : f.section ? "此分区" : "全部"}{f.p0 ? " · 仅 P0" : ""}）的 {unreadN} 条标为已读</TooltipContent>
         </Tooltip>
         {briefScope && (
-          <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => setBriefOpen(true)} aria-label="生成简报" data-testid="brief-btn" className="px-1.5 type-caption font-normal text-faint" />}>
-              <FileText className="size-3.5" /><span className="hidden md:inline">生成简报</span>
-            </TooltipTrigger>
-            <TooltipContent>汇总{briefLabel === "全部" ? "全部" : `「${briefLabel}」`}近 48 小时要点（可复制 / 导出 Markdown）</TooltipContent>
-          </Tooltip>
+          <div className="flex items-center gap-0.5" data-testid="brief-tools">
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={autoBrief} aria-label="自动简报" data-testid="brief-btn" className="px-1.5 type-caption font-normal text-faint" />}>
+                <FileText className="size-3.5" /><span className="hidden md:inline">自动简报</span>
+              </TooltipTrigger>
+              <TooltipContent>自动挑选 {PICK_MAX} 条{briefLabel === "全部" ? "" : `「${briefLabel}」`}内容：多源报道的热点优先，再取最早与最新</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger render={<Button variant={pickMode === "brief" ? "secondary" : "ghost"} size="sm" onClick={() => startPick("brief")} aria-pressed={pickMode === "brief"} aria-label="手动简报" data-testid="brief-manual-btn" className="px-1.5 type-caption font-normal text-faint aria-pressed:text-foreground" />}>
+                <ListChecks className="size-3.5" /><span className="hidden md:inline">手动简报</span>
+              </TooltipTrigger>
+              <TooltipContent>选择最多 {PICK_MAX} 条生成简报</TooltipContent>
+            </Tooltip>
+            {desktop && (
+              <Tooltip>
+                <TooltipTrigger render={<Button variant={pickMode === "article" ? "secondary" : "ghost"} size="sm" onClick={() => startPick("article")} aria-pressed={pickMode === "article"} aria-label="生成文章" data-testid="article-btn" className="px-1.5 type-caption font-normal text-faint aria-pressed:text-foreground" />}>
+                  <PenLine className="size-3.5" /><span className="hidden md:inline">生成文章</span>
+                </TooltipTrigger>
+                <TooltipContent>选择最多 {PICK_MAX} 条，写成推特 / 公众号 / 小红书文章</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         )}
         <div className="ml-auto flex items-center gap-3 type-meta text-faint">
           <span className="hidden items-center gap-1 xl:flex">
@@ -330,7 +385,7 @@ export default function Feed() {
             <div className={GRID}>
               {g.items.map((it) => {
                 const i = idx.get(it.id)!;
-                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={openItem} hover={canHover} />;
+                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={onCard} hover={canHover} pick={pickOf(it.id)} />;
               })}
             </div>
           </section>
@@ -346,7 +401,18 @@ export default function Feed() {
           </button>
         )}
         {canHover && <HoverPreviewLayer onOpen={onPreview} />}
-        {briefOpen && briefScope && <BriefDialog open={briefOpen} onOpenChange={setBriefOpen} section={briefScope === "all" ? null : briefScope} sectionLabel={briefLabel} />}
+        {pickMode && (
+          <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 ease-out fixed inset-x-0 bottom-5 z-30 flex justify-center px-4" data-testid="pick-bar">
+            <div className="flex items-center gap-2 rounded-full bg-popover py-1.5 pl-4 pr-1.5 shadow-raised ring-1 ring-border">
+              <span className="type-caption text-muted-foreground">{pickMode === "brief" ? "手动简报" : "生成文章"} · 已选 <span className="font-mono tabular-nums text-foreground" data-testid="pick-count">{picked.length}/{PICK_MAX}</span></span>
+              {picked.length > 0 && <Button variant="ghost" size="sm" className="h-7 rounded-full px-2 text-faint" onClick={() => setPicked([])}>清空</Button>}
+              <Button size="sm" className="h-7 rounded-full" disabled={!picked.length} onClick={runPick} data-testid="pick-go">{pickMode === "brief" ? "生成简报" : "生成文章"}</Button>
+              <Button variant="ghost" size="icon-sm" className="size-7 rounded-full text-faint" aria-label="退出选择" onClick={() => setPickMode(null)}><X /></Button>
+            </div>
+          </div>
+        )}
+        {briefOpen && briefScope && <BriefDialog key={`${briefScope}|${briefIds?.join(",") ?? "auto"}`} open={briefOpen} onOpenChange={setBriefOpen} section={briefScope === "all" ? null : briefScope} sectionLabel={briefLabel} ids={briefIds} />}
+        {articleOpen && briefScope && <ArticleDialog key={`${briefScope}|${picked.join(",")}`} open={articleOpen} onOpenChange={setArticleOpen} section={briefScope} ids={picked} />}
     </div>
   );
 }

@@ -259,3 +259,10 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## 0.8.0 notes
 - Brief = one item per paragraph: `briefMarkdown` writes each item as its own paragraph; AI output goes through `onePerParagraph` (splits prose paragraphs after each `[[n]](url)` run). The built-in skill (v1.1) says the same.
 - Scroll perf: `src/lib/font-warm.ts` preloads LXGW WenKai unicode-range slices for loaded items at idle (slices loading mid-scroll caused full relayouts). The scrolling flag is `.feed-list[data-scrolling]` (not on `<html>`). Feed cards are plain divs (no shadcn Card `:has()` selectors) with `shadow-feed`.
+
+## 0.9.0 notes
+- Brief toolbar: 自动简报 (`autoPick` in briefpick.go: ≤10 → all; else one per multi-source story, then oldest/newest alternately), 手动简报 (`/api/brief?ids=`, ≤10, web too), 生成文章 (desktop, `POST /api/compose`).
+- Skill kinds (`skillKinds` in skills.go): brief / twitter / wechat / xhs, settings `<kind>_skill`, built-ins under `server/radar/defaultskill/`. `/api/skills*` take `kind`.
+- Covers: a Skill's output line `<!-- cover-image[ size=WxH]: prompt -->` or `cover-video`; `multimodal.go` (OpenAI-compatible images, async video submit→poll→download, vision chat). `vision: true` in front matter sends item images to the vision model.
+- 成果目录: `artifacts.go`, setting `artifacts_dir`, env `ARTIFACTS_DIR`, default `~/Documents/AI News Radar`; desktop only.
+- Brief dialog: only the newest request may land (seq + scope check); Feed closes dialogs / selection on view change.

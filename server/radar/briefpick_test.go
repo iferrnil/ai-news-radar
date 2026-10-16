@@ -55,11 +55,59 @@ func TestBriefSpreadPick(t *testing.T) {
 			pubs = append(pubs, int(r.Num("published")))
 		}
 	}
-	// newest first: 3 newest (30,29,28), 3 middle of 5..27 (15,16,17), 4 oldest (4,3,2,1)
-	if fmt.Sprint(pubs) != "[30 29 28 17 16 15 4 3 2 1]" {
+	// no duplicates: alternately oldest / newest (1,30,2,29,…), shown newest first
+	if fmt.Sprint(pubs) != "[30 29 28 27 26 5 4 3 2 1]" {
 		t.Fatalf("picked %v", pubs)
 	}
-	if got := spreadPick(rs[:7], 10); len(got) != 7 || got[0].Num("published") != 7 {
+	if got := autoPick(rs[:7], 10); len(got) != 7 || got[0].Num("published") != 7 {
 		t.Fatalf("≤10 keeps all, newest first: %d", len(got))
+	}
+}
+
+func TestBriefAutoPickHot(t *testing.T) {
+	var rs []*Row
+	words := []string{"quantum", "robotics", "pricing", "lawsuit", "benchmark", "chips", "funding", "privacy", "agents", "vision",
+		"speech", "datacenter", "energy", "safety", "education", "medical", "coding", "search", "music", "video"}
+	words2 := append(append([]string(nil), words...), "translation", "weather", "finance", "gaming", "drones", "satellite", "battery", "genome", "climate", "retail")
+	for i := 1; i <= 20; i++ {
+		rs = append(rs, row(i, fmt.Sprintf("%s %s %d", words[i-1], words2[(i*7)%30], i*37), fmt.Sprintf("https://e.com/%d", i), i, float64(i)))
+	}
+	if n := len(dedupeBrief(rs)); n != 20 {
+		t.Fatalf("fixture titles collide: %d", n)
+	}
+	// hot stories in the middle of the window: 3 copies of 10, 2 of 12 (different sources / urls)
+	rs = append(rs, row(101, rs[9].Str("title")+" - The Verge", "https://v.com/a", 50, 10.5), row(102, rs[9].Str("title"), "https://w.com/a", 51, 10.4),
+		row(103, rs[11].Str("title"), "https://v.com/b", 50, 12.5))
+	got := autoPick(rs, 10)
+	var ids []int
+	for _, r := range got {
+		ids = append(ids, int(r.Num("id")))
+	}
+	has := func(id int) bool {
+		for _, x := range ids {
+			if x == id {
+				return true
+			}
+		}
+		return false
+	}
+	n10 := 0
+	for _, id := range []int{10, 101, 102} {
+		if has(id) {
+			n10++
+		}
+	}
+	if len(got) != 10 || n10 != 1 || !(has(12) || has(103)) || (has(12) && has(103)) {
+		t.Fatalf("hot stories once each: %v", ids)
+	}
+	// the remaining 8: 1,20,2,19,3,18,4,17
+	for _, id := range []int{1, 2, 3, 4, 17, 18, 19, 20} {
+		if !has(id) {
+			t.Fatalf("missing %d from the ends: %v", id, ids)
+		}
+	}
+	// ≤10 items: all of them (one per story)
+	if g := autoPick(rs[:9], 10); len(g) != 9 {
+		t.Fatalf("≤10 keeps all: %d", len(g))
 	}
 }

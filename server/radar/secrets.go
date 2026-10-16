@@ -23,6 +23,8 @@ type Stored struct {
 	DeepseekKey     string `json:"deepseekKey,omitempty"`
 	DeepseekBaseURL string `json:"deepseekBaseUrl,omitempty"`
 	DeepseekModel   string `json:"deepseekModel,omitempty"`
+	// 多模态模型 (desktop: covers / videos / vision); see multimodal.go
+	MM MMConfig `json:"multimodal,omitempty"`
 }
 
 func (s *Store) loadSecrets() Stored {

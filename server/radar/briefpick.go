@@ -6,9 +6,8 @@ import (
 	"unicode"
 )
 
-// Brief item selection: dedupe (same URL, same / near-identical title — also across sources and between the
-// original and the translated title), then at most briefPick items; when more remain, by time: the 4 oldest,
-// 3 from the middle and the 3 newest, so a brief covers the whole window instead of the last hour.
+// Brief item selection (自动简报): stories are matched by URL and same / near-identical title (also across sources
+// and between the original and the translated title); see autoPick. 手动简报 uses exactly the chosen items.
 const (
 	briefPick    = 10
 	briefSimilar = 0.6 // Dice coefficient of character bigrams on normalized titles
@@ -111,26 +110,75 @@ func dedupeBrief(rs []*Row) []*Row {
 	return out
 }
 
-// spreadPick returns at most n rows by time: all of them when they fit, else 4 oldest + 3 middle + 3 newest
-// (scaled for other n). The result is sorted newest first.
-func spreadPick(rs []*Row, n int) []*Row {
-	s := append([]*Row(nil), rs...)
-	sort.SliceStable(s, func(i, j int) bool { return s[i].Num("published") < s[j].Num("published") })
-	if len(s) > n {
-		old, newest := n*4/10, n*3/10
-		mid := n - old - newest
-		rest := s[old : len(s)-newest]
-		start := (len(rest) - mid) / 2
-		pick := append(append(append([]*Row(nil), s[:old]...), rest[start:start+mid]...), s[len(s)-newest:]...)
-		s = pick
+// storyGroups clusters rows into stories (first row of a group = its representative; rows come P0 first, newest first).
+func storyGroups(rs []*Row) [][]*Row {
+	var groups [][]*Row
+	var keys []briefKey
+	for _, r := range rs {
+		k := keyOf(r)
+		hit := -1
+		for i, o := range keys {
+			if sameStory(k, o) {
+				hit = i
+				break
+			}
+		}
+		if hit < 0 {
+			groups = append(groups, []*Row{r})
+			keys = append(keys, k)
+		} else {
+			groups[hit] = append(groups[hit], r)
+		}
 	}
-	sort.SliceStable(s, func(i, j int) bool { return s[i].Num("published") > s[j].Num("published") })
-	return s
+	return groups
 }
 
-// selectBrief: dedupe, then the time spread; grouped by source in order of each source's newest item.
-func selectBrief(rs []*Row) (order []int64, groups map[int64][]*Row, meta map[int64][2]string) {
-	picked := spreadPick(dedupeBrief(rs), envIntDef("BRIEF_MAX_ITEMS", briefPick))
+// autoPick (自动简报): ≤n rows → all of them (deduped). Otherwise first one item per story that several items /
+// sources carry (hot topics, most-covered first), then the rest alternately from the oldest and the newest end of
+// the window until n. The result is sorted newest first.
+func autoPick(rs []*Row, n int) []*Row {
+	groups := storyGroups(rs)
+	var hot, rest []*Row
+	hotG := [][]*Row{}
+	for _, g := range groups {
+		if len(g) > 1 {
+			hotG = append(hotG, g)
+		} else {
+			rest = append(rest, g[0])
+		}
+	}
+	var out []*Row
+	if len(rs) <= n {
+		for _, g := range groups {
+			out = append(out, g[0])
+		}
+	} else {
+		sort.SliceStable(hotG, func(i, j int) bool { return len(hotG[i]) > len(hotG[j]) })
+		for _, g := range hotG {
+			hot = append(hot, g[0])
+		}
+		if len(hot) > n {
+			hot = hot[:n]
+		}
+		out = hot
+		sort.SliceStable(rest, func(i, j int) bool { return rest[i].Num("published") < rest[j].Num("published") })
+		lo, hi := 0, len(rest)-1
+		for old := true; len(out) < n && lo <= hi; old = !old {
+			if old {
+				out = append(out, rest[lo])
+				lo++
+			} else {
+				out = append(out, rest[hi])
+				hi--
+			}
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Num("published") > out[j].Num("published") })
+	return out
+}
+
+// groupBrief groups picked rows by source in order of each source's newest item.
+func groupBrief(picked []*Row) (order []int64, groups map[int64][]*Row, meta map[int64][2]string) {
 	groups, meta = map[int64][]*Row{}, map[int64][2]string{}
 	for _, r := range picked {
 		sid := int64(r.Num("source_id"))
@@ -141,4 +189,9 @@ func selectBrief(rs []*Row) (order []int64, groups map[int64][]*Row, meta map[in
 		groups[sid] = append(groups[sid], r)
 	}
 	return
+}
+
+// selectBrief: the 自动简报 pick (autoPick), grouped by source.
+func selectBrief(rs []*Row) (order []int64, groups map[int64][]*Row, meta map[int64][2]string) {
+	return groupBrief(autoPick(rs, envIntDef("BRIEF_MAX_ITEMS", briefPick)))
 }

@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { type TrScopes, api, secZh } from "./common";
 import { GeneralCard, NotifyCard, UpdateCard, type NotifyPrefs } from "./settings-extra";
 const SkillCard = dynamic(() => import("./settings-skill"), { ssr: false });
+const MultimodalCard = dynamic(() => import("./settings-media").then((m) => m.MultimodalCard), { ssr: false });
+const ArtifactsCard = dynamic(() => import("./settings-media").then((m) => m.ArtifactsCard), { ssr: false });
 
 type DS = { configured: boolean; source: "app" | "env" | null; baseUrl: string; model: string; baseUrlCustom: boolean; modelCustom: boolean; locked: boolean };
 type TR = { available: boolean; reason: string | null; scopes: TrScopes; done: number; queued: number; failed: number; lastError: string | null };
@@ -99,7 +101,7 @@ export default function Settings() {
         </CardFooter>
       </Card>
 
-      {s?.desktop && <SkillCard />}
+      {s?.desktop && <><SkillCard /><SkillCard kind="twitter" /><SkillCard kind="wechat" /><SkillCard kind="xhs" /><MultimodalCard /><ArtifactsCard /></>}
       {s?.desktop && <UpdateCard version={s.version ?? null} />}
       {s?.dataDir && <DataCard dataDir={s.dataDir} />}
       <AboutCard version={s?.version ?? null} desktop={!!s?.desktop} />

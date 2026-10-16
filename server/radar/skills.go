@@ -46,8 +46,40 @@ const (
 	DefaultSkillName = "brief-polish"
 )
 
-//go:embed defaultskill/brief-polish
+//go:embed defaultskill
 var defaultSkillFS embed.FS
+
+// skillKind: what a Skill is used for. Installed skills are shared; each kind remembers its active one in a
+// setting and falls back to its own built-in default.
+type skillKind struct{ Key, Setting, Builtin, Label string }
+
+var skillKinds = []skillKind{
+	{"brief", "brief_skill", DefaultSkillName, "简报"},
+	{"twitter", "twitter_skill", "twitter-article", "推特"},
+	{"wechat", "wechat_skill", "wechat-article", "公众号"},
+	{"xhs", "xhs_skill", "xhs-article", "小红书"},
+}
+
+func skillKindOf(k string) (skillKind, bool) {
+	if k == "" {
+		k = "brief"
+	}
+	for _, x := range skillKinds {
+		if x.Key == k {
+			return x, true
+		}
+	}
+	return skillKind{}, false
+}
+
+func isBuiltinSkill(name string) bool {
+	for _, x := range skillKinds {
+		if x.Builtin == name {
+			return true
+		}
+	}
+	return false
+}
 
 type skillFile struct {
 	Path string `json:"path"`
@@ -415,8 +447,8 @@ func buildSkillTree(files []treeFile, prefix string) ([]treeFile, *frontMatterT,
 func (s *Store) skillsDir() string { return filepath.Join(filepath.Dir(s.Cfg.DBPath), "skills") }
 
 func (s *Store) saveSkill(tree []treeFile, fm *frontMatterT, source string) (*skillMeta, error) {
-	if fm.Name == DefaultSkillName {
-		return nil, fmt.Errorf("「%s」是内置 Skill 的名称，请换一个 name", DefaultSkillName)
+	if isBuiltinSkill(fm.Name) {
+		return nil, fmt.Errorf("「%s」是内置 Skill 的名称，请换一个 name", fm.Name)
 	}
 	dir := filepath.Join(s.skillsDir(), fm.Name)
 	tmp := dir + ".tmp-" + strconv.FormatInt(time.Now().UnixNano(), 36)
@@ -444,10 +476,13 @@ func (s *Store) saveSkill(tree []treeFile, fm *frontMatterT, source string) (*sk
 	return m, nil
 }
 
-// skillFS returns the tree of an installed skill, or the built-in one for "".
+// skillFS returns the tree of an installed skill, or a built-in one ("" = brief-polish).
 func (s *Store) skillFS(slug string) (fs.FS, bool) {
-	if slug == "" || slug == DefaultSkillName {
-		sub, _ := fs.Sub(defaultSkillFS, "defaultskill/brief-polish")
+	if slug == "" {
+		slug = DefaultSkillName
+	}
+	if isBuiltinSkill(slug) {
+		sub, _ := fs.Sub(defaultSkillFS, "defaultskill/"+slug)
 		return sub, true
 	}
 	if !skillNameRe.MatchString(slug) {
@@ -473,9 +508,12 @@ func (s *Store) loadSkill(slug string) (*skillMeta, *frontMatterT, bool) {
 	if err != nil {
 		fm = &frontMatterT{Body: string(md)}
 	}
-	m := &skillMeta{Name: fm.Name, Slug: slug, Description: fm.Description, License: fm.License, Compatibility: fm.Compatibility, Builtin: slug == "" || slug == DefaultSkillName}
+	m := &skillMeta{Name: fm.Name, Slug: slug, Description: fm.Description, License: fm.License, Compatibility: fm.Compatibility, Builtin: slug == "" || isBuiltinSkill(slug)}
 	if m.Builtin {
-		m.Slug, m.Name = "", DefaultSkillName
+		if slug == "" {
+			slug = DefaultSkillName
+		}
+		m.Slug, m.Name = "", slug
 	}
 	if m.Name == "" {
 		m.Name = slug
@@ -504,8 +542,8 @@ func (s *Store) loadSkill(slug string) (*skillMeta, *frontMatterT, bool) {
 	return m, fm, true
 }
 
-func (s *Store) listSkills() []*skillMeta {
-	act, _ := s.GetSetting("brief_skill")
+func (s *Store) listSkills(k skillKind) []*skillMeta {
+	act, _ := s.GetSetting(k.Setting)
 	out := []*skillMeta{}
 	ents, _ := os.ReadDir(s.skillsDir())
 	for _, e := range ents {
@@ -518,7 +556,7 @@ func (s *Store) listSkills() []*skillMeta {
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].InstalledAt > out[j].InstalledAt })
-	def, _, _ := s.loadSkill("")
+	def, _, _ := s.loadSkill(k.Builtin)
 	def.Active = true
 	for _, m := range out {
 		if m.Active {
@@ -534,21 +572,38 @@ type skillPrompt struct {
 	Name, Body string
 	Refs       []treeFile
 	Scripts    []string
+	Vision     bool // front matter "vision: true" (e.g. under metadata): wants the items' images as input
 }
+
+var visionRe = regexp.MustCompile(`(?m)^\s*vision:\s*["']?true["']?\s*$`)
 
 var refPathRe = regexp.MustCompile(`(?:\]\(|` + "`" + `|\s|^)((?:\./)?(?:references|assets)/[A-Za-z0-9._/\-]+\.(?:md|markdown|txt|json|ya?ml|csv))`)
 
-func (s *Store) activeSkill() *skillPrompt {
+func (s *Store) activeSkill(kind string) *skillPrompt {
+	k, _ := skillKindOf(kind)
+	if k.Key == "" {
+		k = skillKinds[0]
+	}
 	slug := ""
 	if s.Cfg.Desktop {
-		slug, _ = s.GetSetting("brief_skill")
-		if _, ok := s.skillFS(slug); !ok {
+		slug, _ = s.GetSetting(k.Setting)
+		if _, ok := s.skillFS(slug); !ok || isBuiltinSkill(slug) {
 			slug = ""
 		}
+	}
+	if slug == "" {
+		slug = k.Builtin
 	}
 	fsys, _ := s.skillFS(slug)
 	m, fm, _ := s.loadSkill(slug)
 	sp := &skillPrompt{Name: m.Name, Body: fm.Body}
+	if raw, err := fs.ReadFile(fsys, "SKILL.md"); err == nil {
+		if t := strings.TrimLeft(string(raw), "\ufeff \r\n"); strings.HasPrefix(t, "---") {
+			if i := strings.Index(t[3:], "\n---"); i > 0 {
+				sp.Vision = visionRe.MatchString(t[3 : 3+i])
+			}
+		}
+	}
 	seen, total := map[string]bool{}, 0
 	for _, mt := range refPathRe.FindAllStringSubmatch(fm.Body, -1) {
 		p := strings.TrimPrefix(mt[1], "./")
@@ -581,15 +636,24 @@ func (s *Store) activeSkill() *skillPrompt {
 
 func desktopOnly(s *Store, w http.ResponseWriter) bool {
 	if !s.Cfg.Desktop {
-		detail(w, 404, "简报 Skill 仅桌面版可用")
+		detail(w, 404, "Skill 仅桌面版可用")
 		return false
 	}
 	return true
 }
 
-func (s *Store) skillsOut(w http.ResponseWriter, extra ...any) {
+// reqKind: ?kind= (or the JSON body's "kind"); brief by default.
+func reqKind(w http.ResponseWriter, k string) (skillKind, bool) {
+	x, ok := skillKindOf(k)
+	if !ok {
+		detail(w, 400, "未知的 Skill 类型")
+	}
+	return x, ok
+}
+
+func (s *Store) skillsOut(w http.ResponseWriter, k skillKind, extra ...any) {
 	w.Header().Set("Cache-Control", "no-store")
-	o := obj("skills", s.listSkills())
+	o := obj("skills", s.listSkills(k), "kind", k.Key)
 	for i := 0; i+1 < len(extra); i += 2 {
 		o.Set(extra[i].(string), extra[i+1])
 	}
@@ -598,7 +662,9 @@ func (s *Store) skillsOut(w http.ResponseWriter, extra ...any) {
 
 func (s *Store) hSkillsList(w http.ResponseWriter, r *http.Request) {
 	if desktopOnly(s, w) {
-		s.skillsOut(w)
+		if k, ok := reqKind(w, r.URL.Query().Get("kind")); ok {
+			s.skillsOut(w, k)
+		}
 	}
 }
 
@@ -609,7 +675,11 @@ func (s *Store) hSkillGet(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := r.PathValue("name")
 	if slug == "default" {
-		slug = ""
+		k, ok := reqKind(w, r.URL.Query().Get("kind"))
+		if !ok {
+			return
+		}
+		slug = k.Builtin
 	}
 	fsys, ok := s.skillFS(slug)
 	if !ok {
@@ -683,7 +753,11 @@ func (s *Store) hSkillInstall(w http.ResponseWriter, r *http.Request) {
 		detail(w, 422, err.Error())
 		return
 	}
-	s.skillsOut(w, "installed", m.Slug)
+	k, _ := skillKindOf(r.URL.Query().Get("kind"))
+	if k.Key == "" {
+		k = skillKinds[0]
+	}
+	s.skillsOut(w, k, "installed", m.Slug)
 }
 
 // POST /api/skills/upload: "file" = SKILL.md or a zip / tar.gz; or several "files" whose file names are the
@@ -766,22 +840,31 @@ func (s *Store) hSkillUpload(w http.ResponseWriter, r *http.Request) {
 		detail(w, 422, err.Error())
 		return
 	}
-	s.skillsOut(w, "installed", m.Slug)
+	k, _ := skillKindOf(r.URL.Query().Get("kind"))
+	if k.Key == "" {
+		k = skillKinds[0]
+	}
+	s.skillsOut(w, k, "installed", m.Slug)
 }
 
 func (s *Store) hSkillActive(w http.ResponseWriter, r *http.Request) {
 	if !desktopOnly(s, w) {
 		return
 	}
-	slug := str(readBody(r)["slug"])
+	body := readBody(r)
+	k, ok := reqKind(w, str(body["kind"]))
+	if !ok {
+		return
+	}
+	slug := str(body["slug"])
 	if slug != "" {
-		if _, ok := s.skillFS(slug); !ok || slug == DefaultSkillName {
+		if _, ok := s.skillFS(slug); !ok || isBuiltinSkill(slug) {
 			detail(w, 404, "Skill 不存在")
 			return
 		}
 	}
-	s.SetSetting("brief_skill", slug)
-	s.skillsOut(w)
+	s.SetSetting(k.Setting, slug)
+	s.skillsOut(w, k)
 }
 
 func (s *Store) hSkillDelete(w http.ResponseWriter, r *http.Request) {
@@ -789,7 +872,7 @@ func (s *Store) hSkillDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := r.PathValue("name")
-	if slug == "" || slug == DefaultSkillName || !skillNameRe.MatchString(slug) {
+	if slug == "" || isBuiltinSkill(slug) || !skillNameRe.MatchString(slug) {
 		detail(w, 400, "内置 Skill 不能删除")
 		return
 	}
@@ -798,10 +881,16 @@ func (s *Store) hSkillDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	os.RemoveAll(filepath.Join(s.skillsDir(), slug))
-	if a, _ := s.GetSetting("brief_skill"); a == slug {
-		s.SetSetting("brief_skill", "")
+	for _, k := range skillKinds {
+		if a, _ := s.GetSetting(k.Setting); a == slug {
+			s.SetSetting(k.Setting, "")
+		}
 	}
-	s.skillsOut(w)
+	k, _ := skillKindOf(r.URL.Query().Get("kind"))
+	if k.Key == "" {
+		k = skillKinds[0]
+	}
+	s.skillsOut(w, k)
 }
 
 func str(v any) string { s, _ := v.(string); return s }

@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, Download, Eye, FileText, Languages, Loader2, Pencil, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { api } from "./common";
+import { Markdown } from "./md-view";
 import { useApp } from "./app-shell";
 
 type BriefItem = { title: string; summary: string; url: string; source: string; published: number; translated: boolean };
@@ -15,56 +16,14 @@ export type BriefOut = {
   markdown: string; title: string; scope: string; scopeLabel: string; groups: BriefGroup[] | null;
   count: number; sources: number; generatedAt: number; ai: boolean; cached: boolean;
   aiAvailable: boolean; aiReason: string | null; translate: boolean; translateNote?: string; skill?: string;
-  verified?: boolean; noFullText?: { n: number; title: string; source: string; url: string; status: string; reason: string }[];
+  verified?: boolean; manual?: boolean; saved?: string; noFullText?: { n: number; title: string; source: string; url: string; status: string; reason: string }[];
 };
 
 const TR_KEY = "brief-translate";
 
-/** Inline markdown: [[n]](url) → small superscript source link, [text](url), **bold**. */
-function Inline({ text }: { text: string }) {
-  const parts: React.ReactNode[] = [];
-  const re = /\[\[(\d+)\]\]\((https?:\/\/[^)\s]+)\)|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\*\*([^*]+)\*\*/g;
-  let last = 0, m: RegExpExecArray | null, k = 0;
-  while ((m = re.exec(text))) {
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    if (m[1]) parts.push(<a key={k++} href={m[2]} target="_blank" rel="noreferrer" title={m[2]} data-testid="brief-ref" className="mx-0.5 align-super text-[10px] font-medium text-brand/80 no-underline hover:text-brand">[{m[1]}]</a>);
-    else if (m[3]) parts.push(<a key={k++} href={m[4]} target="_blank" rel="noreferrer" className="text-brand underline-offset-2 hover:underline">{m[3]}</a>);
-    else parts.push(<strong key={k++} className="font-semibold">{m[5]}</strong>);
-    last = re.lastIndex;
-  }
-  parts.push(text.slice(last));
-  return <>{parts}</>;
-}
-
-/** Small markdown renderer for the AI-polished brief (headings, lists, quotes, paragraphs). */
-function Markdown({ md }: { md: string }) {
-  const out: React.ReactNode[] = [];
-  let list: string[] = [];
-  const flush = () => { if (list.length) { out.push(<ol key={out.length} className="my-2 list-decimal space-y-0.5 pl-5 type-caption text-muted-foreground">{list.map((l, i) => <li key={i}><Inline text={l} /></li>)}</ol>); list = []; } };
-  for (const raw of md.split("\n")) {
-    const l = raw.trimEnd();
-    const li = /^\s*(?:[-*]|\d+\.)\s+(.*)$/.exec(l);
-    if (li) { list.push(li[1]); continue; }
-    flush();
-    if (!l.trim()) continue;
-    const h = /^(#{1,4})\s+(.*)$/.exec(l);
-    if (h) {
-      const n = h[1].length;
-      out.push(n === 1 ? null : n === 2
-        ? <h3 key={out.length} className="mt-5 mb-2 border-b border-border/60 pb-1 type-ui font-semibold first:mt-0">{<Inline text={h[2]} />}</h3>
-        : <h4 key={out.length} className="mt-3 mb-1 type-body font-semibold"><Inline text={h[2]} /></h4>);
-      continue;
-    }
-    if (l.startsWith(">")) { out.push(<p key={out.length} className="my-2 border-l-2 border-border pl-3 text-muted-foreground"><Inline text={l.replace(/^>\s?/, "")} /></p>); continue; }
-    out.push(<p key={out.length} className="my-2.5"><Inline text={l} /></p>);
-  }
-  flush();
-  return <div className="type-body leading-[1.7] text-foreground/90">{out}</div>;
-}
-
 /** Dialog: rule-based section brief (optionally translated) + optional AI 润色; copy / export markdown. */
-export default function BriefDialog({ open, onOpenChange, section, sectionLabel }: {
-  open: boolean; onOpenChange: (o: boolean) => void; section: string | null; sectionLabel: string;
+export default function BriefDialog({ open, onOpenChange, section, sectionLabel, ids }: {
+  open: boolean; onOpenChange: (o: boolean) => void; section: string | null; sectionLabel: string; ids?: number[];
 }) {
   const { tr } = useApp();
   const [b, setB] = useState<BriefOut | null>(null);
@@ -80,15 +39,24 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel 
   const [editing, setEditing] = useState(false);
   const edited = !!b && text !== b.markdown;
   const scope = section || "all";
+  const idq = ids?.length ? `&ids=${ids.join(",")}` : "";
+  // Only the newest request may land: a slower response for an earlier section / selection / mode (e.g. the
+  // dialog stayed open while ⌘K switched sections) must never replace the current brief.
+  const seq = useRef(0);
+  const want = useRef("");
+  useEffect(() => { want.current = scope + idq; seq.current++; }, [scope, idq]); // a scope change voids what is in flight
 
   const load = useCallback(async (ai: boolean, t: boolean) => {
+    const my = ++seq.current, key = scope + idq;
     (ai ? setAiBusy : setBusy)(true); setErr("");
+    const stale = () => my !== seq.current || want.current !== key;
     try {
-      const r = await api<BriefOut>(`/api/brief?section=${encodeURIComponent(scope)}${ai ? "&ai=1" : ""}${t ? "&tr=1" : ""}`);
+      const r = await api<BriefOut>(`/api/brief?section=${encodeURIComponent(scope)}${idq}${ai ? "&ai=1" : ""}${t ? "&tr=1" : ""}`);
+      if (stale() || r.scope !== scope) return;
       setB(r); setText(r.markdown); setEditing(false);
-    } catch (e) { setErr((e as Error).message); if (!ai) setB(null); else toast.error((e as Error).message); }
-    finally { (ai ? setAiBusy : setBusy)(false); }
-  }, [scope]);
+    } catch (e) { if (stale()) return; setErr((e as Error).message); if (!ai) setB(null); else toast.error((e as Error).message); }
+    finally { if (my === seq.current) { setBusy(false); setAiBusy(false); } }
+  }, [scope, idq]);
 
   useEffect(() => { if (open) { setB(null); setErr(""); void load(false, trOn); } }, [open, load]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggleTr = (v: boolean) => { setTrOn(v); try { localStorage.setItem(TR_KEY, v ? "1" : "0"); } catch { /* */ } void load(!!b?.ai, v); };
@@ -112,7 +80,7 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel 
         <DialogHeader className="gap-1 border-b border-border/60 px-5 py-4">
           <DialogTitle className="flex items-center gap-2 pr-6"><FileText className="size-4 text-brand" />{b?.title ?? `「${sectionLabel}」简报`}</DialogTitle>
           <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>{busy && !b ? "正在汇总近 48 小时内容…" : b ? `${b.count} 条 · ${b.sources} 个来源${b.ai ? ` · AI 润色${b.skill ? `（${b.skill}）` : ""}` : " · 规则生成"}${b.cached ? " · 缓存" : ""}${edited ? " · 已编辑" : ""}` : ""}</span>
+            <span>{busy && !b ? (ids?.length ? "正在汇总所选内容…" : "正在汇总近 48 小时内容…") : b ? `${b.count} 条 · ${b.sources} 个来源${b.ai ? ` · AI 润色${b.skill ? `（${b.skill}）` : ""}` : " · 规则生成"}${b.cached ? " · 缓存" : ""}${edited ? " · 已编辑" : ""}` : ""}{b?.saved && <span className="ml-2 text-faint" title={b.saved} data-testid="brief-saved">已保存</span>}</span>
             <label className="ml-auto inline-flex cursor-pointer items-center gap-2 type-caption text-muted-foreground" title={trHint}>
               <Languages className="size-3.5" />翻译
               <Switch size="sm" checked={trOn} disabled={busy || aiBusy} onCheckedChange={(v) => toggleTr(!!v)} aria-label="翻译简报" data-testid="brief-tr" />

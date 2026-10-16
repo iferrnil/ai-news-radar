@@ -15,6 +15,7 @@ type DesktopHooksT struct {
 	NotifyTest         func() (NotifyState, error) // shows a banner through UNUserNotificationCenter
 	OpenNotifySettings func() error                // System Settings › Notifications
 	OpenDataDir        func() error                // reveal the data folder
+	OpenPath           func(p string) error        // reveal a folder (成果目录)
 }
 
 var DesktopHooks DesktopHooksT

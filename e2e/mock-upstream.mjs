@@ -114,7 +114,9 @@ http.createServer((req, res) => {
           send(res, 200, { choices: [{ message: { content: JSON.stringify({ r }) } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
         } catch {
           // brief AI 润色: user content is Markdown, not a translate batch
-          send(res, 200, { choices: [{ message: { content: "# 【润色】\n\n> SKILL: " + skill.slice(0, 2000) + "\n\n" + content } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+          // 生成文章: a Skill that asks for a cover gets a cover marker line (t22)
+          const cover = content.includes("## 选中的新闻") && /cover-image/.test(sys) ? "\n\n<!-- cover-image: e2e cover prompt -->" : "";
+          send(res, 200, { choices: [{ message: { content: "# 【润色】\n\n> SKILL: " + skill.slice(0, 2000) + "\n\n" + content + cover } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
         }
       } catch { send(res, 400, { error: "bad request" }); }
     });
