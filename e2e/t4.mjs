@@ -1,4 +1,4 @@
-import { launch, rec, srcs, api } from "./lib.mjs";
+import { launch, rec, srcs, api, B } from "./lib.mjs";
 const all = await srcs();
 const { br, page, errors } = await launch(false);
 const g = page.getByRole("group", { name: "按状态筛选" });
@@ -13,7 +13,7 @@ rec("only one status pressed", others === 1);
 const hs = await g.getByRole("button").evaluateAll((bs) => [...new Set(bs.map((b) => Math.round(b.getBoundingClientRect().height) + "/" + getComputedStyle(b).fontWeight))]);
 rec("status buttons uniform height/weight", hs.length === 1, hs.join(","));
 // feed
-await page.goto("http://localhost:3000/"); await page.waitForSelector("[data-slot=card]"); await page.waitForTimeout(800);
+await page.goto(B + "/"); await page.waitForSelector("[data-slot=card]"); await page.waitForTimeout(800);
 const p0 = page.locator("main button[aria-pressed]").first();
 await p0.click(); await page.waitForTimeout(300); const onAll = await p0.getAttribute("aria-pressed");
 rec("P0 toggle on in 全部 (URL p0=1)", onAll === "true" && page.url().includes("p0=1"), page.url());
@@ -39,7 +39,7 @@ rec("drawer opens", await page.getByRole("dialog").count() > 0); await page.keyb
 await page.keyboard.press("Control+k"); await page.locator("[data-slot=command-input]").waitFor(); await page.waitForTimeout(150); await page.keyboard.type("zzzzqqq"); await page.waitForTimeout(500);
 await page.screenshot({ path: "/tmp/t4pal.png" }); rec("palette empty state", await page.getByText("没有结果").count() > 0); await page.keyboard.press("Escape");
 // delete + restore via 已删除的内置源 dialog
-await page.goto("http://localhost:3000/sources"); await page.getByRole("heading", { name: "数据源" }).waitFor();
+await page.goto(B + "/sources"); await page.getByRole("heading", { name: "数据源" }).waitFor();
 await page.getByRole("row").filter({ hasText: "Techmeme" }).getByRole("button", { name: "操作" }).click();
 await page.getByRole("menuitem", { name: "删除" }).click(); await page.getByRole("alertdialog").getByRole("button", { name: "删除" }).click(); await page.waitForTimeout(1200);
 await page.getByRole("button", { name: /已删除的内置源/ }).click(); await page.waitForTimeout(400);

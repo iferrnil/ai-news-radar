@@ -1,4 +1,4 @@
-# Release workflow for the macOS desktop app (desktop/, MyGo + bundled Node).
+# Release workflow for the macOS desktop app (desktop/, MyGo + in-process Go backend + embedded static UI).
 # Trigger: push a tag `desktop-v*` (e.g. desktop-v0.1.0) or run it manually (Actions → desktop-release).
 # Builds one .dmg per arch (arm64 + x64, each ~half the size of a universal build), writes SHA256SUMS
 # and publishes a GitHub Release with notes. Without signing secrets the app is signed ad hoc
@@ -38,7 +38,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: desktop/go.mod
-          cache-dependency-path: desktop/go.sum
+          cache-dependency-path: |
+            desktop/go.sum
+            server/go.sum
       - run: npm ci --no-audit --no-fund
       - name: Import the certificate and the notary credentials
         id: sign
@@ -77,7 +79,7 @@ jobs:
           ver="${tag#desktop-v}"
           jq --arg v "$ver" '.version = $v' desktop/mygo.json > "$RUNNER_TEMP/m.json" && mv "$RUNNER_TEMP/m.json" desktop/mygo.json
           echo "tag=$tag" >> "$GITHUB_OUTPUT"; echo "ver=$ver" >> "$GITHUB_OUTPUT"
-      - name: Build (Next standalone + Node + MyGo, darwin/arm64 + darwin/amd64)
+      - name: Build (Next static export + Go + MyGo, darwin/arm64 + darwin/amd64)
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }} # ed25519 update signing (independent of Apple signing)
         run: desktop/scripts/package.sh darwin/arm64,darwin/amd64
@@ -88,7 +90,7 @@ jobs:
           mkdir -p dist
           for a in arm64:arm64 amd64:x64; do
             d="desktop/build/darwin-${a%%:*}"; app="$d/AI News Radar.app"
-            lipo -info "$app/Contents/MacOS/AI News Radar" "$app/Contents/Resources/node/bin/node"
+            lipo -info "$app/Contents/MacOS/AI News Radar"
             codesign --verify --deep --strict --verbose=2 "$app"
             dmg=$(ls "$d"/*.dmg | head -1); hdiutil verify "$dmg"
             cp "$dmg" "dist/AI-News-Radar-$VER-macos-${a##*:}.dmg"

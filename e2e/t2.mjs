@@ -1,4 +1,4 @@
-import { launch, rec, results, srcs, deleted, openImport, waitPlan, counts, setMode, applyImport } from "./lib.mjs";
+import { launch, rec, results, srcs, deleted, openImport, waitPlan, counts, setMode, applyImport, B } from "./lib.mjs";
 import fs from "fs";
 const snap = (l) => Object.fromEntries(l.map((s) => [s.name, JSON.stringify([s.type, s.type === "x" ? s.username : s.url, s.section, s.priority, s.poll_interval, !!s.enabled])]));
 const before = snap(await srcs());
@@ -73,7 +73,7 @@ dlg = await openImport(page, "/tmp/malformed.json"); await sleep(800);
 alert = await dlg.getByRole("alert").innerText().catch(() => "");
 rec("malformed JSON clear error", /JSON 解析失败/.test(alert), alert); await closeDlg();
 // server-side direct checks
-const r = await fetch("http://localhost:3000/api/sources/import", { method: "POST", body: JSON.stringify({ entries: [{ name: "x", type: "rss", url: "javascript:alert(1)" }], dryRun: true }) }).then((r) => r.json());
+const r = await fetch(B + "/api/sources/import", { method: "POST", body: JSON.stringify({ entries: [{ name: "x", type: "rss", url: "javascript:alert(1)" }], dryRun: true }) }).then((r) => r.json());
 rec("server re-validates javascript: URL", r.counts?.invalid === 1);
 rec("desktop import: no console errors", errors.length === 0, errors.join(" | ").slice(0, 400));
 await br.close();

@@ -84,7 +84,7 @@ function StatusBadge({ s }: { s: SourceRow }) {
 
 
 export default function Sources() {
-  const { sources: rows, reloadSources, addOpen, setAddOpen, sections } = useApp();
+  const { sources: rows, reloadSources, addOpen, setAddOpen, sections, tr } = useApp();
   const [renaming, setRenaming] = useState<number | null>(null);
   const [editSrc, setEditSrc] = useState<SourceRow | null>(null); const [editUsed, setEditUsed] = useState(false);
   useEffect(() => { if (editSrc) setEditUsed(true); }, [editSrc]);
@@ -144,12 +144,12 @@ export default function Sources() {
   const doExport = async (fmt: "json" | "opml") => {
     const base = scope === "enabled" ? rows.filter((r) => r.enabled) : scope === "view" ? view : scope === "sel" ? rows.filter((r) => sel.has(r.id)) : rows;
     const list: ExportSource[] = base.filter((r) => r.type !== "html").map((r) => ({ ...r, section: sourceSection(r) }));
-    const custom = allSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false }));
+    const custom = allSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false, translate: !!c.translate }));
     if (!list.length) { toast.error("没有可导出的来源"); return; }
     const d = new Date();
     const { buildJson, buildOpml, exportFileName } = await import("@/lib/portable-export");
-    if (fmt === "json") download(exportFileName("json", d), buildJson(list, d, custom), "application/json");
-    else download(exportFileName("opml", d), buildOpml(list, d, custom), "text/x-opml");
+    if (fmt === "json") download(exportFileName("json", d), buildJson(list, d, custom, !!tr?.scopes.all), "application/json");
+    else download(exportFileName("opml", d), buildOpml(list, d, custom, !!tr?.scopes.all), "text/x-opml");
     const nx = list.filter((r) => r.type.startsWith("x")).length;
     toast.success(`已导出 ${list.length} 个来源`, { description: fmt === "opml" && nx ? `${nx} 个 X 来源以自定义 type="x" 写入，其他阅读器会忽略它们` : undefined });
   };

@@ -3,11 +3,11 @@ import type { ItemOut } from "@/lib/types";
 // Exclusive sections: each SOURCE belongs to exactly one section (sources.section = section key), so every item is in exactly one.
 // ALL sections are user-manageable rows from /api/sections (the former built-ins lab/cn/media/x/ent were seeded once);
 // only 全部 is fixed. app-shell registers them at runtime via setSections(); `sectionsReady()` gates 全部 filtering.
-export type Section = { key: string; zh: string; includeInAll?: boolean; icon?: string | null; pos?: number };
+export type Section = { key: string; zh: string; includeInAll?: boolean; icon?: string | null; pos?: number; translate?: boolean };
 export type SectionKey = string;
-export type SectionApiRow = { key: string; name: string; icon: string | null; in_all: number; pos: number };
+export type SectionApiRow = { key: string; name: string; icon: string | null; in_all: number; pos: number; tr?: number };
 let LIST: Section[] = []; let READY = false;
-export function setSections(rows: SectionApiRow[]) { LIST = rows.map((r) => ({ key: r.key, zh: r.name, icon: r.icon, includeInAll: !!r.in_all, pos: r.pos })); READY = true; }
+export function setSections(rows: SectionApiRow[]) { LIST = rows.map((r) => ({ key: r.key, zh: r.name, icon: r.icon, includeInAll: !!r.in_all, pos: r.pos, translate: r.tr === 1 })); READY = true; }
 export const allSections = (): Section[] => LIST;
 export const sectionsReady = () => READY;
 export const isSectionKeyLike = (k: string) => /^[a-z][a-z0-9]{0,15}$/.test(k);
@@ -54,7 +54,15 @@ export type SourceRow = {
   /** fetch health (source_health): runs = last 20 outcomes "1"/"0"; open = circuit breaker cool-down end */
   h_runs?: string; h_last_ok?: number; h_err_at?: number; h_kind?: string; h_consec?: number; h_lat?: number; h_open?: number;
   hidden_count?: number; f_include?: string | null; f_exclude?: string | null; f_scope?: "title" | "all" | null; f_cs?: number;
+  tr?: number; // 1 = translation switched on for this source view
 };
+
+/** /api/settings `translate`: availability + the switched-on view scopes (全部 / sections / sources). */
+export type TrScopes = { all: boolean; sections: string[]; sources: number[] };
+export type TrInfo = { available: boolean; reason: string | null; scopes: TrScopes; queued: number; done: number; cached: number; failed: number; lastError: string | null; model: string };
+/** translation is shown for an item when 全部, its section or its source has translation switched on */
+export const trOnFor = (s: TrScopes | null | undefined, sourceId: number | null | undefined, section: string | null | undefined) =>
+  !!s && (s.all || (section != null && s.sections.includes(section)) || (sourceId != null && s.sources.includes(sourceId)));
 
 /** Show the Chinese translation (if any) in place of title/summary, keeping the original in `orig`. */
 export function localize(it: ItemOut): ItemOut {

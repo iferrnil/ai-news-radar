@@ -1,7 +1,7 @@
 "use client";
 // 设置: DeepSeek key (write-only, masked), optional base URL / model, translation toggle; P0 通知, 阅读, desktop updates (settings-extra.tsx).
 import { useEffect, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Lock, PlugZap, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, KeyRound, Languages, Loader2, Lock, PlugZap, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +10,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { api } from "./common";
+import { type TrScopes, api, secZh } from "./common";
 import { DesktopCard, NotifyCard, ReadingCard, type NotifyPrefs } from "./settings-extra";
 
 type DS = { configured: boolean; source: "app" | "env" | null; baseUrl: string; model: string; baseUrlCustom: boolean; modelCustom: boolean; locked: boolean };
-type TR = { available: boolean; enabled: boolean; done: number; queued: number; failed: number; lastError: string | null };
+type TR = { available: boolean; reason: string | null; scopes: TrScopes; done: number; queued: number; failed: number; lastError: string | null };
+const trScopeText = (sc: TrScopes) => [sc.all && "全部", ...sc.sections.map((k) => `分区「${secZh(k)}」`), sc.sources.length && `${sc.sources.length} 个来源`].filter(Boolean).join("、") || "无";
 type S = { deepseek: DS; translate: TR; notify: NotifyPrefs; desktop: boolean; version?: string | null };
 type Test = { ok: boolean; error?: string } | null;
 
@@ -92,17 +92,14 @@ export default function Settings() {
 
       <Card className="mt-4">
         <CardContent>
-          <label className="flex cursor-pointer items-start gap-3">
-            <div className="flex-1">
-              <div className="type-ui font-medium">抓取时翻译</div>
-              <div className="mt-0.5 type-caption text-muted-foreground">
-                {!s ? "读取中…" : !s.translate.available ? "需要先配置 API key。" : `新外文条目自动翻译标题与摘要 · 已译 ${s.translate.done} · 排队 ${s.translate.queued}${s.translate.failed ? ` · 失败 ${s.translate.failed}` : ""}`}
-              </div>
-              {s?.translate.lastError && <div className="mt-1 type-meta text-red-500">{s.translate.lastError}</div>}
+          <div data-testid="settings-translate">
+            <div className="type-ui font-medium">翻译</div>
+            <div className="mt-0.5 type-caption text-muted-foreground">
+              在页面右上角的翻译按钮（<Languages className="inline size-3 align-[-1px]" />）里按当前视图开启：「全部」、某个分区或单个来源。
+              {s && (s.translate.available ? ` 已开启：${trScopeText(s.translate.scopes)} · 已译 ${s.translate.done} · 排队 ${s.translate.queued}${s.translate.failed ? ` · 失败 ${s.translate.failed}` : ""}` : ` ${s.translate.reason ?? "翻译不可用"}。`)}
             </div>
-            <Switch aria-label="抓取时翻译" checked={!!s?.translate.enabled} disabled={!s?.translate.available || !!busy}
-              onCheckedChange={(v) => patch({ translate: !!v }, "save", v ? "已开启抓取时翻译" : "已关闭抓取时翻译")} />
-          </label>
+            {s?.translate.lastError && <div className="mt-1 type-meta text-red-500">{s.translate.lastError}</div>}
+          </div>
         </CardContent>
       </Card>
 

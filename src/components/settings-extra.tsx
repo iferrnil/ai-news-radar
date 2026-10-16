@@ -17,7 +17,7 @@ import { SectionName } from "./section-icon";
 import { askPermission, setWebPrefs, webNotifySupported, webPrefs, type WebNotifyPrefs } from "./notify-client";
 import { markOnHover, setMarkOnHover } from "./read-store";
 
-export type NotifyPrefs = { enabled: boolean; sections: string[] };
+export type NotifyPrefs = { enabled: boolean; sections: string[]; system?: boolean; scope?: "p0" | "all" };
 const PERM: Record<string, { label: string; v: "success" | "destructive" | "secondary" | "warning" }> = {
   granted: { label: "浏览器已允许", v: "success" }, denied: { label: "浏览器已拒绝", v: "destructive" }, default: { label: "尚未授权", v: "secondary" }, unsupported: { label: "此浏览器不支持", v: "warning" },
 };
@@ -68,6 +68,24 @@ export function NotifyCard({ desktop, server, locked, onSaved }: { desktop: bool
           </div>
           <Switch aria-label="P0 通知" checked={p.enabled} disabled={disabled} onCheckedChange={(v) => void toggle(!!v)} />
         </label>
+        {desktop && (
+          <>
+            <label className="flex cursor-pointer items-start gap-3" data-testid="notify-system">
+              <div className="flex-1">
+                <div className="type-ui font-medium">桌面系统通知</div>
+                <div className="mt-0.5 type-caption text-muted-foreground">在 macOS 通知中心显示（每批一条汇总，点击打开 App 和对应内容）；关闭后只在 App 内提示。</div>
+              </div>
+              <Switch aria-label="桌面系统通知" checked={p.system !== false} disabled={disabled || !p.enabled} onCheckedChange={(v) => void save({ system: !!v })} />
+            </label>
+            <div className="grid gap-2">
+              <Label>系统通知内容</Label>
+              <RadioGroup value={p.scope ?? "p0"} disabled={disabled || !p.enabled || p.system === false} className="flex flex-wrap gap-4" onValueChange={(v) => void save({ scope: v as "p0" | "all" })}>
+                <label className="flex items-center gap-2 type-body"><RadioGroupItem value="p0" aria-label="仅 P0 动态" />仅 P0 动态</label>
+                <label className="flex items-center gap-2 type-body"><RadioGroupItem value="all" aria-label="全部新内容" />全部新内容（「新增 N 条」汇总）</label>
+              </RadioGroup>
+            </div>
+          </>
+        )}
         <div className="grid gap-2">
           <Label>分区</Label>
           <RadioGroup value={custom ? "custom" : "all"} disabled={disabled || !p.enabled} className="flex flex-wrap gap-4"

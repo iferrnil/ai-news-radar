@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
-import { rec } from "./lib.mjs";
-const B = "http://localhost:3000"; const b = await chromium.launch(); const errs = [];
+import { rec, B } from "./lib.mjs";
+ const b = await chromium.launch(); const errs = [];
 const page = async (vp, theme = "dark") => { const c = await b.newContext({ viewport: vp }); await c.addInitScript((t) => localStorage.setItem("theme", t), theme); const p = await c.newPage();
   p.on("console", (m) => m.type() === "error" && errs.push(`${p.url()} ${m.text()}`)); p.on("pageerror", (e) => errs.push(String(e))); return p; };
 // overflow matrix
@@ -27,8 +27,8 @@ const allN = Number(side["全部"]);
 rec("section views match sidebar counts; 全部 = sum of non-娱乐 sections", notes.every((x) => !x.includes("wrong")) && allN === sum, notes.join(" ") + ` 全部=${allN} sum=${sum}`);
 // translate menu lazy popover
 await p.goto(B + "/", { waitUntil: "load" }); await p.waitForTimeout(600);
-await p.getByRole("button", { name: "翻译设置" }).click(); await p.waitForTimeout(1500);
-rec("translate menu loads on first click and opens", await p.getByText("翻译成中文").count() > 0);
+await p.getByTestId("tr-toggle").click(); await p.waitForTimeout(1500);
+rec("translate menu loads on first click and opens", await p.getByText("翻译「全部」").count() > 0);
 await p.keyboard.press("Escape"); await p.waitForTimeout(300);
 // theme toggle
 const before = await p.evaluate(() => document.documentElement.classList.contains("dark"));

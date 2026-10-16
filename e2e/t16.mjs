@@ -24,14 +24,17 @@ await toggle.hover(); await page.getByText("隐藏侧边栏").last().waitFor({ t
 rec("tooltip names the action + shortcut", /隐藏侧边栏\s*Ctrl\+B/.test(await page.locator("[data-slot=tooltip-content]").last().innerText().catch(() => "")));
 await page.screenshot({ path: SHOT("sidebar_expanded.png") });
 
-// sample the width every frame while it animates
+// sample every frame while it animates: the panel slides (transform), the column width changes in ONE step
+// (no per-frame re-layout of the feed grid — that was the stutter)
 const frames = await page.evaluate(() => new Promise((res) => {
-  const a = document.getElementById("app-sidebar"), out = [], t0 = performance.now();
+  const a = document.getElementById("app-sidebar"), p = a.firstElementChild, out = [], t0 = performance.now();
   document.querySelector("[data-testid=sidebar-toggle]").click();
-  const f = () => { out.push(a.getBoundingClientRect().width); if (performance.now() - t0 < 400) requestAnimationFrame(f); else res(out); }; requestAnimationFrame(f);
+  const f = () => { out.push({ w: a.getBoundingClientRect().width, x: new DOMMatrix(getComputedStyle(p).transform).m41 }); if (performance.now() - t0 < 450) requestAnimationFrame(f); else res(out); }; requestAnimationFrame(f);
 }));
-const mid = frames.find((w) => w > 0 && w < 244) ?? -1; await settle();
-rec("click collapses with a transition", mid > 0 && (await width()) === 0, `frames=${frames.length} mid=${Math.round(mid)}`);
+const midX = frames.find((f) => f.x < 0 && f.x > -244)?.x ?? 0; await settle();
+const widths = [...new Set(frames.map((f) => Math.round(f.w)))];
+rec("click collapses with a slide transition", midX < 0 && (await width()) === 0, `frames=${frames.length} midX=${Math.round(midX)}`);
+rec("column width changes in one step (no per-frame reflow)", widths.length <= 2 && widths.every((w) => w === 0 || w === 244), widths.join(","));
 rec("collapsed: aria + inert + persisted", (await toggle.getAttribute("data-state")) === "collapsed" && (await toggle.getAttribute("aria-label")) === "显示侧边栏" && (await aside.getAttribute("inert")) !== null
   && (await page.evaluate(() => localStorage.getItem("sidebar.collapsed"))) === "1");
 const colsClosed = await cols();

@@ -1,30 +1,30 @@
 # AI News Radar 桌面版（macOS）
 
-用 [MyGo](https://github.com/egoist/mygo)（固定 v0.4.3）做的原生外壳，内置 Node 22 和 Next.js standalone 服务：
+用 [MyGo](https://github.com/egoist/mygo)（固定 v0.4.3）做的原生外壳，Go 后端（`../server`）在 App 进程内运行，Next.js 静态界面嵌入二进制，不含 Node：
 
-- 启动时在 `127.0.0.1` 的随机空闲端口启动内置服务，`/api/health` 就绪后在原生窗口（WKWebView）中打开；
+- 启动时在 `127.0.0.1:47821`（被占用则随机空闲端口）启动内置服务，`/api/health` 就绪后在原生窗口（WKWebView）中打开；
 - 数据库在用户数据目录：`~/Library/Application Support/AI News Radar/news.db`（日志 `server.log` 也在这里）；
 - 不读取/传递环境变量 `DEEPSEEK_API_KEY`，翻译默认关闭；在 App 的 **设置** 页填写 DeepSeek key（保存到数据目录 `secrets.json`，权限 0600，立即生效）后可开启“抓取时翻译”。没有用 macOS 钥匙串：MyGo 没有钥匙串 API，而调用 `security` 命令会把 key 暴露在进程参数里；
 - 站外链接用默认浏览器打开；只允许运行一个实例（再次打开会把窗口调到前台）；
 - 关闭窗口 = 隐藏（菜单栏图标仍在），菜单栏 / 应用菜单：显示 / 隐藏（⌘⇧R）、刷新（⌘R）、打开数据目录、退出（⌘Q）；
 - 窗口：隐藏标题栏（红绿灯嵌入顶栏，拖动顶栏移动窗口），记住大小和位置（数据目录 `window-state.json`），最小 720×480；默认跟随系统深浅色（在应用里手动切换后以手动为准）；
 - 快捷键：⌘B 显示/隐藏侧边栏（菜单「视图」）、⌘, 设置、⌘F 搜索、⌘K 命令面板；
-- 退出时先关闭内置服务的 stdin（服务随即退出并正常关闭 SQLite），再依次 SIGTERM、强杀兜底。
+- 退出时停止轮询、关闭 HTTP 服务（最多等 2 秒），再正常关闭 SQLite（WAL 合并）。
 
 ## 在自己的 Mac 上构建
 
-需要：Xcode 命令行工具（`xcode-select --install`）、Node 22、Go 1.27.1+（`go.mod` 里的 toolchain 会自动下载）。
+需要：Xcode 命令行工具（`xcode-select --install`）、Node 22（仅构建界面）、Go 1.27.1+（`go.mod` 里的 toolchain 会自动下载）。
 
 ```sh
 git clone https://github.com/iferrnil/ai-news-radar.git && cd ai-news-radar
 npm ci
 desktop/scripts/package.sh                 # 默认 darwin/universal（Intel + Apple 芯片）
-# 国内网络：MIRROR=cn desktop/scripts/package.sh   （Node 从 npmmirror 下载）
+# 网络受限：npm config set registry https://registry.npmmirror.com；export GOPROXY=https://goproxy.cn,direct
 # 只要本机架构更小：desktop/scripts/package.sh darwin/arm64
 open desktop/build/darwin-universal        # AI News Radar.app 和 .dmg
 ```
 
-脚本做的事：`STANDALONE=1 npm run build` → 组装 `desktop/resources/server`（standalone + static + public + sources.json；`.next` 改名为 `next-dist`，因为 MyGo 不打包隐藏文件）→ 下载对应架构的 Node 官方二进制 → 放入 better-sqlite3 自带的 darwin 预编译模块（Node-API，无需编译）→ `go tool mygo build`（在 Mac 上会签名并生成 .dmg）。
+脚本做的事：`npm run build`（静态导出到 `out/`）→ 复制到 `desktop/webui/`（连同 `sources.json`，用 go:embed 嵌入）→ `go tool mygo build`（在 Mac 上会签名并生成 .dmg）。arm64 的 .app 约 28 MB（0.3.0 内置 Node 时为 135 MB）。
 
 本机构建默认是 ad-hoc 签名，可在本机直接运行。要发给别人用，在 `mygo.json` 的 `macos` 里加上 `signingIdentity`（Developer ID）和 `notarize: { keychainProfile: "notary" }`，并先执行一次 `xcrun notarytool store-credentials notary`。
 
@@ -70,15 +70,14 @@ App 使用 MyGo 更新器：启动后及每 12 小时检查 GitHub Releases 上�
 
 ## 安装包瘦身
 
-`package.sh` 的「2b. slim」步骤会去掉 source map、类型声明、文档、Next 的实验运行时与 React Refresh、非中英字体子集，并 strip Node 符号表。
+不再打包 Node 运行时和 Next 服务端：App 里只有一个 Go 二进制（后端 + 嵌入的静态界面）。`package.sh` 还会去掉 source map 和非中英字体子集。
 
 ## 开发 / 测试
 
 ```sh
 cd desktop
-go vet ./... && go test ./...                               # 单元测试
-AI_RADAR_TEST_RES=$PWD/build/linux-amd64 go test ./...      # 用已构建的 Linux 包端到端测服务的启动/健康检查/优雅退出
+go vet ./... && go test ./...                               # 单元测试 + 进程内服务的启动/健康检查/优雅退出
 desktop/scripts/package.sh darwin/universal,linux/amd64     # 也可以在 Linux 上交叉编译（不签名、不出 dmg）
 ```
 
-`AI_RADAR_NODE` / `AI_RADAR_SERVER` 可覆盖内置的 node 与服务目录。网页版 / Docker 不受影响（`desktop/` 已加入 `.dockerignore`）。
+`AI_RADAR_UI=<目录>`（如 `../out`）可让 App 使用该目录的界面而不是嵌入的版本。网页版 / Docker 不受影响（`desktop/` 已加入 `.dockerignore`）。

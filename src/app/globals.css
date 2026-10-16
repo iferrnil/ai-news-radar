@@ -188,26 +188,31 @@
 .fresh-row { animation: enter .45s cubic-bezier(.2,.8,.2,1) both; box-shadow: inset 2px 0 0 var(--brand); }
 .no-scrollbar { scrollbar-width: none; }
 
-/* Sidebar collapse (≥lg): width animates 244px → 0; the inner panel keeps its width and slides under the clip. */
+/* Sidebar collapse (≥lg). Only the inner panel animates, with transform + opacity (compositor-only, 60 fps); the
+   column width changes in ONE step so the feed grid re-lays out once instead of on every frame (animating width
+   reflowed hundreds of cards per frame and stuttered). Collapse: panel slides out, then the column snaps to 0 after
+   200 ms (delayed width step). Expand: the column snaps to 244 px first, then the panel slides in. */
 @media (min-width: 1024px) {
-  .app-sidebar { transition: width 200ms ease-out; }
-  .app-sidebar > div { transition: transform 200ms ease-out, opacity 150ms ease-out; }
-  html[data-sidebar="collapsed"] .app-sidebar { width: 0; border-right-width: 0; }
-  html[data-sidebar="collapsed"] .app-sidebar > div { transform: translateX(-24px); opacity: 0; }
+  .app-sidebar { transition: width 0s linear 0s, border-right-width 0s linear 0s; contain: layout paint style; }
+  .app-sidebar > div { transition: transform 200ms cubic-bezier(.2,.8,.2,1), opacity 160ms ease-out; will-change: transform; }
+  html[data-sidebar="collapsed"] .app-sidebar { width: 0; border-right-width: 0; transition-delay: 200ms; }
+  html[data-sidebar="collapsed"] .app-sidebar > div { transform: translateX(-100%); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .app-sidebar, .app-sidebar > div { transition: none; }
 }
+
 
 /* Desktop app (set by the MyGo preload script): app chrome is not selectable text, and on macOS the hidden title bar
    leaves room for the traffic lights (--mygo-titlebar-inset-left) and drags the window by the header / sidebar top. */
 html[data-desktop] .app-header, html[data-desktop] .app-sidebar, html[data-desktop] [data-slot="kbd"] { -webkit-user-select: none; user-select: none; }
 html[data-desktop] .app-header { --app-region: drag; }
 html[data-desktop] .app-header :is(button, a, input, [role="button"]) { --app-region: no-drag; }
-html[data-titlebar] .app-sidebar .app-brand { --app-region: drag; padding-left: max(1rem, var(--mygo-titlebar-inset-left, 0px)); }
-html[data-titlebar] .app-header { transition: padding-left 200ms ease-out; }
+/* the traffic lights end ≈78 px from the left edge: keep a clear ≥10 px gap before the logo (88 px minimum) */
+html[data-titlebar] .app-sidebar .app-brand { --app-region: drag; padding-left: max(88px, calc(var(--mygo-titlebar-inset-left, 0px) + 12px)); }
 @media (min-width: 1024px) {
-  html[data-titlebar][data-sidebar="collapsed"] .app-header { padding-left: calc(var(--mygo-titlebar-inset-left, 0px) + 0.5rem); }
+  /* in step with the sidebar column: padding grows when the column snaps to 0 (after the 200 ms slide) */
+  html[data-titlebar][data-sidebar="collapsed"] .app-header { padding-left: calc(var(--mygo-titlebar-inset-left, 0px) + 0.5rem); transition: padding-left 0s linear 200ms; }
 }
 @media (max-width: 1023.98px) {
   html[data-titlebar] .app-header { padding-left: calc(var(--mygo-titlebar-inset-left, 0px) + 0.5rem); }

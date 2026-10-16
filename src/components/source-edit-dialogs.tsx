@@ -82,7 +82,7 @@ function SectionRow({ s, count, first, last, onChanged, onDelete }: { s: Section
 export function exportBackup(sources: SourceRow[]) {
   const d = new Date();
   const list = sources.filter((r) => r.type !== "html").map((r) => ({ ...r, section: sourceSection(r) }));
-  const custom = allSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false }));
+  const custom = allSections().map((c) => ({ key: c.key, name: c.zh, icon: c.icon, inAll: c.includeInAll !== false, translate: !!c.translate }));
   const url = URL.createObjectURL(new Blob([buildJson(list, d, custom)], { type: "application/json" }));
   const a = Object.assign(document.createElement("a"), { href: url, download: exportFileName("json", d) }); document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
-import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, BookOpen, ChevronRight, Command as CommandIcon, Database, Inbox, Menu, Moon,
   PanelLeft, Radio, SlidersHorizontal, Search, Settings2, Sun,
@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import type { ItemOut } from "@/lib/types";
 import { secIcon } from "./section-icon";
 import { HealthDot, healthOf, healthText } from "./source-health";
-import { type SectionApiRow, type Section, type SourceRow, allSections, api, inAll, secZh, sectionOf, setSections } from "./common";
+import { type SectionApiRow, type Section, type SourceRow, type TrInfo, allSections, api, inAll, localize, secZh, sectionOf, setSections, trOnFor } from "./common";
 import { Languages, MinusCircle } from "lucide-react";
 import dynamic from "next/dynamic";
 // ⌘K palette (cmdk) is code-split and only mounted after first open
@@ -35,8 +35,8 @@ const MobileNav = dynamic(() => import("./mobile-nav"), { ssr: false });
 const TranslateMenu = dynamic(() => import("./translate-menu"), { ssr: false, loading: () => <TrButton /> });
 /** Placeholder with the same look as the translate popover trigger; first click loads the real menu (opened). */
 function TrButton({ onClick }: { onClick?: () => void }) {
-  const { zh } = useApp();
-  return <Button variant="ghost" size="icon" aria-label="翻译设置" className={zh ? "text-brand" : ""} onClick={onClick}><Languages className="size-4" /></Button>;
+  const { trView } = useApp();
+  return <Button variant="ghost" size="icon" aria-label="翻译" aria-pressed={trView} data-testid="tr-toggle" className={trView ? "text-brand" : ""} onClick={onClick}><Languages className="size-4" /></Button>;
 }
 
 export const SEC_ICON: Record<string, React.ElementType> = { all: Inbox };
@@ -51,7 +51,8 @@ type Ctx = {
   sections: Section[]; // built-in + user-created (re-render trigger; read via allSections()/secZh too)
   setPalette: (b: boolean) => void; addOpen: boolean; setAddOpen: (b: boolean) => void;
   onStream: (fn: (ev: string, data: any) => void) => () => void;
-  zh: boolean; setZh: (b: boolean) => void;
+  /** translation scopes + availability (null until loaded); trView = the current view's scope is translated; loc = show translation if its scope is on */
+  tr: TrInfo | null; settingsLocked: boolean; reloadTr: () => Promise<void>; trView: boolean; loc: (it: ItemOut) => ItemOut;
 };
 const AppCtx = createContext<Ctx>(null as unknown as Ctx);
 export const useApp = () => useContext(AppCtx);
@@ -222,7 +223,8 @@ function GroupLink({ on, icon: Icon, children, onClick }: { on: boolean; icon?: 
   );
 }
 
-export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
+// memo: toggling the sidebar re-renders AppShell; the (large) sidebar tree itself does not need to re-render
+export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const { f, navigate, sources, facet, sections, isRead } = useApp();
   const router = useRouter(); const path = usePathname();
   const active = sources.filter((s) => s.enabled && s.supported);
@@ -282,7 +284,7 @@ export function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
       </div>
     </div>
   );
-}
+});
 
 function Shell({ children }: { children: React.ReactNode }) {
   const sp = useSearchParams();
@@ -297,9 +299,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   const isRead = useCallback((id: number) => rs.isRead(id), [readVer]);
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [live, setLive] = useState(false);
-  const [zh, setZhState] = useState(true);
-  useEffect(() => { setZhState(localStorage.getItem("zh") !== "0"); }, []);
-  const setZh = useCallback((b: boolean) => { setZhState(b); localStorage.setItem("zh", b ? "1" : "0"); }, []);
+  const [tr, setTr] = useState<TrInfo | null>(null);
+  const [settingsLocked, setSettingsLocked] = useState(false);
+  const reloadTr = useCallback(async () => {
+    try { const r = await api<{ translate: TrInfo; deepseek?: { locked?: boolean } }>("/api/settings"); setTr(r.translate); setSettingsLocked(!!r.deepseek?.locked); } catch {}
+  }, []);
+  useEffect(() => { void reloadTr(); }, [reloadTr]);
+  const scopes = tr?.scopes;
+  const loc = useCallback((it: ItemOut) => (trOnFor(scopes, it.source_id, it.section) ? localize(it) : it), [scopes]);
   const [open, setOpenState] = useState<ItemOut | null>(null);
   const setOpen = useCallback((i: ItemOut | null) => { setOpenState(i); if (i) markRead(i.id); }, [markRead]);
   const [palette, setPalette] = useState(false);
@@ -320,17 +327,20 @@ function Shell({ children }: { children: React.ReactNode }) {
   const [addOpen, setAddOpen] = useState(false);
   const reloadSourcesRef = useRef<(() => void) | null>(null);
   const reloadNowRef = useRef<(() => void) | null>(null);
+  const reloadTrRef = useRef(reloadTr);
+  useEffect(() => { reloadTrRef.current = reloadTr; }, [reloadTr]);
   const listeners = useRef(new Set<(ev: string, data: any) => void>());
   const onStream = useCallback((fn: (ev: string, data: any) => void) => { listeners.current.add(fn); return () => { listeners.current.delete(fn); }; }, []);
   useEffect(() => {
     const es = new EventSource("/api/stream");
     es.onopen = () => setLive(true);
     es.onerror = () => setLive(false);
-    for (const ev of ["item", "update", "removed", "sources", "notify"]) es.addEventListener(ev, (e) => {
+    for (const ev of ["item", "update", "removed", "sources", "notify", "translate"]) es.addEventListener(ev, (e) => {
       const d = JSON.parse((e as MessageEvent).data); listeners.current.forEach((fn) => fn(ev, d));
       if (ev === "notify" && d.batch) handleBatch(d.batch, (id) => openByIdRef.current(id));
       if (ev === "item") reloadSourcesRef.current?.();
       if (ev === "sources") reloadNowRef.current?.();
+      if (ev === "translate") reloadTrRef.current();
     });
     return () => es.close();
   }, []);
@@ -405,8 +415,9 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, [desktopCmd]);
   const markManyRead = useCallback((ids: number[]) => rs.markRead(ids), []);
   const markManyUnread = useCallback((ids: number[]) => rs.markUnread(ids), []);
-  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, zh, setZh }),
-    [f, setF, navigate, facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, open, setOpen, addOpen, onStream, zh, setZh]);
+  const trView = !!tr && trOnFor(tr.scopes, f.source, f.source != null ? sources.find((s) => s.id === f.source)?.section ?? null : f.section || null);
+  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, tr, settingsLocked, reloadTr, trView, loc }),
+    [f, setF, navigate, facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, open, setOpen, addOpen, onStream, tr, settingsLocked, reloadTr, trView, loc]);
   const title = path === "/sources" ? "数据源" : path === "/settings" ? "设置" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
     : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
 

@@ -6,23 +6,26 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
-func TestServerEnvDropsSecrets(t *testing.T) {
+func TestApplyEnvDropsSecrets(t *testing.T) {
 	fake := "not" + "-a-real-key" // keeps the repo secret scan quiet
-	env := serverEnv([]string{"DEEPSEEK_API_KEY=" + fake, "TRANSLATE_ENABLED=1", "PATH=/bin", "NEWS_DB=/x"}, 4321, "/data", "/app", nil)
-	j := strings.Join(env, "\n")
-	for _, bad := range []string{fake, "TRANSLATE_ENABLED=1", "NEWS_DB=/x"} {
-		if strings.Contains(j, bad) {
-			t.Fatalf("env leaks %q", bad)
+	t.Setenv("DEEPSEEK_API_KEY", fake)
+	t.Setenv("TRANSLATE_ENABLED", "1")
+	t.Setenv("SETTINGS_LOCKED", "1")
+	t.Setenv("NEWS_DB", "/x")
+	applyEnv("1.2.3")
+	for _, k := range []string{"DEEPSEEK_API_KEY", "SETTINGS_LOCKED", "NEWS_DB"} {
+		if _, ok := os.LookupEnv(k); ok {
+			t.Fatalf("%s still set", k)
 		}
 	}
-	for _, want := range []string{"PATH=/bin", "TRANSLATE_ENABLED=0", "PORT=4321", "HOSTNAME=127.0.0.1", "NEWS_DB=" + filepath.Join("/data", "news.db"), "SOURCES_JSON=" + filepath.Join("/app", "sources", "sources.json")} {
-		if !strings.Contains(j, want) {
-			t.Fatalf("env misses %q", want)
+	for k, want := range map[string]string{"TRANSLATE_ENABLED": "0", "AI_RADAR_DESKTOP": "1", "AI_RADAR_VERSION": "1.2.3"} {
+		if os.Getenv(k) != want {
+			t.Fatalf("%s=%q", k, os.Getenv(k))
 		}
 	}
 }
@@ -34,27 +37,26 @@ func TestFreePort(t *testing.T) {
 	}
 }
 
-// End-to-end with the real bundle: AI_RADAR_TEST_RES=<dir holding node/bin/node and server/>.
-func TestBundledServerLifecycle(t *testing.T) {
-	res := os.Getenv("AI_RADAR_TEST_RES")
-	if res == "" {
-		t.Skip("set AI_RADAR_TEST_RES to a built resources dir")
+// In-process backend: seeds, serves the UI + API on 127.0.0.1, stops cleanly with SQLite checkpointed.
+func TestServerLifecycle(t *testing.T) {
+	seed, err := os.ReadFile("../sources/sources.json")
+	if err != nil {
+		t.Skip("no sources.json")
 	}
+	t.Setenv("UPSTREAM_MOCK", "http://127.0.0.1:9") // nothing listens: the poller fails fast, no network
+	t.Setenv("AI_RADAR_TEST_KEEP_UPSTREAM_MOCK", "1")
 	t.Setenv("DEEPSEEK_API_KEY", "x-should-not-leak")
-	node, app := bundleLayout(res)
 	data := t.TempDir()
-	s, err := StartServer(ServerConfig{Node: node, AppDir: app, DataDir: data, Log: os.Stderr, Grace: 8 * time.Second})
+	ui := fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>radar</title>")}}
+	s, err := StartServer(ServerConfig{DataDir: data, UI: ui, Seed: seed, Version: "9.9.9"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Stop()
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := s.WaitHealthy(ctx); err != nil {
 		t.Fatal(err)
-	}
-	if !strings.HasPrefix(s.URL, "http://127.0.0.1:") {
-		t.Fatal(s.URL)
 	}
 	var srcs []map[string]any
 	r, err := http.Get(s.URL + "/api/sources")
@@ -66,21 +68,27 @@ func TestBundledServerLifecycle(t *testing.T) {
 	if len(srcs) < 20 {
 		t.Fatalf("seeded sources: %d", len(srcs))
 	}
+	var set struct {
+		Desktop  bool `json:"desktop"`
+		Deepseek struct {
+			Configured bool `json:"configured"`
+		} `json:"deepseek"`
+	}
+	r, _ = http.Get(s.URL + "/api/settings")
+	json.NewDecoder(r.Body).Decode(&set)
+	r.Body.Close()
+	if set.Deepseek.Configured {
+		t.Fatal("DEEPSEEK_API_KEY leaked into the desktop backend")
+	}
 	if r, err := http.Get(s.URL + "/"); err != nil || r.StatusCode != 200 {
 		t.Fatal("index", err)
-	}
-	db := filepath.Join(data, "news.db")
-	if _, err := os.Stat(db + "-wal"); err != nil {
-		t.Logf("no WAL while running (%v)", err)
 	}
 	start := time.Now()
 	if err := s.Stop(); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("stopped in %v", time.Since(start))
-	if time.Since(start) > 7*time.Second {
-		t.Fatal("node needed a kill (no graceful exit)")
-	}
+	db := filepath.Join(data, "news.db")
 	if _, err := os.Stat(db); err != nil {
 		t.Fatal("db missing", err)
 	}

@@ -8,21 +8,16 @@ Real-time aggregator of domestic + international AI news for an AI content creat
 ## Stack
 - Next.js 16 (App Router) · TypeScript · React 19
 - shadcn/ui **Base UI** variant (`components.json` style `base-nova`; components use `render` props, not Radix `asChild`) · Tailwind CSS v4 (CSS-first tokens in `src/app/globals.css`) · lucide-react · sonner · tw-animate-css (no framer-motion) · `cn` (shadcn's clsx+tailwind-merge replacement) · cmdk · next-themes
-- SQLite via `better-sqlite3` (WAL), `fast-xml-parser` for RSS/Atom
-- **Node ≥ 22 required** (better-sqlite3 v13 has no build for Node 20). On the shared box Node 22 lives in `~/.local/node22`; run `export PATH=~/.local/node22/bin:$PATH` first.
+- **Backend: one pure-Go binary** (`server/`, module `github.com/iferrnil/ai-news-radar/server`, package `radar`; modernc SQLite WAL, no cgo) serving `/api/*` + the static UI. The Next.js app is a **static export** (`output: "export"` → `out/`); there are no route handlers / SSR any more. See "Go backend (Oct 2026)" below — older notes that mention `src/lib/{db,store,fetchers,net,…}.ts` describe the TS originals the Go code ports 1:1.
+- **Node ≥ 22 required** for the UI build. On the shared box Node 22 lives in `~/.local/node22`; run `export PATH=~/.local/node22/bin:$PATH` first.
 
 ## Directory map
 ```
-src/app/                 pages: / (feed), /sources, /docs (index), /docs/<slug> (doc pages) ; api/* route handlers
-src/app/api/             items, stats, sources (+ test, [id], [id]/fetch), stream (SSE)
+src/app/                 pages: / (feed), /sources, /settings, /docs (index), /docs/<slug> (doc pages) — all static
+server/radar/            Go backend: db, seed, sections, rules, net, fetchers, scheduler, store, notify, translate, secrets, import, api, static
+server/cmd/radar-server  main (serve | vacuum-into | healthcheck); server/parity/ = Node-vs-Go diff harness
 src/components/          app-shell.tsx (sidebar, topbar, ⌘K palette, item drawer, context), Feed.tsx, Sources.tsx, common.ts
 src/components/ui/       shadcn/ui (Base UI) primitives — generated, edit sparingly
-src/lib/db.ts            schema, seed/sync from sources/sources.json, tier intervals
-src/lib/fetchers.ts      FETCHERS by type (rss, api, x, x_list) + detect() for add-source
-src/lib/feed.ts          RSS/Atom/RDF parser + <link rel=alternate> autodiscovery
-src/lib/store.ts         insert/dedupe/merge ("also on X"), queryItems, prune
-src/lib/scheduler.ts     poll loop, limiters, pollOne
-src/instrumentation.ts   starts the scheduler once (nodejs runtime only)
 src/lib/docs-registry.ts DOCS array → sidebar "文档" group children, /docs index, ⌘K entries
 src/data/rate-limits.json + src/lib/rate-usage.ts   data for /docs/rate-limits and docs/rate-limits.md
 sources/sources.json     source catalog (core list enabled + disabled reference entries; the 开发 section was removed 2026-10-10 (its sources disabled))
@@ -35,8 +30,8 @@ data/                    runtime SQLite (gitignored)
 ```bash
 export PATH=~/.local/node22/bin:$PATH
 npm ci
-npm run dev                      # dev server (poller runs too)
-npm run build && npm run start -- -p 3000   # production (what we deploy)
+(cd server && PORT=3001 go run ./cmd/radar-server) & npm run dev   # dev: next dev proxies /api to :3001
+npm run build && (cd server && go build -o bin/radar-server ./cmd/radar-server) && server/bin/radar-server -ui out   # production
 npm run lint                     # eslint (must be clean)
 npm run typecheck                # tsc --noEmit
 npm run screenshots              # needs running server + `npx playwright install chromium`
@@ -153,11 +148,10 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - Source list refresh: structural changes arrive via the SSE `sources` event; the sidebar polls only every 60 s (sources page 15 s) for status dots, skipped while the tab is hidden.
 - Fonts: WenKai is the biggest cold-load cost (~2.1 MB / 41 slices on the feed, Regular+Medium; 0 B warm). Dropping Medium would roughly halve it but titles would lose weight (faux bold); the alternative is system CJK fonts.
 - Thumbnails: fixed-height box + `loading=lazy decoding=async` → CLS 0.
-- `npm ci` needs `make`/`g++` if the better-sqlite3 prebuild download fails.
 
 ## Mirror-accelerated build (README: 镜像加速构建说明)
 - Fonts come from `@fontsource-variable/{inter,jetbrains-mono} + lxgw-wenkai-webfont (Regular + Medium as weight 700; semibold titles resolve to it)` imported in `app/layout.tsx`; CSS vars `--font-latin/--font-cjk/--font-mono-face` are set in `globals.css`. Never reintroduce `next/font/google` — the build must not touch Google.
-- Compose builds `ai-news-radar:local` with `pull_policy: build`; build args `NPM_REGISTRY`, `APT_MIRROR`.
+- Compose builds `ai-news-radar:local` with `pull_policy: build`; build args `NPM_REGISTRY`, `GOPROXY`, `APK_MIRROR` (Dockerfile: node → static `out/`, golang → `radar-server`, alpine runtime as uid 1000).
 
 ## Type scale (WenKai + Inter)
 - Tokens in `globals.css` `@theme`, used via `@utility type-*` classes: `type-2xs` 12 · `type-meta` 12.5 · `type-caption` 13.5 · `type-body` 14.5 · `type-ui` 15 · `type-title` 16.5 · `type-h3` 20 · `type-h1` 24 px (each with its own line-height; raised 2026-10-11 for readability — nothing below 12px, incl. shadcn `text-xs`).
@@ -222,11 +216,19 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - Playwright: `bash e2e/runall.sh [baseline.db] [t1 t2 …]` (in the repo; CI runs it). Without a baseline it builds one with `e2e/make-fixture.sh` (seed + one poll against the mock, 22 sources / 19 active) and restores it before EACH test file. t11 covers the 数据源 group and plain-text section selects.
 
 ## macOS desktop app (desktop/, Oct 2026)
-- Go module `desktop/` (MyGo pinned v0.4.3 incl. `tool` directive; Go 1.27.1). `main.go` = window/tray/menu/single instance/link routing; `server.go` = spawn bundled node (`--require <data>/desktop-preload.cjs server.js`, env from `serverEnv`: drops DEEPSEEK_API_KEY/NODE_OPTIONS/…, sets TRANSLATE_ENABLED=0, HOSTNAME=127.0.0.1, free PORT, NEWS_DB in userData), `/api/health` wait, shutdown = close stdin (preload exits) → SIGTERM → kill. Stdin is used because GTK/WebKit threads leave SIGTERM blocked in the child's mask (verified on Linux).
-- `src/lib/db.ts` closes the DB on process `exit` (WAL checkpoint) — harmless for web/docker.
-- `desktop/scripts/package.sh [platforms]` (MIRROR=cn for npmmirror): STANDALONE build → `resources/server` (.next renamed `next-dist` + server.js distDir patched, because mygo drops hidden files; sharp/@img removed; better-sqlite3 13 ships Node-API prebuilds, copied per platform) → Node binaries per arch → `go tool mygo build`. Generated resources/build/.cache are gitignored; `desktop` is in .dockerignore, eslint ignores, tsconfig exclude.
-- Linux can cross-compile the universal .app (unsigned, no dmg); signing/dmg need macOS → workflow `.github/workflows/desktop-release.yml` (tag desktop-v* or manual → per-arch dmgs + SHA256SUMS + gh release) (ad hoc, or Developer ID + notarization when secrets exist).
-- Tests: `cd desktop && go test ./...`; `AI_RADAR_TEST_RES=$PWD/build/linux-amd64 go test ./...` runs the real bundle (seed, health, index, graceful stop, WAL checkpointed).
+- Go module `desktop/` (MyGo pinned v0.4.3 incl. `tool` directive; Go 1.27.1; `replace …/server => ../server`). `main.go` = window/tray/menu/single instance/link routing; `server.go` = the Go backend **in-process** (`radar.Open` + scheduler + `http.Server` on 127.0.0.1, preferred port 47821). `applyEnv` drops DEEPSEEK_API_KEY/SETTINGS_LOCKED/NEWS_DB/… from our own env and sets TRANSLATE_ENABLED=0, AI_RADAR_DESKTOP=1, AI_RADAR_VERSION. No Node, no child process; Stop = scheduler off → Shutdown (2 s) → SQLite close (WAL checkpointed).
+- UI + sources.json are embedded with `//go:embed all:webui` (filled by `desktop/scripts/package.sh` from `out/`; only `webui/README.md` is committed). `AI_RADAR_UI=<dir>` serves a folder instead (dev).
+- `desktop/scripts/package.sh [platforms]`: `npm run build` (SKIP_UI_BUILD=1 to reuse) → copy `out/` to `webui/` (drops cyrillic/greek/vietnamese font slices) → `go tool mygo build`. arm64 .app ≈ 28 MB (0.3.0 with Node: 135 MB).
+- Linux can cross-compile the .app (unsigned, no dmg); signing/dmg need macOS → workflow `.github/workflows/desktop-release.yml`.
+- Tests: `cd desktop && go test ./...` (env scrubbing, in-process lifecycle: seed, health, settings, graceful stop, WAL checkpointed).
+
+## Go backend (Oct 2026)
+- `server/radar` ports every former `src/lib/*.ts` server module and `src/app/api/**` route with identical JSON (key order via `Row`, nulls dropped like `jsonResponse`, JS-style error strings such as `TimeoutError: …` / `TypeError: fetch failed (…)`), status codes, SSE (`retry: 3000`, 15 s ping), ETag/304 + br/gzip. Unknown `/api/*` → the export's 404 page (as Next did).
+- Regex rules use `dlclark/regexp2` (ECMAScript mode + MatchTimeout) instead of node:vm. regexp2 optimises some V8-catastrophic patterns (`^(a|a)*$`), so `dupAlt` also rejects quantified groups with duplicate/overlapping alternatives (the browser still runs the pattern for the live preview). Parser errors are mapped to V8 wording (`Unterminated group`, …).
+- Static serving (`static.go`): exact file → `<path>.html` → `index.html` for `/` → `404.html` (404). `_next/static/*` immutable, HTML no-cache.
+- `server/parity/up.sh` + `compare.mjs`: run a Node build (:3091) and Go (:3090) against the mock and diff 56 requests (needs a Node build of the pre-Go tree; last run 53/56, remaining = row order of items with equal timestamps / ids from poll order, and Next's HTML 404 vs JSON before the UI existed).
+- e2e: `restart.sh` starts `server/bin/radar-server` (built if missing) with a pidfile in `$E2E_DATA` (default `data/`) and kills only that pid — never `pkill next-server` (prod on the box is a next-server). `PORT=3092 E2E_DATA=/tmp/e2edata MOCK_PORT=4012 bash e2e/runall.sh` runs next to prod. `make-fixture.sh` uses `radar-server vacuum-into`.
+- Tests: `cd server && go test ./...` (parsers, rule guard, Row JSON, import validation, static fallbacks, API smoke, secrets 0600).
 
 ## Settings (DeepSeek, in-app)
 - `src/lib/secrets.ts`: key/base/model in `SECRETS_FILE` (default dirname(NEWS_DB)/secrets.json, atomic write, 0600), read at runtime (no restart). APIs expose only `deepseekPublic()` (configured/source/baseUrl/model/locked) — never the key; never log it.

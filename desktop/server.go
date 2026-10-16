@@ -1,66 +1,65 @@
 package main
 
-// The embedded Node/Next.js standalone server: started on a free 127.0.0.1 port,
-// health-checked, and stopped gracefully (SIGTERM, then kill after a grace period).
+// The embedded Go backend (../server, package radar) runs in-process: no Node, no child process.
+// It listens on 127.0.0.1 only and serves the static Next.js UI embedded in the binary (webui/).
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/iferrnil/ai-news-radar/server/radar"
 )
 
-// ServerConfig locates the bundled runtime and the user's data.
+// webui is filled by scripts/package.sh (Next.js static export + sources.json); the committed README.md keeps
+// `go build` / `go test` working without a UI build.
+//
+//go:embed all:webui
+var webui embed.FS
+
+// ServerConfig locates the user's data and the UI.
 type ServerConfig struct {
-	Node     string // node executable
-	AppDir   string // Next standalone dir (server.js, .next, public, sources, node_modules)
-	DataDir  string // per-user data dir; the SQLite DB lives here
-	Log      io.Writer
-	Grace    time.Duration // SIGTERM -> kill
-	ExtraEnv []string
-	Port     int // preferred port (0 = any free one)
+	DataDir string // per-user data dir; the SQLite DB lives here
+	Log     io.Writer
+	Port    int    // preferred port (0 = any free one)
+	Version string // AI_RADAR_VERSION
+	UI      fs.FS  // static UI; nil = embedded webui/out
+	Seed    []byte // sources.json; nil = embedded webui/sources.json
 }
 
 type Server struct {
-	cfg   ServerConfig
-	cmd   *exec.Cmd
-	Port  int
-	URL   string
-	done  chan struct{}
-	err   error
-	once  sync.Once
-	stdin io.WriteCloser
+	st   *radar.Store
+	srv  *http.Server
+	Port int
+	URL  string
+	done chan struct{}
+	err  error
+	once sync.Once
 }
-
-const preloadJS = `"use strict";
-// AI News Radar desktop: exit (closing SQLite via the "exit" handler) when the shell closes our stdin.
-const bye = () => process.exit(0);
-process.stdin.on("end", bye); process.stdin.on("close", bye); process.stdin.on("error", bye);
-process.stdin.resume();
-`
 
 // PreferredPort is tried first so the page keeps the same origin (http://127.0.0.1:47821) between launches:
 // localStorage (theme, read state, sidebar) belongs to the origin. Taken -> a random free port.
 const PreferredPort = 47821
 
-// PickPort returns preferred when it is free on 127.0.0.1, else a free port from the OS.
-func PickPort(preferred int) (int, error) {
+// listen binds preferred on 127.0.0.1 when it is free, else a free port from the OS.
+func listen(preferred int) (net.Listener, error) {
 	if preferred > 0 {
 		if l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", preferred)); err == nil {
-			l.Close()
-			return preferred, nil
+			return l, nil
 		}
 	}
-	return FreePort()
+	return net.Listen("tcp", "127.0.0.1:0")
 }
 
 // FreePort asks the OS for an unused TCP port on 127.0.0.1.
@@ -73,76 +72,89 @@ func FreePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-// serverEnv is the child's environment: the parent's minus anything secret or
-// conflicting, plus the desktop settings. The DeepSeek key is never passed via
-// env and translation defaults to off; the user sets both in 设置, which stores
-// the key in <dataDir>/secrets.json (0600). In-app settings are never locked here.
-func serverEnv(parent []string, port int, dataDir string, appDir string, extra []string) []string {
-	drop := map[string]bool{"DEEPSEEK_API_KEY": true, "TRANSLATE_ENABLED": true, "PORT": true, "HOSTNAME": true, "NEWS_DB": true, "SOURCES_JSON": true, "NODE_OPTIONS": true, "SETTINGS_LOCKED": true, "SECRETS_FILE": true}
-	var env []string
-	for _, kv := range parent {
-		k := kv
-		for i := 0; i < len(kv); i++ {
-			if kv[i] == '=' {
-				k = kv[:i]
-				break
-			}
-		}
-		if !drop[k] {
-			env = append(env, kv)
-		}
-	}
-	env = append(env,
-		"NODE_ENV=production", "NEXT_TELEMETRY_DISABLED=1", "TRANSLATE_ENABLED=0",
-		fmt.Sprintf("PORT=%d", port), "HOSTNAME=127.0.0.1",
-		"NEWS_DB="+filepath.Join(dataDir, "news.db"),
-		"SOURCES_JSON="+filepath.Join(appDir, "sources", "sources.json"),
-		"SECRETS_FILE="+filepath.Join(dataDir, "secrets.json"),
-		"AI_RADAR_DESKTOP=1",
-	)
-	return append(env, extra...)
+// desktopEnv is applied to our own process before the backend starts (it reads tunables from the environment):
+// anything secret or conflicting is removed, plus the desktop settings. The DeepSeek key is never taken from
+// the env and translation defaults to off; the user sets both in 设置, which stores the key in
+// <dataDir>/secrets.json (0600). In-app settings are never locked here.
+var desktopDrop = []string{"DEEPSEEK_API_KEY", "TRANSLATE_ENABLED", "PORT", "HOSTNAME", "NEWS_DB", "SOURCES_JSON", "SETTINGS_LOCKED", "SECRETS_FILE", "UPSTREAM_MOCK", "DISABLE_POLLER"}
+
+func desktopEnv(version string) map[string]string {
+	return map[string]string{"TRANSLATE_ENABLED": "0", "AI_RADAR_DESKTOP": "1", "AI_RADAR_VERSION": version}
 }
 
-// StartServer spawns node server.js and returns once the process started (not yet healthy).
-func StartServer(cfg ServerConfig) (*Server, error) {
-	if cfg.Grace == 0 {
-		cfg.Grace = 5 * time.Second
+func applyEnv(version string) {
+	for _, k := range desktopDrop {
+		if os.Getenv("AI_RADAR_TEST_KEEP_"+k) == "" { // tests may keep e.g. UPSTREAM_MOCK
+			os.Unsetenv(k)
+		}
 	}
-	if cfg.Log == nil {
-		cfg.Log = io.Discard
+	for k, v := range desktopEnv(version) {
+		os.Setenv(k, v)
+	}
+}
+
+func embeddedUI() (ui fs.FS, seed []byte) {
+	if sub, err := fs.Sub(webui, "webui/out"); err == nil {
+		if _, err := fs.Stat(sub, "index.html"); err == nil {
+			ui = sub
+		}
+	}
+	seed, _ = webui.ReadFile("webui/sources.json")
+	return
+}
+
+// StartServer opens the database, starts the poller and serves on 127.0.0.1; returns once listening.
+func StartServer(cfg ServerConfig) (*Server, error) {
+	if cfg.Log != nil {
+		log.SetOutput(cfg.Log)
 	}
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, err
 	}
-	port, err := PickPort(cfg.Port)
+	applyEnv(cfg.Version)
+	ui, seed := embeddedUI()
+	if d := os.Getenv("AI_RADAR_UI"); d != "" { // development: serve ../out instead of the embedded copy
+		ui = os.DirFS(d)
+	}
+	if cfg.UI != nil {
+		ui = cfg.UI
+	}
+	if cfg.Seed != nil {
+		seed = cfg.Seed
+	}
+	if seed == nil {
+		seed = []byte(`{"sources":[]}`)
+	}
+	rc := radar.Config{
+		DBPath:      filepath.Join(cfg.DataDir, "news.db"),
+		SecretsPath: filepath.Join(cfg.DataDir, "secrets.json"),
+		SeedData:    seed,
+		Desktop:     true,
+		Version:     cfg.Version,
+	}
+	st, err := radar.Open(rc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open database: %w", err)
 	}
-	// Shutdown goes through a stdin pipe, not only signals: GTK/WebKit (and possibly AppKit) threads can
-	// leave SIGTERM blocked in the mask the child inherits. The preload exits node when stdin closes, which
-	// also covers a crashed shell (no orphaned server). process "exit" closes SQLite (src/lib/db.ts).
-	pre := filepath.Join(cfg.DataDir, "desktop-preload.cjs")
-	if err := os.WriteFile(pre, []byte(preloadJS), 0o644); err != nil {
-		return nil, err
-	}
-	cmd := exec.Command(cfg.Node, "--require", pre, filepath.Join(cfg.AppDir, "server.js"))
-	cmd.Dir = cfg.AppDir
-	cmd.Env = serverEnv(os.Environ(), port, cfg.DataDir, cfg.AppDir, cfg.ExtraEnv)
-	cmd.Stdout, cmd.Stderr = cfg.Log, cfg.Log
-	setProcAttrs(cmd)
-	stdin, err := cmd.StdinPipe()
+	l, err := listen(cfg.Port)
 	if err != nil {
+		st.Close()
 		return nil, err
 	}
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start node: %w", err)
-	}
-	s := &Server{cfg: cfg, cmd: cmd, Port: port, URL: fmt.Sprintf("http://127.0.0.1:%d", port), done: make(chan struct{}), stdin: stdin}
-	go func() { s.err = cmd.Wait(); close(s.done) }()
+	port := l.Addr().(*net.TCPAddr).Port
+	s := &Server{st: st, Port: port, URL: fmt.Sprintf("http://127.0.0.1:%d", port), done: make(chan struct{})}
+	s.srv = &http.Server{Handler: st.Server(ui), ReadHeaderTimeout: 10 * time.Second}
+	st.StartScheduler()
+	go func() {
+		if err := s.srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.err = err
+		}
+		close(s.done)
+	}()
 	return s, nil
 }
 
-// WaitHealthy polls /api/health until it answers 200, the process exits, or ctx ends.
+// WaitHealthy polls /api/health until it answers 200, the server stops, or ctx ends.
 func (s *Server) WaitHealthy(ctx context.Context) error {
 	c := &http.Client{Timeout: 2 * time.Second}
 	for {
@@ -155,44 +167,32 @@ func (s *Server) WaitHealthy(ctx context.Context) error {
 		}
 		select {
 		case <-s.done:
-			return fmt.Errorf("server exited before it was healthy: %v", s.err)
+			return fmt.Errorf("server stopped before it was healthy: %v", s.err)
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(250 * time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }
 
-// Done is closed when the node process exits.
+// Done is closed when the HTTP server stops.
 func (s *Server) Done() <-chan struct{} { return s.done }
 
-// Stop sends SIGTERM (node closes SQLite on exit), waits up to Grace, then kills.
+// Stop: poller off, open requests (SSE) cut after 2 s, then SQLite is checkpointed and closed.
 func (s *Server) Stop() error {
+	var err error
 	s.once.Do(func() {
-		select {
-		case <-s.done:
-			return
-		default:
+		s.st.StopScheduler()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if e := s.srv.Shutdown(ctx); e != nil {
+			s.srv.Close()
 		}
-		_ = s.stdin.Close() // 1) graceful: the preload exits node
-		select {
-		case <-s.done:
-			return
-		case <-time.After(s.cfg.Grace / 2):
-		}
-		if runtime.GOOS != "windows" { // 2) SIGTERM (Next's own handler, then "exit")
-			_ = s.cmd.Process.Signal(syscall.SIGTERM)
-		}
-		select {
-		case <-s.done:
-		case <-time.After(s.cfg.Grace / 2): // 3) kill
-			_ = s.cmd.Process.Kill()
-			<-s.done
+		<-s.done
+		err = s.st.Close()
+		if err != nil && strings.Contains(err.Error(), "closed") {
+			err = nil
 		}
 	})
-	var ee *exec.ExitError
-	if s.err != nil && !errors.As(s.err, &ee) {
-		return s.err
-	}
-	return nil
+	return err
 }

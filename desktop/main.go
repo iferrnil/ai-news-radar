@@ -1,5 +1,5 @@
-// AI News Radar desktop shell (MyGo): runs the bundled Next.js standalone server on
-// 127.0.0.1 and shows it in a native window with a tray/menu.
+// AI News Radar desktop shell (MyGo): runs the Go backend in-process on 127.0.0.1 (static Next.js UI embedded
+// in the binary) and shows it in a native window with a tray/menu.
 package main
 
 import (
@@ -53,18 +53,12 @@ func main() {
 			fatal("data dir", err)
 			return
 		}
-		res, err := mygo.App.Path(mygo.PathResources)
-		if err != nil {
-			fatal("resources", err)
-			return
-		}
 		_ = os.MkdirAll(data, 0o755)
 		logf, _ := os.OpenFile(filepath.Join(data, "server.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-		var lw io.Writer = io.Discard
+		var lw io.Writer = os.Stderr
 		if logf != nil {
-			lw = logf
+			lw = io.MultiWriter(os.Stderr, logf)
 		}
-		node, app := bundleLayout(res)
 
 		win = mygo.NewWindow(windowOptions())
 		win.Page().LoadHTML(splashHTML, "")
@@ -76,8 +70,7 @@ func main() {
 			}
 		})
 
-		srv, err = StartServer(ServerConfig{Node: node, AppDir: app, DataDir: data, Log: lw, Port: PreferredPort,
-			ExtraEnv: []string{"AI_RADAR_VERSION=" + mygo.App.Version()}})
+		srv, err = StartServer(ServerConfig{DataDir: data, Log: lw, Port: PreferredPort, Version: mygo.App.Version()})
 		if err != nil {
 			fatal("启动内置服务失败", err)
 			return
@@ -110,7 +103,7 @@ func main() {
 		go func() { // the server died on its own: tell the user instead of a blank window
 			<-srv.Done()
 			if !quitting.Load() {
-				win.Page().LoadHTML(errorHTML("内置服务已退出，请重启应用。日志：server.log"), "")
+				win.Page().LoadHTML(errorHTML("内置服务已停止，请重启应用。日志：server.log"), "")
 			}
 		}()
 
@@ -159,7 +152,7 @@ func main() {
 		}
 	})
 
-	// graceful shutdown: stop node (SIGTERM -> it closes SQLite) before the process exits
+	// graceful shutdown: stop the poller and close SQLite before the process exits
 	// any quit (menu, Cmd+Q, Dock, SIGTERM) must let the window really close instead of hiding
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { quitting.Store(true); stopApp() })
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { quitting.Store(true); stopServer(srv) })

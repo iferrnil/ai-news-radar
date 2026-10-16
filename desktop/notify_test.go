@@ -43,3 +43,36 @@ func TestReadSSE(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestPrefsWants(t *testing.T) {
+	off := false
+	cases := []struct {
+		p     notifyPrefs
+		event string
+		want  bool
+	}{
+		{notifyPrefs{Enabled: true}, "notify", true},
+		{notifyPrefs{Enabled: true}, "digest", false},
+		{notifyPrefs{Enabled: true, Scope: "all"}, "digest", true},
+		{notifyPrefs{Enabled: true, Scope: "all"}, "notify", false},
+		{notifyPrefs{Enabled: true, System: &off}, "notify", false},
+		{notifyPrefs{Enabled: false, Scope: "all"}, "digest", false},
+	}
+	for i, c := range cases {
+		if got := c.p.wants(c.event); got != c.want {
+			t.Errorf("case %d: %v", i, got)
+		}
+	}
+}
+
+func TestDigestText(t *testing.T) {
+	items := []notifyItem{{Source: "a", Title: "1"}, {Source: "b", Title: "2"}, {Source: "c", Title: "3"}, {Source: "d", Title: "4"}}
+	title, body := batchText(notifyBatch{Count: 5, Items: items, Digest: true})
+	if title != "新增 5 条" || !strings.Contains(body, "· a：1") || !strings.Contains(body, "…还有 2 条") {
+		t.Fatal(title, body)
+	}
+	title, _ = batchText(notifyBatch{Count: 1, Items: items[:1], Digest: true})
+	if title != "a" {
+		t.Fatal(title)
+	}
+}

@@ -9,14 +9,14 @@ import { CommandDialog, Command, CommandEmpty, CommandGroup, CommandInput, Comma
 import { DOCS, docHref } from "@/lib/docs-registry";
 import type { ItemOut } from "@/lib/types";
 import type { Filters } from "./filters";
-import { inAll, ago, api, handleOf, sectionOf, xText, localize } from "./common";
+import { inAll, ago, api, handleOf, sectionOf, xText } from "./common";
 import { SectionName } from "./section-icon";
 import { SourceAvatar } from "./source-avatar";
 import { useApp } from "./app-shell";
 import { secIcon } from "./section-icon";
 
 export default function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
-  const { navigate, sources, sections, setOpen, setAddOpen, zh } = useApp();
+  const { navigate, sources, sections, setOpen, setAddOpen, loc } = useApp();
   const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -25,11 +25,11 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
     if (!open) return;
     const t = setTimeout(async () => {
       // "最新" (no query) mirrors 全部 and skips 娱乐; a real search may still hit 娱乐 items (labelled)
-      const r = (await api<ItemOut[]>(`/api/items?limit=${q.trim() ? 12 : 40}${zh ? "&zh=1" : ""}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`)).map((it) => (zh ? localize(it) : it));
+      const r = (await api<ItemOut[]>(`/api/items?limit=${q.trim() ? 12 : 40}&zh=1${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`)).map(loc);
       setHits(q.trim() ? r : r.filter((it) => inAll(sectionOf(it))).slice(0, 12));
     }, 150);
     return () => clearTimeout(t);
-  }, [q, open, zh]);
+  }, [q, open, loc]);
   const run = (fn: () => void) => { onOpenChange(false); setQ(""); fn(); };
   const goFeed = (p: Partial<Filters>) => run(() => navigate({ section: "", source: null, ...p }));
   const ql = q.trim().toLowerCase();

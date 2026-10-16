@@ -10,7 +10,7 @@ const HOVER_Q = "(hover: hover) and (pointer: fine)";
 function useCanHover() {
   return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
 }
-import { ArrowUp, ArrowUpRight, CheckCheck, CircleDot, Inbox, RefreshCw, WifiOff } from "lucide-react";
+import { ArrowUp, ArrowUpRight, CheckCheck, CircleDot, FileText, Inbox, RefreshCw, WifiOff } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { markOnHover } from "./read-store";
@@ -23,9 +23,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "./empty-state";
+import dynamic from "next/dynamic";
+const BriefDialog = dynamic(() => import("./brief-dialog"), { ssr: false });
 import type { ItemOut } from "@/lib/types";
 import { useApp } from "./app-shell";
-import { sectionsReady, ago, api, bj, dekText, handleOf, localize, sectionOf, srcName, xText } from "./common";
+import { sectionsReady, ago, api, bj, dekText, handleOf, sectionOf, srcName, xText } from "./common";
 import { SectionName } from "./section-icon";
 import { countOf, passes } from "./filters";
 import { SourceAvatar } from "./source-avatar";
@@ -50,7 +52,7 @@ const GRID = "grid grid-cols-1 gap-3 @2xl:grid-cols-2 @2xl:gap-4 @5xl:grid-cols-
 // content side padding (mirrored by the sticky day header's negative margin): 16 · 24 (sm) · 32 (xl) · 40 (2xl)
 const PAD = "px-4 sm:px-6 xl:px-8 2xl:px-10";
 const BLEED = "-mx-4 px-4 sm:-mx-6 sm:px-6 xl:-mx-8 xl:px-8 2xl:-mx-10 2xl:px-10";
-const CARD_H = "h-[216px]";
+const CARD_H = "h-[208px]"; // slightly denser cards without redesign
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
 const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onPreview, hover }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; onPreview: (it: ItemOut) => void; hover: boolean }) {
@@ -62,9 +64,9 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onPre
   const card = (
     <Card ref={ref} size="sm" onClick={() => onOpen(it)} data-active={active} data-read={read} data-item={it.id} role="button" tabIndex={-1}
       className={cn(CARD_H, "group/item cursor-pointer gap-0 py-0 shadow-card ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
-        "hover:-translate-y-px hover:ring-foreground/[0.16] hover:shadow-raised",
-        "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/60", fresh && "fresh-row")}>
-      <div className="flex h-11 shrink-0 items-center gap-2 px-4 pt-1 type-caption leading-4">
+        "hover:-translate-y-px hover:ring-foreground/[0.14] hover:shadow-raised",
+        "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/55", fresh && "fresh-row")}>
+      <div className="flex h-10 shrink-0 items-center gap-2 px-3.5 pt-0.5 type-caption leading-4">
         <SourceAvatar name={it.source} username={h} homepage={it.homepage} url={it.url} x={x} className="size-5" />
         <span className={cn("min-w-0 truncate font-medium", x ? "text-foreground/85" : "text-muted-foreground")}>{x ? srcName(it).replace(/^@/, "") : it.source}</span>
         {x && <span className="hidden min-w-0 shrink truncate text-faint sm:inline">@{h}</span>}
@@ -74,7 +76,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onPre
         {!read && <span data-testid="unread-dot" aria-label="未读" title="未读" className="ml-auto size-1.5 shrink-0 rounded-full bg-brand" />}
         <time className={cn("shrink-0 font-mono type-meta tabular-nums text-faint", read && "ml-auto")} title={`北京时间 ${bj(it.published)}`}>{ago(it.published, true)}</time>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden px-4">
+      <div className="min-h-0 flex-1 overflow-hidden px-3.5">
         {x ? (
           <p className={cn("line-clamp-5 break-words [overflow-wrap:anywhere] type-ui leading-[1.6]", linkOnly ? "text-faint" : read ? "text-muted-foreground" : "text-foreground/90")}>
             {linkOnly ? `分享了一个链接 · ${t.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}` : t}
@@ -85,12 +87,12 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onPre
             {it.image ? (
               // thumbnail (memes / video covers): fixed height so cards stay equal; lazy + no-referrer for hotlink-protected CDNs
               <img src={it.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
-                className="mt-2 h-[92px] w-full rounded-md bg-muted object-cover ring-1 ring-border/50" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                className="mt-1.5 h-[88px] w-full rounded-md bg-muted object-cover ring-1 ring-border/40" onError={(e) => { e.currentTarget.style.display = "none"; }} />
             ) : dek && dek !== it.title && <p className="mt-1.5 line-clamp-3 break-words [overflow-wrap:anywhere] type-body leading-[1.6] text-muted-foreground">{dek}</p>}
           </>
         )}
       </div>
-      <div className="flex h-10 shrink-0 items-center gap-1.5 border-t border-border/50 px-4 type-meta text-faint">
+      <div className="flex h-9 shrink-0 items-center gap-1.5 border-t border-border/40 px-3.5 type-meta text-faint">
         <Badge size="sm" variant="outline" className="text-muted-foreground"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>
         {it.also_on_x.length > 0 && <Badge size="sm" variant="muted" className="min-w-0"><Twitter />也在 X</Badge>}
         <a href={it.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} aria-label="打开原文"
@@ -112,7 +114,11 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onPre
 });
 
 export default function Feed() {
-  const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, markRead, markManyRead, markManyUnread, zh, sections } = useApp();
+  const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, markRead, markManyRead, markManyUnread, loc, sections } = useApp();
+  const [briefOpen, setBriefOpen] = useState(false);
+  // brief is for a section page or 全部 (not a single-source page)
+  const briefScope = f.source != null ? null : (f.section || "all");
+  const briefLabel = briefScope === "all" ? "全部" : briefScope ? (sections.find((s) => s.key === briefScope)?.zh ?? briefScope) : "";
   const sp = useSearchParams(); const router = useRouter();
   const secReady = sections.length > 0 || sectionsReady(); // 全部 must know which sections are excluded before rendering
   const [raw, setItems] = useState<ItemOut[]>([]);
@@ -120,8 +126,8 @@ export default function Feed() {
   const enabledIds = useMemo(() => (sources.length ? new Set(sources.filter((s) => s.enabled).map((s) => s.id)) : null), [sources]);
   const items = useMemo(() => {
     const vis = enabledIds ? raw.filter((it) => enabledIds.has(it.source_id)) : raw;
-    return zh ? vis.map(localize) : vis;
-  }, [raw, zh, enabledIds]);
+    return vis.map(loc); // translation shown where its view scope (全部 / section / source) is switched on
+  }, [raw, loc, enabledIds]);
   const [pending, setPending] = useState<ItemOut[]>([]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -135,11 +141,11 @@ export default function Feed() {
   // 48 h retention keeps the window small: load it all once, filter client-side.
   const load = useCallback(async () => {
     let rs: ItemOut[];
-    try { rs = await api<ItemOut[]>(`/api/items?limit=1000${zh ? "&zh=1" : ""}`); } // translations only when shown
+    try { rs = await api<ItemOut[]>(`/api/items?limit=1000&zh=1`); } // translations are picked per item by loc()
     catch (e) { setLoadErr(e instanceof Error ? e.message : String(e)); setLoading(false); return; }
     seen.current = new Set(rs.map((r) => r.id));
     setLoadErr(null); setItems(rs); setPending([]); setLoading(false);
-  }, [zh]);
+  }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setFacet(items); }, [items, setFacet]);
   // a source was re-enabled (undo / sources page): its items aren't in the list yet -> reload once
@@ -149,11 +155,28 @@ export default function Feed() {
     prevIds.current = enabledIds;
   }, [enabledIds, load]);
   useEffect(() => { setCursor(-1); }, [f]);
-  useEffect(() => onStream((ev, d) => {
-    if (ev === "item") { const it = d.item as ItemOut; if (!seen.current.has(it.id)) setPending((p) => (p.some((x) => x.id === it.id) ? p : [...p, it])); }
-    else if (ev === "update") { const it = d.item as ItemOut; setItems((cur) => cur.map((x) => (x.id === it.id ? it : x))); setPending((cur) => cur.map((x) => (x.id === it.id ? it : x))); }
-    else if (ev === "removed") { setItems((c) => c.filter((x) => x.id !== d.id)); setPending((p) => p.filter((x) => x.id !== d.id)); }
-  }), [onStream]);
+  // batch SSE "update" (e.g. translations) so a burst of DeepSeek results doesn't re-render the list per item
+  useEffect(() => {
+    const pendingUpd = new Map<number, ItemOut>();
+    let flushT: ReturnType<typeof setTimeout> | null = null;
+    const flush = () => {
+      flushT = null;
+      if (!pendingUpd.size) return;
+      const batch = new Map(pendingUpd); pendingUpd.clear();
+      setItems((cur) => cur.map((x) => batch.get(x.id) ?? x));
+      setPending((cur) => cur.map((x) => batch.get(x.id) ?? x));
+    };
+    return onStream((ev, d) => {
+      if (ev === "item") { const it = d.item as ItemOut; if (!seen.current.has(it.id)) setPending((p) => (p.some((x) => x.id === it.id) ? p : [...p, it])); }
+      else if (ev === "update") {
+        pendingUpd.set((d.item as ItemOut).id, d.item as ItemOut);
+        if (!flushT) flushT = setTimeout(flush, 200);
+      } else if (ev === "removed") {
+        pendingUpd.delete(d.id);
+        setItems((c) => c.filter((x) => x.id !== d.id)); setPending((p) => p.filter((x) => x.id !== d.id));
+      }
+    });
+  }, [onStream]);
   useEffect(() => { const h = () => setShowTop(window.scrollY > 900); window.addEventListener("scroll", h, { passive: true }); return () => window.removeEventListener("scroll", h); }, []);
 
   // 只看未读 hides what was read BEFORE this view was opened (snapshot), so cards read while browsing stay put until the view changes
@@ -179,8 +202,8 @@ export default function Feed() {
     if (!itemParam || loading) return;
     const strip = () => { const q = new URLSearchParams(sp.toString()); q.delete("item"); const s = q.toString(); router.replace(s ? `/?${s}` : "/", { scroll: false }); };
     const hit = items.find((x) => x.id === itemParam);
-    if (hit) { setOpen(hit); strip(); return; }
-    api<ItemOut[]>(`/api/items?id=${itemParam}${zh ? "&zh=1" : ""}`).then((r) => { if (r[0]) setOpen(zh ? localize(r[0]) : r[0]); else toast("这条内容已不在 48 小时窗口内"); }).catch(() => {}).finally(strip);
+    if (hit) { setOpen(loc(hit)); strip(); return; }
+    api<ItemOut[]>(`/api/items?id=${itemParam}&zh=1`).then((r) => { if (r[0]) setOpen(loc(r[0])); else toast("这条内容已不在 48 小时窗口内"); }).catch(() => {}).finally(strip);
   }, [itemParam, loading]); // eslint-disable-line react-hooks/exhaustive-deps
   // render in pages of 60 cards; an IntersectionObserver sentinel reveals more while scrolling
   const [shown, setShown] = useState(60);
@@ -252,6 +275,14 @@ export default function Feed() {
           </TooltipTrigger>
           <TooltipContent>将当前视图（{f.source != null ? "此来源" : f.section ? "此分区" : "全部"}{f.p0 ? " · 仅 P0" : ""}）的 {unreadN} 条标为已读</TooltipContent>
         </Tooltip>
+        {briefScope && (
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => setBriefOpen(true)} aria-label="生成简报" data-testid="brief-btn" className="px-1.5 type-caption font-normal text-faint" />}>
+              <FileText className="size-3.5" /><span className="hidden md:inline">生成简报</span>
+            </TooltipTrigger>
+            <TooltipContent>汇总{briefLabel === "全部" ? "全部" : `「${briefLabel}」`}近 48 小时要点（可复制 / 导出 Markdown）</TooltipContent>
+          </Tooltip>
+        )}
         <div className="ml-auto flex items-center gap-3 type-meta text-faint">
           <span className="hidden items-center gap-1 xl:flex">
             {[["J", "K", "移动"], ["↵", "", "打开"], ["N", "", "新内容"], ["G", "", "顶部"]].map(([a, b, l]) => (
@@ -304,6 +335,7 @@ export default function Feed() {
             <ArrowUp className="size-4" />
           </button>
         )}
+        {briefOpen && briefScope && <BriefDialog open={briefOpen} onOpenChange={setBriefOpen} section={briefScope === "all" ? null : briefScope} sectionLabel={briefLabel} />}
     </div>
   );
 }

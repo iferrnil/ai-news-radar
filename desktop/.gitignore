@@ -5,3 +5,5 @@
 /resources/darwin-*/
 /resources/linux-*/
 /resources/windows-*/
+/webui/out/
+/webui/sources.json

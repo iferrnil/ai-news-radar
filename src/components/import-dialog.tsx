@@ -31,7 +31,7 @@ const fmtSize = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} 
 
 export default function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (b: boolean) => void; onDone: () => void }) {
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
-  const [parsed, setParsed] = useState<{ format: "json" | "opml"; rows: ParsedRow[] } | null>(null);
+  const [parsed, setParsed] = useState<{ format: "json" | "opml"; rows: ParsedRow[]; translateAll?: boolean } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [mode, setMode] = useState<ImportMode>("merge");
@@ -62,7 +62,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
   const apply = async () => {
     setBusy(true);
     try {
-      const r = await api<ImportPlan & { added: number }>("/api/sources/import", { method: "POST", body: JSON.stringify({ entries: entries(), mode, dryRun: false, test }) });
+      const r = await api<ImportPlan & { added: number }>("/api/sources/import", { method: "POST", body: JSON.stringify({ entries: entries(), mode, dryRun: false, test, ...(parsed?.translateAll ? { translateAll: true } : {}) }) });
       const c = r.counts;
       toast.success("导入完成", { description: [`新增 ${c.new + c.restore}`, mode === "update" || mode === "replace" ? `更新 ${c.update}` : `跳过已存在 ${c.dup}`, c.invalid ? `无效 ${c.invalid}` : "", c.remove ? `删除 ${c.remove}` : ""].filter(Boolean).join(" · ") + (test && r.added ? "；正在测试抓取新来源" : "") });
       onDone(); onOpenChange(false); reset();

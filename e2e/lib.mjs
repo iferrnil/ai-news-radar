@@ -8,6 +8,7 @@ export const E2E = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.dirname(E2E);
 export const RESTART = path.join(E2E, "restart.sh");
 export const PORT = Number(process.env.PORT ?? 3000);
+export const DATA = process.env.E2E_DATA ?? path.join(ROOT, "data");
 export const B = process.env.E2E_BASE ?? `http://localhost:${PORT}`;
 export const MOCK = process.env.UPSTREAM_MOCK ?? "http://127.0.0.1:4010";
 export const LOG = process.env.E2E_LOG ?? path.join(os.tmpdir(), "radar-server.log");

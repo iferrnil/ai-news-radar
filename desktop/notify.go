@@ -1,8 +1,9 @@
 package main
 
-// Native P0 notifications: the shell listens to the bundled server's SSE stream (/api/stream) for `notify`
-// batches (already batched, throttled and free of start-up backlog, see src/lib/notify.ts), reads the user's
-// prefs from /api/settings and shows one system notification per batch. Clicking it opens the item.
+// Native notifications: the shell listens to the bundled server's SSE stream (/api/stream) for `notify` (new P0
+// items) or `digest` (every new subscription item) batches — already batched, throttled and free of start-up
+// backlog, see src/lib/notify.ts — reads the user's prefs from /api/settings and shows one system notification
+// per batch ("新增 N 条" + top titles). Clicking it focuses the app and opens the item.
 
 import (
 	"bufio"
@@ -24,13 +25,27 @@ type notifyItem struct {
 }
 
 type notifyBatch struct {
-	Count int          `json:"count"`
-	Items []notifyItem `json:"items"`
+	Count  int          `json:"count"`
+	Items  []notifyItem `json:"items"`
+	Digest bool         `json:"-"` // every new item, not only P0
 }
 
 type notifyPrefs struct {
 	Enabled  bool     `json:"enabled"`
 	Sections []string `json:"sections"` // empty = all
+	System   *bool    `json:"system"`   // 桌面系统通知 (nil = on, older servers)
+	Scope    string   `json:"scope"`    // "p0" (default) | "all"
+}
+
+// wants reports whether an SSE event should become a system notification under these prefs.
+func (p notifyPrefs) wants(event string) bool {
+	if !p.Enabled || (p.System != nil && !*p.System) {
+		return false
+	}
+	if p.Scope == "all" {
+		return event == "digest"
+	}
+	return event == "notify"
 }
 
 // filterBatch keeps the items of the chosen sections; nil when nothing is left.
@@ -55,12 +70,15 @@ func filterBatch(b notifyBatch, sections []string) *notifyBatch {
 	if len(items) < len(b.Items) {
 		n = len(items)
 	}
-	return &notifyBatch{Count: n, Items: items}
+	return &notifyBatch{Count: n, Items: items, Digest: b.Digest}
 }
 
 // batchText is the notification's title and body.
 func batchText(b notifyBatch) (title, body string) {
 	if b.Count == 1 && len(b.Items) == 1 {
+		if b.Digest {
+			return b.Items[0].Source, b.Items[0].Title
+		}
 		return "P0 · " + b.Items[0].Source, b.Items[0].Title
 	}
 	var lines []string
@@ -72,6 +90,9 @@ func batchText(b notifyBatch) (title, body string) {
 	}
 	if b.Count > 3 {
 		lines = append(lines, fmt.Sprintf("…还有 %d 条", b.Count-3))
+	}
+	if b.Digest {
+		return fmt.Sprintf("新增 %d 条", b.Count), strings.Join(lines, "\n")
 	}
 	return fmt.Sprintf("%d 条新 P0 动态", b.Count), strings.Join(lines, "\n")
 }
@@ -132,7 +153,7 @@ func watchNotifications(ctx context.Context, base string, show func(notifyBatch)
 		if err == nil {
 			wait = time.Second
 			_ = readSSE(res.Body, func(event, data string) {
-				if event != "notify" {
+				if event != "notify" && event != "digest" {
 					return
 				}
 				var msg struct {
@@ -142,9 +163,10 @@ func watchNotifications(ctx context.Context, base string, show func(notifyBatch)
 					return
 				}
 				p, err := fetchPrefs(ctx, base)
-				if err != nil || !p.Enabled {
+				if err != nil || !p.wants(event) {
 					return
 				}
+				msg.Batch.Digest = event == "digest"
 				if b := filterBatch(msg.Batch, p.Sections); b != nil {
 					show(*b)
 				}

@@ -7,3 +7,5 @@ docs/screenshots
 *.log
 .env*
 desktop
+out
+server/bin

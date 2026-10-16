@@ -1,10 +1,10 @@
 // in-app DeepSeek settings: masked key, never echoed, 0600 file, clear, locked mode
 import fs from "node:fs"; import { execSync } from "node:child_process";
-import { launch, rec, B, SHOT, RESTART, ROOT, LOG } from "./lib.mjs";
+import { launch, rec, B, SHOT, RESTART, LOG, DATA } from "./lib.mjs";
 const KEY = "sk-" + "e2efake" + Math.random().toString(36).slice(2, 14) + "zz";
 const leak = (t) => t.includes(KEY) || t.includes(KEY.slice(3, 20));
 const get = async (p) => (await fetch(B + p)).text();
-const SF = ROOT + "/data/secrets.json";
+const SF = DATA + "/secrets.json";
 let { br, page, errors } = await launch(false);
 await page.goto(B + "/settings"); await page.waitForTimeout(1200);
 rec("settings page renders, unconfigured", (await page.getByTestId("key-status").textContent()) === "未配置");

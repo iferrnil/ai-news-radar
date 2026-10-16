@@ -8,9 +8,11 @@ services:
     build:
       context: .
       args:
-        # If network access is restricted, use mirrors: NPM_REGISTRY=https://registry.npmmirror.com  APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+        # If network access is restricted, use mirrors:
+        #   NPM_REGISTRY=https://registry.npmmirror.com  GOPROXY=https://goproxy.cn,direct  APK_MIRROR=mirrors.tuna.tsinghua.edu.cn
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
-        APT_MIRROR: ${APT_MIRROR:-}
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+        APK_MIRROR: ${APK_MIRROR:-}
     container_name: ai-news-radar
     restart: unless-stopped
     ports:
@@ -19,7 +21,7 @@ services:
       - ${DATA_DIR:-./data}:/app/data
     environment:
       TZ: Asia/Shanghai
-      NODE_OPTIONS: --max-old-space-size=256
+      GOMEMLIMIT: 200MiB
       RETENTION_HOURS: ${RETENTION_HOURS:-48}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       TRANSLATE_ENABLED: ${TRANSLATE_ENABLED:-1}

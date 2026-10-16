@@ -88,6 +88,23 @@ http.createServer((req, res) => {
     const data = { props: { pageProps: { headerProps: { listName: "Mock list" }, timeline: { entries: [] } } } };
     return send(res, 200, `<html><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(data)}</script></html>`, "text/html");
   }
+  // fake DeepSeek-compatible translator (t17): echoes every title/summary prefixed with 【译】
+  if (host === "ds.mock-ai.com" && u.pathname.endsWith("/chat/completions")) {
+    let b = ""; req.on("data", (c) => (b += c)).on("end", () => {
+      try {
+        const content = JSON.parse(b).messages.at(-1).content;
+        try {
+          const items = JSON.parse(content);
+          const r = items.map((x) => ({ i: x.i, t: "【译】" + x.t, s: x.s ? "【译】" + x.s : "" }));
+          send(res, 200, { choices: [{ message: { content: JSON.stringify({ r }) } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+        } catch {
+          // brief AI 润色: user content is Markdown, not a translate batch
+          send(res, 200, { choices: [{ message: { content: "# 【润色】\n\n" + content } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+        }
+      } catch { send(res, 400, { error: "bad request" }); }
+    });
+    return;
+  }
   if (host === "api.deepseek.com" || u.pathname.endsWith("/models")) return send(res, 401, { error: { message: "Authentication Fails (mock)" } });
   const j = api(u);
   if (j) return send(res, 200, j);

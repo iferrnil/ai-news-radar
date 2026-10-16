@@ -18,6 +18,8 @@ export const EntrySchema = z.object({
   sectionName: z.string().trim().min(1).max(24).optional().catch(undefined),
   sectionIcon: z.string().trim().max(8).optional().catch(undefined),
   sectionInAll: z.boolean().optional().catch(undefined),
+  sectionTranslate: z.boolean().optional().catch(undefined),
+  translate: z.enum(["inherit", "on", "off"]).optional().catch(undefined), // only "on" is written now; inherit/off (older exports) = off
   filter: z.object({
     include: z.string().max(200).optional(), exclude: z.string().max(200).optional(),
     scope: z.enum(["title", "all"]).catch("title"), caseSensitive: z.boolean().catch(false),
@@ -34,7 +36,8 @@ export type Entry = z.output<typeof EntrySchema>;
 export const ExportSchema = z.object({
   app: z.literal(APP), version: z.number().int().min(1).max(SCHEMA_VERSION), exportedAt: z.string().optional(),
   sources: z.array(z.unknown()).max(MAX_ENTRIES),
-  sections: z.array(z.object({ key: z.string(), name: z.string(), icon: z.string().nullish(), inAll: z.boolean().optional() })).max(200).optional().catch(undefined),
+  sections: z.array(z.object({ key: z.string(), name: z.string(), icon: z.string().nullish(), inAll: z.boolean().optional(), translate: z.boolean().optional() })).max(200).optional().catch(undefined),
+  translateAll: z.boolean().optional().catch(undefined),
 });
 
 export interface ParsedRow { raw: unknown; entry?: Entry; error?: string }
@@ -58,10 +61,10 @@ function opmlRows(xml: string, fallback: Entry["section"]): unknown[] {
       const a = o as Record<string, string> & { outline?: Record<string, unknown>[] };
       const name = a.title || a.text || "";
       // this app's own custom sections carry sectionCustom="1"; other readers' folders fall back to the chosen default
-      const custom = a.sectionCustom === "1" && a.category ? { section: a.sectionKey || "custom", sectionName: a.category, sectionIcon: a.sectionIcon, sectionInAll: a.sectionInAll ? a.sectionInAll !== "false" : undefined } : null;
+      const custom = a.sectionCustom === "1" && a.category ? { section: a.sectionKey || "custom", sectionName: a.category, sectionIcon: a.sectionIcon, sectionInAll: a.sectionInAll ? a.sectionInAll !== "false" : undefined, sectionTranslate: a.sectionTranslate ? a.sectionTranslate !== "false" : undefined } : null;
       const sec = custom ? custom.section : zhToKey(a.category) ?? zhToKey(folder) ?? fallback;
       const filter = a.filterInclude || a.filterExclude ? { include: a.filterInclude, exclude: a.filterExclude, scope: a.filterScope, caseSensitive: a.filterCase === "true" } : undefined;
-      const extra = { ...custom, section: sec, priority: a.priority, interval: a.interval ? Number(a.interval) : undefined, enabled: a.enabled ? a.enabled !== "false" : undefined, filter };
+      const extra = { ...custom, section: sec, priority: a.priority, interval: a.interval ? Number(a.interval) : undefined, enabled: a.enabled ? a.enabled !== "false" : undefined, filter, translate: a.translate || undefined };
       if (a.type === "x") rows.push({ name, type: "x", username: a.xUsername, ...extra });
       else if (a.xmlUrl) rows.push({ name: name || a.xmlUrl, type: a.type === "x_list" ? "x_list" : a.type === "api" ? "api" : "rss", url: a.xmlUrl, homepage: a.htmlUrl, ...extra });
       if (a.outline) walk(a.outline, a.outline.length && !a.xmlUrl ? name : folder);
@@ -72,25 +75,26 @@ function opmlRows(xml: string, fallback: Entry["section"]): unknown[] {
 }
 
 /** Parse a user-chosen file (JSON from this app, or OPML from any reader) into validated rows. */
-export function parseImport(text: string, fileName: string, opmlSection: Entry["section"] = "media", known: KnownSection[] = []): { format: "json" | "opml"; rows: ParsedRow[] } {
+export function parseImport(text: string, fileName: string, opmlSection: Entry["section"] = "media", known: KnownSection[] = []): { format: "json" | "opml"; rows: ParsedRow[]; translateAll?: boolean } {
   if (text.length > MAX_BYTES) throw new Error("文件超过 1 MB");
   KNOWN = known;
   const t = text.replace(/^\uFEFF/, "").trim();
   const isJson = /\.json$/i.test(fileName) || t.startsWith("{");
-  let raws: unknown[];
+  let raws: unknown[]; let translateAll: boolean | undefined;
   if (isJson) {
     let j: unknown; try { j = JSON.parse(t); } catch { throw new Error("JSON 解析失败"); }
     const e = ExportSchema.safeParse(j);
     if (!e.success) throw new Error(`不是本应用导出的 JSON（需要 app="${APP}" 且 version≤${SCHEMA_VERSION}）`);
     // v2: attach custom section metadata (by key) to each entry so the server can match/create sections by name
+    translateAll = e.data.translateAll;
     const meta = new Map((e.data.sections ?? []).map((x) => [x.key, x]));
     raws = e.data.sources.map((r) => {
       const m = r && typeof r === "object" ? meta.get(String((r as { section?: unknown }).section)) : undefined;
-      return m ? { ...(r as object), sectionName: m.name, sectionIcon: m.icon ?? undefined, sectionInAll: m.inAll } : r;
+      return m ? { ...(r as object), sectionName: m.name, sectionIcon: m.icon ?? undefined, sectionInAll: m.inAll, sectionTranslate: m.translate } : r;
     });
-  } else raws = opmlRows(t, opmlSection);
+  } else { raws = opmlRows(t, opmlSection); translateAll = /<head>[\s\S]*<radarTranslateAll>true<\/radarTranslateAll>[\s\S]*<\/head>/.test(t) || undefined; }
   if (raws.length > MAX_ENTRIES) throw new Error(`条目过多（>${MAX_ENTRIES}）`);
-  return { format: isJson ? "json" : "opml", rows: raws.map((raw) => {
+  return { format: isJson ? "json" : "opml", ...(translateAll ? { translateAll } : {}), rows: raws.map((raw) => {
     const r = EntrySchema.safeParse(raw);
     return r.success ? { raw, entry: r.data } : { raw, error: r.error.issues.map((i) => i.message).join("；") };
   }) };

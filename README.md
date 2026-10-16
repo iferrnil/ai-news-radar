@@ -64,12 +64,13 @@ docker compose up -d          # 首次会本地构建镜像
 open http://localhost:3080    # 数据保存在 ./data（容器内仍监听 3000）
 ```
 
-### 本地开发（Node ≥ 22）
+### 本地开发（Node ≥ 22 + Go）
 
 ```bash
 npm ci
-npm run dev                                  # 开发模式 http://localhost:3000
-npm run build && npm run start -- -p 3000    # 生产模式
+(cd server && PORT=3001 go run ./cmd/radar-server) &   # 后端（API + 轮询）
+npm run dev                                            # 开发模式 http://localhost:3000（/api 代理到 :3001）
+npm run build && (cd server && go build -o bin/radar-server ./cmd/radar-server) && server/bin/radar-server -ui out   # 生产模式 :3000
 ```
 
 > 同一个数据目录只能运行**一个**实例（轮询器在服务进程内）。
@@ -77,8 +78,7 @@ npm run build && npm run start -- -p 3000    # 生产模式
 ### 桌面版（macOS，需 Go 与 Node 22）
 
 ```bash
-STANDALONE=1 npm run build
-desktop/scripts/package.sh darwin/arm64      # 产物在 desktop/build/
+desktop/scripts/package.sh darwin/arm64      # 构建界面 + Go，产物在 desktop/build/
 ```
 
 详见 [desktop/README.md](desktop/README.md)。
@@ -131,13 +131,13 @@ flowchart LR
     API[JSON API<br/>HF Papers·OpenRouter·机器之心·hnrss]
     FX[FxEmbed API<br/>X 账号时间线]
   end
-  subgraph Node[Next.js 单进程（next start）]
-    SCH[调度器 instrumentation.ts<br/>优先级轮询·并发限制·条件请求]
+  subgraph Go[Go 单进程（radar-server）]
+    SCH[调度器<br/>优先级轮询·并发限制·条件请求]
     STORE[去重 / 合并 / 48h 清理]
     BUS[(事件总线)]
-    APIR[Route Handlers<br/>/api/items · /api/sources · /api/stream]
-    UI[React UI<br/>shadcn/ui]
+    APIR[HTTP API<br/>/api/items · /api/sources · /api/stream]
   end
+  UI[React UI（Next.js 静态导出）<br/>shadcn/ui]
   DB[(SQLite WAL<br/>data/news.db)]
   RSS & API & FX --> SCH --> STORE --> DB
   STORE --> BUS --> APIR
@@ -145,10 +145,11 @@ flowchart LR
   APIR -- SSE --> UI
 ```
 
-- **抓取**：`src/lib/fetchers.ts`（RSS/Atom、JSON API、FxEmbed、X 列表）经 `src/lib/net.ts` 统一做超时、重试和退避；每次结果写入 `source_health`，连续失败的来源自动熔断。
-- **存储**：SQLite WAL，48 小时滚动清理（`incremental_vacuum` + WAL `TRUNCATE`），数据库通常 < 1 MB；常驻内存约 170 MB。
+- **抓取**：`server/radar/fetchers.go`（RSS/Atom、JSON API、FxEmbed、X 列表）经 `server/radar/net.go` 统一做超时、重试和退避；每次结果写入 `source_health`，连续失败的来源自动熔断。
+- **存储**：SQLite WAL，48 小时滚动清理（`incremental_vacuum` + WAL `TRUNCATE`），数据库通常 < 1 MB；常驻内存见下方「后端」说明。
 - **推送**：进程内事件总线 → `/api/stream`（SSE）→ 前端；P0 通知按批次走同一通道。
-- **桌面版**：`desktop/`，基于 [MyGo](https://github.com/egoist/mygo)，内置 Node 22 运行同一套 Next.js 服务（仅监听 127.0.0.1）。
+- **后端**：`server/`，纯 Go 单二进制（modernc SQLite，无 cgo），同时提供 `/api/*` 和静态界面（`out/`）；不再需要 Node 运行时。
+- **桌面版**：`desktop/`，基于 [MyGo](https://github.com/egoist/mygo)，同一套 Go 后端在 App 进程内运行（仅监听 127.0.0.1），界面嵌入二进制，不含 Node。
 
 ## 数据源与频率限制
 
@@ -183,21 +184,21 @@ flowchart LR
 
 ## 部署提示
 
-镜像支持 arm64（如 Oracle Cloud Ampere A1），直接 `docker compose up -d`；用 Node 直接运行需编译工具（`build-essential python3`）以构建 better-sqlite3。建议 compose `restart: unless-stopped` 保活，前面加 Caddy/Nginx 做 HTTPS（SSE 需关闭代理缓冲）。公网部署请保持 `SETTINGS_LOCKED=1`。
+镜像支持 arm64（如 Oracle Cloud Ampere A1），直接 `docker compose up -d`。后端是单个纯 Go 二进制（`server/`，无 cgo），界面是 Next.js 静态导出（`out/`）；不用 Docker 时：`npm ci && npm run build && (cd server && go build -o bin/radar-server ./cmd/radar-server) && server/bin/radar-server -ui out`。建议 compose `restart: unless-stopped` 保活，前面加 Caddy/Nginx 做 HTTPS（SSE 需关闭代理缓冲）。公网部署请保持 `SETTINGS_LOCKED=1`。
 
 ### 构建加速
 
 - 不发布预构建镜像：`docker compose` 只在本地构建（`image: ai-news-radar:local` + `pull_policy: build`），不会去 ghcr.io 拉取。
 - 字体（Inter（西文/数字）/ 霞鹜文楷 LXGW WenKai（中文）/ JetBrains Mono（时间），均为 OFL-1.1）通过 npm 包 `@fontsource-variable/*` 与 `lxgw-wenkai-webfont` 自托管，`next build` 不访问 Google Fonts；霞鹜文楷按 unicode-range 分片（Regular + Medium 两个字重），浏览器只下载页面用到的字。
-- 构建只需要 npm 源和 Debian apt 源，网络受限时可用构建参数换成镜像源：
+- 构建只需要 npm 源、Go 模块代理和 Alpine apk 源，网络受限时可用构建参数换成镜像源：
 
 ```bash
 git pull
-NPM_REGISTRY=https://registry.npmmirror.com APT_MIRROR=mirrors.tuna.tsinghua.edu.cn docker compose up -d --build
-# 或写入 .env：NPM_REGISTRY=...  APT_MIRROR=...
+NPM_REGISTRY=https://registry.npmmirror.com GOPROXY=https://goproxy.cn,direct APK_MIRROR=mirrors.tuna.tsinghua.edu.cn docker compose up -d --build
+# 或写入 .env：NPM_REGISTRY=...  GOPROXY=...  APK_MIRROR=...
 ```
 
-- 基础镜像 `node:22-bookworm-slim` 来自 Docker Hub；若拉不下来，请在 Docker/OrbStack 设置里配置 registry mirror。
+- 基础镜像 `node:22-bookworm-slim`（仅构建界面）、`golang:1.27-alpine`（仅编译）与 `alpine:3.22`（运行）均来自 Docker Hub；若拉不下来，请在 Docker/OrbStack 设置里配置 registry mirror。
 
 ## 字体
 
@@ -209,7 +210,7 @@ NPM_REGISTRY=https://registry.npmmirror.com APT_MIRROR=mirrors.tuna.tsinghua.edu
 
 ## English
 
-AI News Radar is a self-hosted, near-real-time AI news aggregator (Next.js 16 + SQLite, single process): 22 curated sources polled by priority, live SSE updates, P0 notifications, read/unread tracking, per-source health with retries and circuit breaking, optional DeepSeek translation, and a macOS desktop app with auto-update. Quick start: `docker compose up -d`, then open http://localhost:3080.
+AI News Radar is a self-hosted, near-real-time AI news aggregator (Next.js 16 static UI + a single pure-Go server with SQLite): 22 curated sources polled by priority, live SSE updates, P0 notifications, read/unread tracking, per-source health with retries and circuit breaking, optional DeepSeek translation, and a macOS desktop app with auto-update. Quick start: `docker compose up -d`, then open http://localhost:3080.
 
 ## License
 
