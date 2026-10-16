@@ -1,6 +1,6 @@
 "use client";
-import { Fragment, useCallback, useEffect, useState } from "react";
-import { Check, Copy, Download, ExternalLink, FileText, Languages, Loader2, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, Copy, Download, Eye, FileText, Languages, Loader2, Pencil, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,16 +18,17 @@ export type BriefOut = {
 };
 
 const TR_KEY = "brief-translate";
-const fmt = (sec: number) => sec ? new Date(sec * 1000).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 
-/** Inline markdown: [text](url), **bold**. */
+/** Inline markdown: [[n]](url) → small superscript source link, [text](url), **bold**. */
 function Inline({ text }: { text: string }) {
   const parts: React.ReactNode[] = [];
-  const re = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\*\*([^*]+)\*\*/g;
+  const re = /\[\[(\d+)\]\]\((https?:\/\/[^)\s]+)\)|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\*\*([^*]+)\*\*/g;
   let last = 0, m: RegExpExecArray | null, k = 0;
   while ((m = re.exec(text))) {
     if (m.index > last) parts.push(text.slice(last, m.index));
-    parts.push(m[1] ? <a key={k++} href={m[2]} target="_blank" rel="noreferrer" className="text-brand underline-offset-2 hover:underline">{m[1]}</a> : <strong key={k++} className="font-semibold">{m[3]}</strong>);
+    if (m[1]) parts.push(<a key={k++} href={m[2]} target="_blank" rel="noreferrer" title={m[2]} data-testid="brief-ref" className="mx-0.5 align-super text-[10px] font-medium text-brand/80 no-underline hover:text-brand">[{m[1]}]</a>);
+    else if (m[3]) parts.push(<a key={k++} href={m[4]} target="_blank" rel="noreferrer" className="text-brand underline-offset-2 hover:underline">{m[3]}</a>);
+    else parts.push(<strong key={k++} className="font-semibold">{m[5]}</strong>);
     last = re.lastIndex;
   }
   parts.push(text.slice(last));
@@ -38,10 +39,10 @@ function Inline({ text }: { text: string }) {
 function Markdown({ md }: { md: string }) {
   const out: React.ReactNode[] = [];
   let list: string[] = [];
-  const flush = () => { if (list.length) { out.push(<ul key={out.length} className="my-2 list-disc space-y-1 pl-5">{list.map((l, i) => <li key={i}><Inline text={l} /></li>)}</ul>); list = []; } };
+  const flush = () => { if (list.length) { out.push(<ol key={out.length} className="my-2 list-decimal space-y-0.5 pl-5 type-caption text-muted-foreground">{list.map((l, i) => <li key={i}><Inline text={l} /></li>)}</ol>); list = []; } };
   for (const raw of md.split("\n")) {
     const l = raw.trimEnd();
-    const li = /^\s*[-*]\s+(.*)$/.exec(l);
+    const li = /^\s*(?:[-*]|\d+\.)\s+(.*)$/.exec(l);
     if (li) { list.push(li[1]); continue; }
     flush();
     if (!l.trim()) continue;
@@ -54,40 +55,10 @@ function Markdown({ md }: { md: string }) {
       continue;
     }
     if (l.startsWith(">")) { out.push(<p key={out.length} className="my-2 border-l-2 border-border pl-3 text-muted-foreground"><Inline text={l.replace(/^>\s?/, "")} /></p>); continue; }
-    out.push(<p key={out.length} className="my-1.5"><Inline text={l} /></p>);
+    out.push(<p key={out.length} className="my-2.5"><Inline text={l} /></p>);
   }
   flush();
   return <div className="type-body leading-[1.7] text-foreground/90">{out}</div>;
-}
-
-function Groups({ groups }: { groups: BriefGroup[] }) {
-  return (
-    <div className="space-y-6">
-      {groups.map((g) => (
-        <section key={g.source} data-testid="brief-group">
-          <h3 className="sticky top-0 z-[1] -mx-5 mb-3 flex items-center gap-2 border-b border-border/60 bg-popover/95 px-5 py-1.5 type-ui font-semibold">
-            {g.source}{g.priority === "P0" && <span className="rounded bg-brand/10 px-1.5 type-meta font-medium text-brand">P0</span>}
-            <span className="ml-auto type-meta font-normal text-faint">{g.items.length} 条</span>
-          </h3>
-          <ol className="space-y-4">
-            {g.items.map((it, i) => (
-              <li key={it.url + i} className="space-y-1" data-testid="brief-item">
-                <h4 className="type-body font-semibold leading-snug text-foreground">{it.title}</h4>
-                {it.summary && <p className="type-body leading-relaxed text-foreground/80" data-testid="brief-summary">{it.summary}</p>}
-                <div className="flex flex-wrap items-center gap-x-2 type-meta text-faint" data-testid="brief-meta">
-                  <span>来源：{it.source}</span>
-                  {it.published > 0 && <><span aria-hidden>·</span><span>{fmt(it.published)}</span></>}
-                  {it.translated && <><span aria-hidden>·</span><span>译</span></>}
-                  <span aria-hidden>·</span>
-                  <a href={it.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-brand hover:underline" data-testid="brief-link">原文链接<ExternalLink className="size-3" /></a>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ))}
-    </div>
-  );
 }
 
 /** Dialog: rule-based section brief (optionally translated) + optional AI 润色; copy / export markdown. */
@@ -100,14 +71,20 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel 
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [trOn, setTrOn] = useState(true);
-  useEffect(() => { try { setTrOn(localStorage.getItem(TR_KEY) !== "0"); } catch { /* */ } }, []);
+  // off unless the user turned it on (remembered)
+  const [trOn, setTrOn] = useState(false);
+  useEffect(() => { try { setTrOn(localStorage.getItem(TR_KEY) === "1"); } catch { /* */ } }, []);
+  // the brief is editable: copy / export use the edited text; regenerating replaces it
+  const [text, setText] = useState("");
+  const [editing, setEditing] = useState(false);
+  const edited = !!b && text !== b.markdown;
   const scope = section || "all";
 
   const load = useCallback(async (ai: boolean, t: boolean) => {
     (ai ? setAiBusy : setBusy)(true); setErr("");
     try {
-      setB(await api<BriefOut>(`/api/brief?section=${encodeURIComponent(scope)}${ai ? "&ai=1" : ""}${t ? "&tr=1" : ""}`));
+      const r = await api<BriefOut>(`/api/brief?section=${encodeURIComponent(scope)}${ai ? "&ai=1" : ""}${t ? "&tr=1" : ""}`);
+      setB(r); setText(r.markdown); setEditing(false);
     } catch (e) { setErr((e as Error).message); if (!ai) setB(null); else toast.error((e as Error).message); }
     finally { (ai ? setAiBusy : setBusy)(false); }
   }, [scope]);
@@ -117,13 +94,13 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel 
 
   const copy = async () => {
     if (!b) return;
-    try { await navigator.clipboard.writeText(b.markdown); setCopied(true); toast.success("已复制 Markdown"); setTimeout(() => setCopied(false), 1500); }
+    try { await navigator.clipboard.writeText(text); setCopied(true); toast.success("已复制 Markdown"); setTimeout(() => setCopied(false), 1500); }
     catch { toast.error("复制失败"); }
   };
   const download = () => {
     if (!b) return;
     const name = `简报-${b.scopeLabel}-${new Date().toISOString().slice(0, 10)}.md`;
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([b.markdown], { type: "text/markdown" })), download: name });
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([text], { type: "text/markdown" })), download: name });
     document.body.append(a); a.click(); a.remove();
   };
   const trHint = tr?.available ? "用 DeepSeek 翻译外文条目" : "仅使用已有译文（未配置 DeepSeek key）";
@@ -134,7 +111,7 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel 
         <DialogHeader className="gap-1 border-b border-border/60 px-5 py-4">
           <DialogTitle className="flex items-center gap-2 pr-6"><FileText className="size-4 text-brand" />{b?.title ?? `「${sectionLabel}」简报`}</DialogTitle>
           <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>{busy && !b ? "正在汇总近 48 小时内容…" : b ? `${b.count} 条 · ${b.sources} 个来源${b.ai ? ` · AI 润色${b.skill ? `（${b.skill}）` : ""}` : " · 规则生成"}${b.cached ? " · 缓存" : ""}` : "按来源分组，优先 P0。"}</span>
+            <span>{busy && !b ? "正在汇总近 48 小时内容…" : b ? `${b.count} 条 · ${b.sources} 个来源${b.ai ? ` · AI 润色${b.skill ? `（${b.skill}）` : ""}` : " · 规则生成"}${b.cached ? " · 缓存" : ""}${edited ? " · 已编辑" : ""}` : ""}</span>
             <label className="ml-auto inline-flex cursor-pointer items-center gap-2 type-caption text-muted-foreground" title={trHint}>
               <Languages className="size-3.5" />翻译
               <Switch size="sm" checked={trOn} disabled={busy || aiBusy} onCheckedChange={(v) => toggleTr(!!v)} aria-label="翻译简报" data-testid="brief-tr" />
@@ -145,16 +122,18 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel 
           {err && !b && <p className="type-body text-destructive" data-testid="brief-error">{err}</p>}
           {busy && !b && <div className="flex items-center gap-2 type-body text-muted-foreground"><Loader2 className="size-4 animate-spin" />{trOn && tr?.available ? "生成并翻译中…" : "生成中…"}</div>}
           {b?.translateNote && <p className="mb-3 rounded-md bg-muted px-3 py-2 type-caption text-muted-foreground" data-testid="brief-tr-note">{b.translateNote}</p>}
-          {b && (
-            <div data-testid="brief-body" className={busy ? "opacity-60 transition-opacity" : undefined}>
-              {b.count === 0 ? <p className="type-body text-muted-foreground">近 48 小时暂无内容。</p>
-                : b.ai || !b.groups ? <Markdown md={b.markdown} /> : <Groups groups={b.groups} />}
-            </div>
-          )}
+          {b && (editing
+            ? <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} aria-label="编辑简报" data-testid="brief-editor"
+                className="block h-full min-h-[50dvh] w-full resize-none rounded-md border border-border bg-background p-3 font-mono text-[13px] leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring/40" />
+            : <div data-testid="brief-body" className={busy ? "opacity-60 transition-opacity" : undefined}><Markdown md={text} /></div>)}
         </div>
         <Separator />
         <DialogFooter className="flex-row flex-wrap items-center gap-2 px-5 py-3 sm:justify-between">
           <div className="flex flex-wrap gap-2">
+            <Button variant={editing ? "secondary" : "outline"} size="sm" disabled={!b || busy} onClick={() => setEditing(!editing)} aria-pressed={editing} data-testid="brief-edit">
+              {editing ? <Eye className="size-3.5" /> : <Pencil className="size-3.5" />}{editing ? "预览" : "编辑"}
+            </Button>
+            {edited && <Button variant="ghost" size="sm" onClick={() => b && setText(b.markdown)} data-testid="brief-revert"><Undo2 className="size-3.5" />还原</Button>}
             <Button variant="outline" size="sm" disabled={!b || busy} onClick={copy} data-testid="brief-copy">
               {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}
             </Button>

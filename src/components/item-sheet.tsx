@@ -39,7 +39,7 @@ export default function ItemSheet() {
             <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-5 p-5">
                 <p className="whitespace-pre-wrap type-ui leading-7 text-foreground/85">{it.is_x ? it.summary || it.title : dekText(it.summary) || "（该来源未提供摘要）"}</p>
-                {it.image && <img src={it.image} alt="" referrerPolicy="no-referrer" className="mt-3 max-h-[420px] w-full rounded-lg bg-muted object-contain" />}
+                {it.image && <img src={it.image} alt="" decoding="async" referrerPolicy="no-referrer" className="mt-3 max-h-[420px] w-full rounded-lg bg-muted object-contain" />}
                 {it.orig && <Original o={it.orig} x={!!it.is_x} />}
                 {it.also_on_x.length > 0 && (
                   <div className="rounded-lg border bg-muted/40 p-3">

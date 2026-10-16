@@ -226,3 +226,7 @@ html[data-titlebar] .app-sidebar .app-brand { --app-region: drag; padding-left: 
 @media (max-width: 1023.98px) {
   html[data-titlebar] .app-header { padding-left: calc(var(--mygo-titlebar-inset-left, 0px) + 0.5rem); }
 }
+
+/* long feeds: skip layout/paint of off-screen cards; no hover restyles or hover cards while scrolling */
+.feed-card { content-visibility: auto; contain-intrinsic-size: auto 208px; }
+html[data-scrolling] .feed-card { pointer-events: none; transition: none; }

@@ -51,7 +51,7 @@ for (const desktop of [false, true]) {
   const p = await br.newPage({ viewport: { width: 1280, height: 1000 } }); p.on("pageerror", (e) => errors.push(String(e)));
   await p.goto(B + "/settings"); await p.getByTestId("ai-card").waitFor(); await sleep(600);
   const titles = await p.locator("[data-slot=card-title]").allInnerTexts();
-  rec("web settings: cards 常规 / 通知 / 翻译 / AI / 数据 / 关于 (in order)", titles.join(",") === "常规,通知,翻译 / AI,数据,关于", titles.join(","));
+  rec("web settings: cards 常规 / 通知 / 翻译 / AI / 关于 (no 数据 on web) (in order)", titles.join(",") === "常规,通知,翻译 / AI,关于", titles.join(","));
   rec("web: no 简报 Skill / 更新 cards", await p.getByTestId("skill-card").count() === 0 && await p.getByTestId("update-card").count() === 0);
   rec("web: skills API is desktop-only", (await fetch(B + "/api/skills")).status === 404);
   await p.screenshot({ path: SHOT("r5_settings_web.png"), fullPage: true });
@@ -67,44 +67,52 @@ const p = await ctx.newPage(); p.on("pageerror", (e) => errors.push(String(e)));
 await p.goto(B + "/settings"); await p.getByTestId("skill-card").waitFor({ timeout: 15000 }); await sleep(800);
 const titles = await p.locator("[data-slot=card-title]").allInnerTexts();
 rec("desktop settings: 常规 / 通知 / 翻译 / AI / 简报 Skill / 更新 / 数据 / 关于", titles.join(",") === "常规,通知,翻译 / AI,简报 Skill,更新,数据,关于", titles.join(","));
+rec("desktop: notify 发送方式 selector (自动/系统通知中心/AppleScript)", /自动[\s\S]*系统通知中心[\s\S]*AppleScript/.test(await p.getByTestId("notify-method").innerText()));
+{ const r = await (await fetchR(B + "/api/desktop/notify", { method: "PATCH", headers: J, body: JSON.stringify({ method: "bogus" }) })).status; rec("notify method: invalid rejected (404 without shell hooks)", r === 400 || r === 404, String(r)); }
 rec("desktop: notification status + 发送测试通知 button", /不支持|尚未询问|已允许|已拒绝/.test(await p.getByTestId("notify-perm").innerText()) && await p.getByTestId("notify-test").count() === 1);
-rec("desktop: data dir shown", /数据目录/.test(await p.getByTestId("data-card").innerText()));
-rec("default skill active", (await p.getByTestId("skill-row").count()) === 1 && /默认简报/.test(await p.getByTestId("skill-list").innerText()) && await p.getByTestId("skill-active").count() === 1);
+rec("desktop: data dir shown, no import/export", (await p.getByTestId("data-card").getByRole("button").count()) === 1 && /打开数据目录/.test(await p.getByTestId("data-card").innerText()));
+rec("default skill active", (await p.getByTestId("skill-row").count()) === 1 && /brief-polish/.test(await p.getByTestId("skill-list").innerText()) && await p.getByTestId("skill-active").count() === 1);
 
 // install via URL (https only, validated)
 rec("install: http refused", (await fetchR(B + "/api/skills/install", { method: "POST", headers: J, body: JSON.stringify({ url: "http://skills.mock-ai.com/a/SKILL.md" }) })).status === 400);
 rec("install: HTML page refused", (await fetchR(B + "/api/skills/install", { method: "POST", headers: J, body: JSON.stringify({ url: "https://skills.mock-ai.com/a/page" }) })).status === 422);
 await p.getByTestId("skill-url").fill("https://skills.mock-ai.com/editors/SKILL.md");
-await p.getByTestId("skill-install").click(); await p.getByText("E2E 编辑部").waitFor({ timeout: 10000 });
+await p.getByTestId("skill-install").click(); await p.getByTestId("skill-list").getByText("e2e-editors").waitFor({ timeout: 10000 });
 rec("install from URL → listed", (await p.getByTestId("skill-row").count()) === 2);
 // upload a local SKILL.md
-const f = path.join(os.tmpdir(), "SKILL.md"); fs.writeFileSync(f, "# 本地上传 Skill\n\nLOCAL-UPLOAD-MARKER\n");
-await p.getByTestId("skill-file").setInputFiles(f); await p.getByText("本地上传 Skill").waitFor({ timeout: 10000 });
-rec("upload local file → listed", (await p.getByTestId("skill-row").count()) === 3);
+const f = path.join(os.tmpdir(), "SKILL.md"); fs.writeFileSync(f, "# 无 frontmatter\n");
+rec("upload SKILL.md without frontmatter → rejected", (await fetchR(B + "/api/skills/upload", { method: "POST", body: (() => { const fd = new FormData(); fd.append("file", new Blob([fs.readFileSync(f)]), "SKILL.md"); return fd; })() })).status >= 400);
+// upload a local multi-file skill folder
+const dir = path.join(os.tmpdir(), "local-skill"); fs.rmSync(dir, { recursive: true, force: true });
+fs.mkdirSync(path.join(dir, "references"), { recursive: true }); fs.mkdirSync(path.join(dir, "scripts"));
+fs.writeFileSync(path.join(dir, "SKILL.md"), "---\nname: local-skill\ndescription: folder upload\n---\nLOCAL-UPLOAD-MARKER 参见 references/rules.md\n");
+fs.writeFileSync(path.join(dir, "references", "rules.md"), "RULES\n"); fs.writeFileSync(path.join(dir, "scripts", "x.sh"), "echo hi\n");
+await p.getByTestId("skill-folder").setInputFiles(dir); await p.getByTestId("skill-list").getByText("local-skill").waitFor({ timeout: 10000 });
+rec("upload local folder → listed with 参考/脚本 counts", (await p.getByTestId("skill-row").count()) === 3 && /1 个参考 · 1 个脚本/.test(await p.getByTestId("skill-row").filter({ hasText: "local-skill" }).innerText()), await p.getByTestId("skill-row").filter({ hasText: "local-skill" }).innerText());
 // activate the URL one, preview it
-await p.getByRole("button", { name: "使用 E2E 编辑部" }).click(); await sleep(600);
-rec("activate → 使用中", (await p.getByTestId("skill-row").filter({ hasText: "E2E 编辑部" }).getByTestId("skill-active").count()) === 1);
-await p.getByRole("button", { name: "预览 E2E 编辑部" }).click(); await p.getByTestId("skill-preview").waitFor();
+await p.getByRole("button", { name: "使用 e2e-editors" }).click(); await sleep(600);
+rec("activate → 使用中", (await p.getByTestId("skill-row").filter({ hasText: "e2e-editors" }).getByTestId("skill-active").count()) === 1);
+await p.getByRole("button", { name: "预览 e2e-editors" }).click(); await p.getByTestId("skill-preview").waitFor();
 rec("preview shows SKILL.md", /SKILL-E2E-MARKER-42/.test(await p.getByTestId("skill-preview").innerText()));
 await p.keyboard.press("Escape"); await sleep(300);
 await p.getByTestId("skill-card").screenshot({ path: SHOT("r5_settings_skill.png") });
 await p.screenshot({ path: SHOT("r5_settings_desktop.png"), fullPage: true });
 // AI 润色 must carry the active skill in the system prompt (mock echoes it)
 const ai = await (await fetchR(B + "/api/brief?section=all&ai=1")).json();
-rec("AI 润色 system prompt contains the active skill text", ai.ai === true && /SKILL-E2E-MARKER-42/.test(ai.markdown) && ai.skill === "E2E 编辑部", (ai.markdown ?? "").slice(0, 160));
+rec("AI 润色 system prompt contains the active skill text", ai.ai === true && /SKILL-E2E-MARKER-42/.test(ai.markdown) && ai.skill === "e2e-editors", (ai.markdown ?? "").slice(0, 160));
 // delete it → back to the built-in default
-await p.getByRole("button", { name: "删除 E2E 编辑部" }).click(); await sleep(700);
-rec("delete active → default active again", (await p.getByTestId("skill-row").count()) === 2 && /默认简报/.test(await p.getByTestId("skill-row").filter({ has: p.getByTestId("skill-active") }).innerText()));
+await p.getByRole("button", { name: "删除 e2e-editors" }).click(); await sleep(700);
+rec("delete active → default active again", (await p.getByTestId("skill-row").count()) === 2 && /brief-polish/.test(await p.getByTestId("skill-row").filter({ has: p.getByTestId("skill-active") }).innerText()));
 const ai2 = await (await fetchR(B + "/api/brief?section=all&ai=1")).json();
-rec("…and polishing uses the default skill", /SKILL: .*默认简报/.test(ai2.markdown) && !/SKILL-E2E-MARKER-42/.test(ai2.markdown));
+rec("…and polishing uses the default skill", /SKILL: brief-polish .*始终用简体中文写/.test(ai2.markdown) && !/SKILL-E2E-MARKER-42/.test(ai2.markdown));
 // the AI brief renders in the dialog
 await p.goto(B + "/"); await p.locator("[data-slot=card]").first().waitFor({ timeout: 15000 }); await sleep(500);
-await p.getByTestId("brief-btn").click(); await p.getByTestId("brief-item").first().waitFor({ timeout: 15000 });
+await p.getByTestId("brief-btn").click(); await p.getByTestId("brief-body").waitFor({ timeout: 15000 });
 await p.getByTestId("brief-ai").click(); await p.getByTestId("brief-rule").waitFor({ timeout: 15000 });
-rec("dialog: AI result rendered (skill named)", /AI 润色（默认简报）/.test(await p.getByTestId("brief-dialog").innerText()));
+rec("dialog: AI result rendered (skill named)", /AI 润色（brief-polish）/.test(await p.getByTestId("brief-dialog").innerText()));
 await p.getByTestId("brief-dialog").screenshot({ path: SHOT("r5_brief_ai.png") });
 await ctx.close();
-fs.rmSync(f, { force: true });
+fs.rmSync(f, { force: true }); fs.rmSync(dir, { recursive: true, force: true });
 
 await br.close();
 execSync(`bash ${RESTART}`);

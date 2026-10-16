@@ -90,7 +90,7 @@ http.createServer((req, res) => {
   }
   // 简报 Skill install from URL (t19)
   if (host === "skills.mock-ai.com") {
-    if (u.pathname.endsWith("/SKILL.md")) return send(res, 200, "---\nname: E2E 编辑部\ndescription: e2e skill\n---\n# E2E 编辑部\n\nSKILL-E2E-MARKER-42：每条只保留一句话。\n", "text/markdown");
+    if (u.pathname.endsWith("/SKILL.md")) return send(res, 200, "---\nname: e2e-editors\ndescription: e2e skill\n---\n# E2E 编辑部\n\nSKILL-E2E-MARKER-42：每条只保留一句话。\n", "text/markdown");
     return send(res, 200, "<!DOCTYPE html><html><body>not a skill</body></html>", "text/html");
   }
   // fake DeepSeek-compatible translator (t17): echoes every title/summary prefixed with 【译】
@@ -100,7 +100,7 @@ http.createServer((req, res) => {
         const msgs = JSON.parse(b).messages;
         const content = msgs.at(-1).content;
         const sys = msgs[0]?.role === "system" ? msgs[0].content : "";
-        const skill = (/<skill>([\s\S]*?)<\/skill>/.exec(sys)?.[1] ?? "").replace(/\s+/g, " ").trim();
+        const sm = /<skill name="([^"]*)">([\s\S]*?)<\/skill>/.exec(sys); const skill = (sm ? sm[1] + " " + sm[2] : "").replace(/\s+/g, " ").trim();
         try {
           const items = JSON.parse(content);
           const r = items.map((x) => ({ i: x.i, t: "【译】" + x.t, s: x.s ? "【译】" + x.s : "" }));

@@ -55,6 +55,7 @@ func (s *Store) Handler() http.Handler {
 	m.HandleFunc("PATCH /api/skills/active", s.hSkillActive)
 	m.HandleFunc("DELETE /api/skills/{name}", s.hSkillDelete)
 	m.HandleFunc("GET /api/desktop/notify", s.hDesktopNotifyStatus)
+	m.HandleFunc("PATCH /api/desktop/notify", s.hDesktopNotifyPatch)
 	m.HandleFunc("POST /api/desktop/notify-open-settings", s.hDesktopNotifyOpen)
 	m.HandleFunc("POST /api/desktop/open-data", s.hDesktopOpenData)
 	m.HandleFunc("GET /api/stats", s.hStats)
@@ -537,10 +538,10 @@ func (s *Store) hNotifyTest(w http.ResponseWriter, r *http.Request) {
 	if DesktopHooks.NotifyTest != nil {
 		st, err := DesktopHooks.NotifyTest()
 		if err != nil {
-			writeJSON(w, 200, obj("ok", false, "status", st, "error", err.Error()))
+			writeJSON(w, 200, obj("ok", false, "state", st, "error", err.Error()))
 			return
 		}
-		writeJSON(w, 200, obj("ok", true, "status", st, "count", 1))
+		writeJSON(w, 200, obj("ok", true, "state", st, "count", 1))
 		return
 	}
 	if SettingsLocked() {

@@ -53,7 +53,7 @@ export function ItemPreview({ it: base }: { it: ItemOut }) {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {!x && <h4 className="break-words type-ui font-semibold leading-[1.5] tracking-[-0.008em] [overflow-wrap:anywhere]">{it!.title}</h4>}
-        {it!.image && <img src={it!.image} alt="" referrerPolicy="no-referrer" className="mt-2 max-h-[300px] w-full rounded-md bg-muted object-contain" />}
+        {it!.image && <img src={it!.image} alt="" decoding="async" referrerPolicy="no-referrer" className="mt-2 max-h-[300px] w-full rounded-md bg-muted object-contain" />}
         {body && <p className={x ? "whitespace-pre-wrap break-words type-body leading-[1.7] text-foreground/90 [overflow-wrap:anywhere]" : "mt-1.5 whitespace-pre-wrap break-words type-body leading-[1.7] text-muted-foreground [overflow-wrap:anywhere]"}>{body}</p>}
         {loading && <div className="mt-2 space-y-1.5"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-11/12" /><Skeleton className="h-3 w-2/3" /></div>}
         {!body && !loading && !x && <p className="mt-1.5 type-caption text-faint">该来源未提供摘要</p>}

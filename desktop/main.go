@@ -175,7 +175,7 @@ var appCtx, stopApp = context.WithCancel(context.Background())
 func notifyP0(nt *notifier, win *mygo.Window, base string, b notifyBatch, show func()) {
 	title, body := batchText(b)
 	id := b.Items[0].ID
-	_ = nt.show(title, body, func() {
+	_, _ = nt.show(title, body, func() {
 		show()
 		go func() {
 			ok, err := win.Page().Eval(fmt.Sprintf("typeof window.__radarOpenItem === 'function' ? (window.__radarOpenItem(%d), true) : false", id))

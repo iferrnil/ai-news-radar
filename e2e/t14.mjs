@@ -26,7 +26,7 @@ rec("opening a card marks it read (dot gone, counts −1)", (await page.locator(
 
 // 只看未读
 await page.getByRole("button", { name: "只看未读" }).click(); await page.waitForTimeout(500);
-rec("只看未读: URL unread=1, read card hidden, list = unread", page.url().includes("unread=1") && await page.locator(`[data-item="${id1}"]`).count() === 0 && await cards.count() === Math.min(n0 - 1, 60));
+rec("只看未读: URL unread=1, read card hidden, list = unread", page.url().includes("unread=1") && await page.locator(`[data-item="${id1}"]`).count() === 0 && await cards.count() === Math.min(n0 - 1, 30));
 const id2 = await cards.first().getAttribute("data-item");
 await cards.first().click(); await page.getByRole("dialog").waitFor(); await page.keyboard.press("Escape"); await page.waitForTimeout(400);
 rec("card read while browsing 只看未读 stays visible (snapshot)", await page.locator(`[data-item="${id2}"]`).count() === 1 && (await page.locator(`[data-item="${id2}"]`).getAttribute("data-read")) === "true");
@@ -41,7 +41,7 @@ await page.getByRole("button", { name: "全部标为已读" }).click(); await pa
 rec("全部已读 (实验室): section unread 0, 全部 decreased by the same", await total() === 0 && Number(await allCount()) === allBefore - labU && await page.getByText("全部读完了").count() === 1, `${labU}`);
 await page.screenshot({ path: SHOT("all_read.png") });
 await page.getByRole("button", { name: "撤销" }).click(); await page.waitForTimeout(500);
-rec("undo restores the section's unread items", await total() === labU && await cards.count() === Math.min(labU, 60));
+rec("undo restores the section's unread items", await total() === labU && await cards.count() === Math.min(labU, 30));
 
 // persistence
 await page.reload(); await page.waitForSelector("[data-slot=card]"); await page.waitForTimeout(800);
