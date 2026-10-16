@@ -1,0 +1,102 @@
+# Release workflow for the NATIVE desktop app (desktop-native/, pure Go + MyGo native UI, no Node/webview).
+# Trigger: push a tag `desktop-native-v*` (e.g. desktop-native-v0.4.0). Independent of desktop-release.yml
+# (`desktop-v*`), so existing webview users are never offered these builds by their updater.
+# Builds a darwin/universal .app + .dmg (ad-hoc signed), signs the update archive with MYGO_UPDATER_PRIVATE_KEY
+# and publishes a GitHub *prerelease* (MyGo's updater ignores prereleases, so betas never auto-install).
+name: desktop-native-release
+on:
+  push:
+    tags: ["desktop-native-v*"]
+permissions:
+  contents: write
+concurrency:
+  group: desktop-native-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: desktop-native
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop-native/go.mod
+          cache-dependency-path: desktop-native/go.sum
+      - name: Test (backend + headless UI)
+        run: go test ./...
+      - name: Version from the tag
+        id: ver
+        run: |
+          tag="$GITHUB_REF_NAME"
+          case "$tag" in desktop-native-v[0-9]*) ;; *) echo "bad tag: $tag"; exit 1;; esac
+          ver="${tag#desktop-native-v}"
+          cfg=cmd/radar-native/mygo.json
+          # CI signs updates from the secret (env), not the local key file path
+          jq --arg v "$ver" '.version = $v | del(.updates.privateKey)' "$cfg" > "$RUNNER_TEMP/m.json" && mv "$RUNNER_TEMP/m.json" "$cfg"
+          grep -q "^## $ver" CHANGELOG.md || { echo "CHANGELOG.md has no '## $ver' section"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"; echo "ver=$ver" >> "$GITHUB_OUTPUT"
+      - name: Build (darwin/universal .app + .dmg)
+        working-directory: desktop-native/cmd/radar-native
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
+          test -n "$MYGO_UPDATER_PRIVATE_KEY" || { echo "MYGO_UPDATER_PRIVATE_KEY secret missing"; exit 1; }
+          go tool mygo build -platform darwin/universal
+      - name: Verify + collect
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          d=build/darwin-universal; app="$d/AI News Radar.app"
+          ls -la "$d"
+          lipo -info "$app/Contents/MacOS/"*
+          codesign --verify --deep --strict --verbose=2 "$app" || echo "codesign verify failed (ad-hoc build)"
+          mkdir -p dist
+          dmg=$(ls "$d"/*.dmg 2>/dev/null | head -1 || true)
+          if [ -n "$dmg" ]; then hdiutil verify "$dmg"; cp "$dmg" "dist/AI-News-Radar-Native-$VER-macos-universal.dmg"
+          else (cd "$d" && ditto -c -k --keepParent "AI News Radar.app" "$GITHUB_WORKSPACE/desktop-native/dist/AI-News-Radar-Native-$VER-macos-universal.zip"); fi
+          ls "$d"/update-darwin-*.json >/dev/null 2>&1 || { echo "no update manifest (signing key?)"; exit 1; }
+          cp "$d"/update-darwin-*.json "$d"/*-darwin-*.tar.gz dist/
+          (cd dist && shasum -a 256 * > SHA256SUMS && cat SHA256SUMS)
+          ls -la dist
+      - name: Release notes
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          {
+            echo "## AI News Radar 原生版测试版 $VER（macOS，Apple Silicon + Intel 通用）"
+            echo
+            echo "用 Go + MyGo 原生界面重写的桌面版：不再内置 Node 服务和网页视图，安装包更小、占用内存更低。作者：Lang"
+            echo
+            echo "> ⚠️ **测试版**：本版本尚未在真实的 Mac 上完整测试（仅在 Linux 上做了自动化测试和截图检查），可能存在问题。欢迎反馈。"
+            echo
+            echo "**首次打开**：本版本未签名、未公证（ad-hoc），macOS 会提示“无法验证开发者”。"
+            echo "右键（或 Control-点按）App → 打开 → 再点“打开”；或在 系统设置 → 隐私与安全性 中点“仍要打开”。"
+            echo "也可以执行：\`xattr -dr com.apple.quarantine \"/Applications/AI News Radar.app\"\`"
+            echo
+            echo "**与旧版的关系**："
+            echo "- 已安装旧版（desktop-v*，网页窗口版）的用户 **不会** 被自动升级到本测试版，需要手动下载安装。"
+            echo "- 原生版与旧版是同一个 App（同名同标识），安装会替换 /Applications 中的旧版；如需保留旧版，请先备份。"
+            echo "- 首次启动会自动导入旧版的数据源、分区、过滤规则、已读记录和设置（只读复制，旧数据不改动）。"
+            echo "- 测试版标记为 prerelease，App 内的自动更新不会检查测试版。"
+            echo
+            notes=$(awk -v v="$VER" '$0 ~ "^## \\[?"v"\\]?" {on=1; next} /^## / {on=0} on' CHANGELOG.md)
+            if [ -n "$notes" ]; then echo "### 更新内容"; echo "$notes"; echo; fi
+            echo "校验：\`shasum -a 256 -c SHA256SUMS\`"
+          } > dist/NOTES.md
+          cat dist/NOTES.md
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          files=$(ls dist/* | grep -v NOTES.md)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" $files --clobber
+            gh release edit "$TAG" --notes-file dist/NOTES.md --prerelease --title "原生版测试版 $VER"
+          else
+            gh release create "$TAG" $files --title "原生版测试版 $VER" --notes-file dist/NOTES.md --prerelease --target "$GITHUB_SHA"
+          fi

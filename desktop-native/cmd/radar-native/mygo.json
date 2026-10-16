@@ -1,0 +1,19 @@
+{
+  "name": "AI News Radar",
+  "identifier": "com.iferrnil.ainewsradar",
+  "version": "0.4.0",
+  "copyright": "© 2026 Lang",
+  "icon": "icon.png",
+  "out": "../../build",
+  "macos": {
+    "minimumSystemVersion": "12.0",
+    "infoPlist": { "LSApplicationCategoryType": "public.app-category.news" }
+  },
+  "updates": {
+    "publicKey": "5x4DDfyHk/05QWtgZv4c0MTda56ef9hH6uyLLnNLaAY=",
+    "privateKey": "~/.config/ai-news-radar/update-keys/mygo-update.key",
+    "github": "iferrnil/ai-news-radar",
+    "tagPrefix": "desktop-native-v",
+    "changelog": "../../CHANGELOG.md"
+  }
+}

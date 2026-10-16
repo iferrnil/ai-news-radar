@@ -1,0 +1,4 @@
+/build/
+/radar-native
+/radar-cli
+*.test
