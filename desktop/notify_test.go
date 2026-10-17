@@ -76,4 +76,3 @@ func TestDigestText(t *testing.T) {
 		t.Fatal(title)
 	}
 }
-

@@ -12,9 +12,9 @@ func row(id int, title, url string, src int, pub float64) *Row {
 func TestBriefDedupe(t *testing.T) {
 	rs := []*Row{
 		row(1, "OpenAI releases GPT-6 with 1M context", "https://openai.com/blog/gpt-6?utm_source=x", 1, 100),
-		row(2, "OpenAI releases GPT-6 with 1M context - The Verge", "https://theverge.com/a", 2, 99),   // same title + publisher tail
+		row(2, "OpenAI releases GPT-6 with 1M context - The Verge", "https://theverge.com/a", 2, 99), // same title + publisher tail
 		row(3, "Something else", "https://openai.com/blog/gpt-6", 3, 98),                             // same URL (utm dropped)
-		row(4, "OpenAI releases GPT‑6, with a 1M-token context", "https://techcrunch.com/b", 4, 97), // near-identical
+		row(4, "OpenAI releases GPT‑6, with a 1M-token context", "https://techcrunch.com/b", 4, 97),  // near-identical
 		row(5, "谷歌发布 Gemini 3 多模态模型", "https://a.cn/1", 5, 96),
 		row(6, "谷歌发布Gemini 3多模态模型！", "https://b.cn/2", 6, 95),
 		row(7, "Anthropic raises Series F", "https://x.com/7", 7, 94),
