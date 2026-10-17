@@ -3,21 +3,19 @@ package radar
 import (
 	"encoding/json"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
-// 关键词提醒: the user's watch keywords (setting `watch`). Every stored item is matched once (items.kw = the matched
+// 关键词: the user's watch keywords (setting `watch`). Every stored item is matched once (items.kw = the matched
 // keywords, "\n"-joined; '' = checked, no match) — on insert, after a translation lands and for all retained items
-// when the list changes. The feed highlights items with kw; new matches go to the notifier's `keyword` channel
-// (native notification on desktop, opt-in web notification / toast on the web), deduped per item and per story.
+// when the list changes. Cards show the matched keywords as a tag; GET /api/items?kw=<keyword>|* filters to them.
+// (0.12.0 also sent keyword notifications; 0.13.0 dropped that channel — a stored `notify` flag is ignored.)
 
 type WatchPrefs struct {
 	Keywords      []string `json:"keywords"`
 	Scope         string   `json:"scope"` // "all" (title + content, default) | "title"
 	CaseSensitive bool     `json:"caseSensitive"`
-	Notify        bool     `json:"notify"`
 }
 
 const (
@@ -26,7 +24,7 @@ const (
 )
 
 func (s *Store) WatchPrefs() WatchPrefs {
-	p := WatchPrefs{Keywords: []string{}, Scope: "all", Notify: true}
+	p := WatchPrefs{Keywords: []string{}, Scope: "all"}
 	if v, ok := s.GetSetting("watch"); ok {
 		json.Unmarshal([]byte(v), &p)
 	}
@@ -67,15 +65,12 @@ func cleanKeywords(in []any, cs bool) []string {
 	return out
 }
 
-// SetWatchPrefs merges a PATCH {keywords?, scope?, caseSensitive?, notify?}; returns whether matching changed.
+// SetWatchPrefs merges a PATCH {keywords?, scope?, caseSensitive?}; returns whether matching changed.
 func (s *Store) SetWatchPrefs(m map[string]any) (WatchPrefs, bool) {
 	cur := s.WatchPrefs()
 	next := cur
 	if v, ok := m["caseSensitive"].(bool); ok {
 		next.CaseSensitive = v
-	}
-	if v, ok := m["notify"].(bool); ok {
-		next.Notify = v
 	}
 	if v, ok := m["scope"].(string); ok && (v == "all" || v == "title") {
 		next.Scope = v
@@ -212,70 +207,4 @@ func kwList(v string) []string {
 		return nil
 	}
 	return strings.Split(v, "\n")
-}
-
-// ---- notification dedupe: one alert per item, and per story (same URL / near-identical title) for 24 h
-
-type kwSeen struct {
-	key briefKey
-	at  time.Time
-}
-
-// kwTopics maps item id → the ids of its 热点 topic (other sources' reports of the same event), computed only
-// when a poll brings keyword matches.
-func (n *notifier) kwTopics(fresh []*Row) map[int64][]int64 {
-	for _, i := range fresh {
-		if k, _ := i.Get("kw").([]string); len(k) > 0 {
-			m := map[int64][]int64{}
-			for _, tp := range n.s.hotTopics(now()) {
-				for _, id := range tp.Items {
-					m[id] = tp.Items
-				}
-			}
-			return m
-		}
-	}
-	return nil
-}
-
-func (n *notifier) kwDuplicate(r *Row, topics map[int64][]int64) bool {
-	k := keyOf(r)
-	id := int64(r.Num("id"))
-	cut := time.Now().Add(-24 * time.Hour)
-	if n.kwIDs == nil {
-		n.kwIDs = map[int64]time.Time{}
-	}
-	for x, at := range n.kwIDs {
-		if at.Before(cut) {
-			delete(n.kwIDs, x)
-		}
-	}
-	_, seenItem := n.kwIDs[id]
-	topicSeen := false
-	for _, peer := range topics[id] {
-		if _, ok := n.kwIDs[peer]; ok && peer != id {
-			topicSeen = true
-			break
-		}
-	}
-	n.kwIDs[id] = time.Now()
-	if seenItem || topicSeen {
-		return true
-	}
-	keep := n.kwSeen[:0]
-	dup := false
-	for _, x := range n.kwSeen {
-		if x.at.Before(cut) {
-			continue
-		}
-		keep = append(keep, x)
-		if !dup && sameStory(k, x.key) {
-			dup = true
-		}
-	}
-	n.kwSeen = keep
-	if !dup {
-		n.kwSeen = append(n.kwSeen, kwSeen{k, time.Now()})
-	}
-	return dup
 }

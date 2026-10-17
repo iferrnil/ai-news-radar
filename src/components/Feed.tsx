@@ -11,7 +11,7 @@ const HOVER_Q = "(hover: hover) and (pointer: fine)";
 function useCanHover() {
   return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
 }
-import { ArrowUp, ArrowUpRight, BellRing, Check, CheckCheck, CircleDot, FileText, Inbox, ListChecks, PenLine, RefreshCw, Star, WifiOff, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, CheckCheck, CircleDot, FileText, Inbox, ListChecks, PenLine, RefreshCw, Star, Tag, WifiOff, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { markOnHover } from "./read-store";
@@ -59,20 +59,20 @@ const BLEED = "-mx-4 px-4 sm:-mx-6 sm:px-6 xl:-mx-8 xl:px-8 2xl:-mx-10 2xl:px-10
 const CARD_H = "h-[208px]"; // slightly denser cards without redesign
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
-const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onFav, hover, pick = 0 }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; onFav: (it: ItemOut) => void; hover: boolean; pick?: 0 | 1 | 2 | 3 }) {
+const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onFav, onKw, hover, pick = 0 }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; onFav: (it: ItemOut) => void; onKw: (k: string) => void; hover: boolean; pick?: 0 | 1 | 2 | 3 }) {
   // pick: 0 not selecting · 1 selectable · 2 selected · 3 selection full
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (active) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [active]);
   const x = !!it.is_x, h = x ? handleOf(it) : null, t = x ? xText(it) : "";
   const linkOnly = x && /^https?:\/\//.test(t);
   const dek = x ? "" : dekText(it.summary);
-  const kw = it.kw?.length ? it.kw : null; // 关键词提醒 match
+  const kw = it.kw?.length ? it.kw : null; // 关键词 matches (tag; click = filter)
   const card = (
     <div ref={ref} data-slot="card" data-size="sm" onClickCapture={pick ? (e) => { e.preventDefault(); e.stopPropagation(); onOpen(it); } : undefined} onClick={() => onOpen(it)} data-active={active} data-read={read} data-item={it.id} role="button" tabIndex={-1}
       data-picked={pick === 2 || undefined} aria-pressed={pick ? pick === 2 : undefined} data-kw={kw ? "" : undefined}
       className={cn(CARD_H, "feed-card group/item relative flex flex-col overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 cursor-pointer gap-0 py-0 shadow-feed ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
         "hover:-translate-y-px hover:ring-foreground/[0.14] hover:shadow-raised",
-        "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/55", fresh && "fresh-row", kw && "ring-amber-500/45 dark:ring-amber-400/40",
+        "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/55", fresh && "fresh-row",
         pick === 2 && "ring-2 ring-brand", pick === 3 && "opacity-50")}>
       {pick > 0 && (
         <span data-testid="pick-mark" role="checkbox" aria-checked={pick === 2} aria-label="选择"
@@ -110,7 +110,13 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onFav
       <div className="flex h-9 shrink-0 items-center gap-1.5 border-t border-border/40 px-3.5 type-meta text-faint">
         <Badge size="sm" variant="outline" className="text-muted-foreground"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>
         {it.also_on_x.length > 0 && <Badge size="sm" variant="muted" className="min-w-0"><Twitter />也在 X</Badge>}
-        {kw && <Badge size="sm" variant="outline" data-testid="kw-badge" title={`关键词：${kw.join("、")}`} className="min-w-0 border-amber-500/40 text-amber-700 dark:text-amber-300"><BellRing /><span className="truncate">{kw.join(" · ")}</span></Badge>}
+        {kw && (
+          <Badge size="sm" variant="outline" data-testid="kw-badge" className="min-w-0 gap-0.5 border-amber-500/40 text-amber-700 dark:text-amber-300">
+            <Tag />{kw.map((k, i) => (
+              <button key={k} type="button" title={`只看「${k}」`} onClick={(e) => { e.stopPropagation(); onKw(k); }} className={cn("truncate rounded-sm hover:underline", i > 0 && "before:mr-0.5 before:content-['·']")}>{k}</button>
+            ))}
+          </Badge>
+        )}
         {!pick && (
           <button type="button" onClick={(e) => { e.stopPropagation(); onFav(it); }} aria-label={it.fav ? "取消收藏" : "收藏"} aria-pressed={!!it.fav} data-testid="fav-btn"
             className={cn("ml-auto grid size-6 shrink-0 place-items-center rounded-md transition-[opacity,background-color,color] duration-150 ease-out hover:bg-secondary",
@@ -240,7 +246,7 @@ function FeedList() {
         if (id) { const flip = (c: ItemOut[]) => c.map((x) => (x.id === id ? { ...x, fav: !!on } : x)); setItems(flip); setPending(flip); }
         if (favModeRef.current && (imp || (id && on))) void loadFav();
         else if (id && !on) setFavRaw((c) => (c ? c.map((x) => (x.id === id ? { ...x, fav: false } : x)) : c));
-      } else if (ev === "watch") { // keyword list changed: highlights re-matched server-side
+      } else if (ev === "watch") { // keyword list changed: tags re-matched server-side
         void load(); if (favModeRef.current) void loadFav();
       } else if (ev === "removed") {
         pendingUpd.delete(d.id);
@@ -338,6 +344,10 @@ function FeedList() {
   });
 
   const p0n = countOf(items, { ...f, p0: true, unread: false });
+  // 关键词 filter chip: shown once some item matches a keyword (or a filter is on); click = any keyword / off
+  const onKw = useCallback((k: string) => setF({ kw: f.kw === k ? "" : k }), [setF, f.kw]);
+  const hasKw = useMemo(() => !!f.kw || items.some((it) => it.kw?.length), [items, f.kw]);
+  const kwN = hasKw ? countOf(items, { ...f, kw: f.kw || "*", unread: false }) : 0;
   const lastFetch = Math.max(0, ...sources.filter((s) => s.enabled).map((s) => s.last_fetched ?? 0));
 
   return (
@@ -360,11 +370,19 @@ function FeedList() {
           <CircleDot className="size-3.5" /><span className="hidden sm:inline">只看未读</span><span className="sm:hidden">未读</span>
           <Badge size="sm" variant="muted" data-testid="unread-total" className="px-1 font-mono tabular-nums text-faint">{unreadN}</Badge>
         </Toggle>
+        {hasKw && (
+          <Toggle variant="outline" pressed={!!f.kw} onPressedChange={(v) => setF({ kw: v ? "*" : "" })} data-testid="kw-filter" aria-label="只看命中关键词"
+            title={f.kw && f.kw !== "*" ? `只看「${f.kw}」· 点击取消` : "只看命中关键词的内容"}
+            className="max-w-48 gap-1.5 type-caption text-muted-foreground aria-pressed:border-amber-500/40 aria-pressed:bg-amber-500/10 aria-pressed:text-amber-700 dark:aria-pressed:text-amber-300">
+            <Tag className="size-3.5" />{f.kw && f.kw !== "*" ? <span className="truncate">{f.kw}</span> : <span className="hidden sm:inline">关键词</span>}
+            <Badge size="sm" variant="muted" className="px-1 font-mono tabular-nums text-faint">{kwN}</Badge>
+          </Toggle>
+        )}
         <Tooltip>
           <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={markAll} disabled={!unreadN} aria-label="全部标为已读" className="px-1.5 type-caption font-normal text-faint" />}>
             <CheckCheck className="size-3.5" /><span className="hidden md:inline">全部已读</span>
           </TooltipTrigger>
-          <TooltipContent>将当前视图（{f.source != null ? "此来源" : f.section ? "此分区" : "全部"}{f.p0 ? " · 仅 P0" : ""}）的 {unreadN} 条标为已读</TooltipContent>
+          <TooltipContent>将当前视图（{f.source != null ? "此来源" : f.section ? "此分区" : "全部"}{f.p0 ? " · 仅 P0" : ""}{f.kw ? " · 关键词" : ""}）的 {unreadN} 条标为已读</TooltipContent>
         </Tooltip>
         {briefScope && (
           <div className="flex items-center gap-0.5" data-testid="brief-tools">
@@ -411,13 +429,14 @@ function FeedList() {
       ) : loading || !secReady || (favMode && favRaw == null) ? (
         <div className={cn(GRID, "mt-4")}>{Array.from({ length: 12 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>
       ) : view.length === 0 && favMode ? (
-        <EmptyState icon={Star} className="mt-6 rounded-xl border border-dashed py-14" title={f.unread || f.p0 ? "没有符合条件的收藏" : "还没有收藏"} hint="在卡片或详情里点 ☆ 收藏选题；收藏的内容不会被 48 小时清理。" />
+        <EmptyState icon={Star} className="mt-6 rounded-xl border border-dashed py-14" title={f.unread || f.p0 || f.kw ? "没有符合条件的收藏" : "还没有收藏"} hint="在卡片或详情里点 ☆ 收藏选题；收藏的内容不会被 48 小时清理。" />
       ) : view.length === 0 ? (
         <EmptyState icon={Inbox} className="mt-6 rounded-xl border border-dashed py-14"
-          title={f.unread && scope.length ? "全部读完了" : f.p0 ? "这里 48 小时内没有 P0 内容" : f.section || f.source != null ? "这里 48 小时内还没有内容" : "这里暂时很安静"}
+          title={f.kw && !(f.unread && scope.length) ? "没有命中关键词的内容" : f.unread && scope.length ? "全部读完了" : f.p0 ? "这里 48 小时内没有 P0 内容" : f.section || f.source != null ? "这里 48 小时内还没有内容" : "这里暂时很安静"}
           hint={f.unread && scope.length ? "新内容会实时推送到这里。" : f.section || f.source != null || f.p0 ? "新内容会实时推送到这里。" : "首次启动需要等待一轮抓取，新内容会实时推送到这里。"}>
           {f.unread && <Button variant="outline" size="sm" onClick={() => setF({ unread: false })}>显示已读</Button>}
           {f.p0 && <Button variant="outline" size="sm" onClick={() => setF({ p0: false })}>取消仅 P0</Button>}
+          {f.kw && <Button variant="outline" size="sm" onClick={() => setF({ kw: "" })}>取消关键词筛选</Button>}
           {(f.section || f.source != null) && <Button variant="ghost" size="sm" onClick={() => setF({ section: "", source: null })}>查看全部</Button>}
         </EmptyState>
       ) : (
@@ -429,7 +448,7 @@ function FeedList() {
             <div className={GRID}>
               {g.items.map((it) => {
                 const i = idx.get(it.id)!;
-                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={onCard} onFav={onFav} hover={canHover} pick={pickOf(it.id)} />;
+                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={onCard} onFav={onFav} onKw={onKw} hover={canHover} pick={pickOf(it.id)} />;
               })}
             </div>
           </section>

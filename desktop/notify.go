@@ -1,7 +1,7 @@
 package main
 
 // Native notifications: the shell listens to the bundled server's SSE stream (/api/stream) for `notify` (new P0
-// items), `digest` (every new subscription item) or `keyword` (关键词提醒 matches) batches — already batched, throttled and free of start-up
+// items) or `digest` (every new subscription item) batches — already batched, throttled and free of start-up
 // backlog, see src/lib/notify.ts — reads the user's prefs from /api/settings and shows one system notification
 // per batch ("新增 N 条" + top titles). Clicking it focuses the app and opens the item.
 
@@ -18,18 +18,16 @@ import (
 )
 
 type notifyItem struct {
-	ID       int64    `json:"id"`
-	Title    string   `json:"title"`
-	Source   string   `json:"source"`
-	Section  *string  `json:"section"`
-	Keywords []string `json:"keywords"` // keyword batches: the watch keywords the item matched
+	ID      int64   `json:"id"`
+	Title   string  `json:"title"`
+	Source  string  `json:"source"`
+	Section *string `json:"section"`
 }
 
 type notifyBatch struct {
 	Count  int          `json:"count"`
 	Items  []notifyItem `json:"items"`
 	Digest bool         `json:"-"` // every new item, not only P0
-	Kw     bool         `json:"-"` // 关键词提醒
 }
 
 type notifyPrefs struct {
@@ -41,13 +39,7 @@ type notifyPrefs struct {
 
 // wants reports whether an SSE event should become a system notification under these prefs.
 func (p notifyPrefs) wants(event string) bool {
-	if p.System != nil && !*p.System {
-		return false
-	}
-	if event == "keyword" { // independent of the P0 switch; the server only sends them when 关键词提醒 is on
-		return true
-	}
-	if !p.Enabled {
+	if !p.Enabled || (p.System != nil && !*p.System) {
 		return false
 	}
 	if p.Scope == "all" {
@@ -58,7 +50,7 @@ func (p notifyPrefs) wants(event string) bool {
 
 // filterBatch keeps the items of the chosen sections; nil when nothing is left.
 func filterBatch(b notifyBatch, sections []string) *notifyBatch {
-	if len(sections) == 0 || b.Kw {
+	if len(sections) == 0 {
 		return &b
 	}
 	var items []notifyItem
@@ -78,14 +70,11 @@ func filterBatch(b notifyBatch, sections []string) *notifyBatch {
 	if len(items) < len(b.Items) {
 		n = len(items)
 	}
-	return &notifyBatch{Count: n, Items: items, Digest: b.Digest, Kw: b.Kw}
+	return &notifyBatch{Count: n, Items: items, Digest: b.Digest}
 }
 
 // batchText is the notification's title and body.
 func batchText(b notifyBatch) (title, body string) {
-	if b.Kw {
-		return kwText(b)
-	}
 	if b.Count == 1 && len(b.Items) == 1 {
 		if b.Digest {
 			return b.Items[0].Source, b.Items[0].Title
@@ -106,24 +95,6 @@ func batchText(b notifyBatch) (title, body string) {
 		return fmt.Sprintf("新增 %d 条", b.Count), strings.Join(lines, "\n")
 	}
 	return fmt.Sprintf("%d 条新 P0 动态", b.Count), strings.Join(lines, "\n")
-}
-
-func kwText(b notifyBatch) (title, body string) {
-	if b.Count == 1 && len(b.Items) == 1 {
-		it := b.Items[0]
-		return "关键词 · " + strings.Join(it.Keywords, " / "), it.Source + "：" + it.Title
-	}
-	var lines []string
-	for i, it := range b.Items {
-		if i == 3 {
-			break
-		}
-		lines = append(lines, "· ["+strings.Join(it.Keywords, "/")+"] "+it.Source+"："+it.Title)
-	}
-	if b.Count > 3 {
-		lines = append(lines, fmt.Sprintf("…还有 %d 条", b.Count-3))
-	}
-	return fmt.Sprintf("关键词提醒 %d 条", b.Count), strings.Join(lines, "\n")
 }
 
 // readSSE calls fn(event, data) for every event of an SSE stream until it ends.
@@ -182,7 +153,7 @@ func watchNotifications(ctx context.Context, base string, show func(notifyBatch)
 		if err == nil {
 			wait = time.Second
 			_ = readSSE(res.Body, func(event, data string) {
-				if event != "notify" && event != "digest" && event != "keyword" {
+				if event != "notify" && event != "digest" {
 					return
 				}
 				var msg struct {
@@ -195,7 +166,7 @@ func watchNotifications(ctx context.Context, base string, show func(notifyBatch)
 				if err != nil || !p.wants(event) {
 					return
 				}
-				msg.Batch.Digest, msg.Batch.Kw = event == "digest", event == "keyword"
+				msg.Batch.Digest = event == "digest"
 				if b := filterBatch(msg.Batch, p.Sections); b != nil {
 					show(*b)
 				}

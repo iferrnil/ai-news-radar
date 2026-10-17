@@ -22,6 +22,6 @@ export interface ItemOut {
   priority: Priority | null; homepage: string | null; username: string | null; grp: string | null; section: string | null;
   image?: string; // thumbnail (meme/video cover), only some API sources
   title_zh?: string; summary_zh?: string;
-  fav?: boolean; kw?: string[]; // 选题收藏夹 · 关键词提醒 matches
+  fav?: boolean; kw?: string[]; // 选题收藏夹 · matched 关键词 (tags / filter)
   tr?: boolean; orig?: { title: string; summary: string }; // client-side: set by localize() when showing the translation // only when requested with zh=1 and a translation exists
 }

@@ -1,9 +1,9 @@
 "use client";
-// 设置 › 关键词提醒: watch keywords matched server-side against every new item (title, or title + content). Matches
-// are highlighted in the feed; with 通知 on they also raise a notification (native on desktop; on the web the opt-in
-// web notification / toast). Editable when settings are locked, like the translation switches.
+// 设置 › 关键词: watch keywords matched server-side against every item (title, or title + content). Matching cards get a
+// keyword tag; the feed's 关键词 chip / a tag click filters to them. No notifications (removed in 0.13.0).
+// Editable when settings are locked, like the translation switches.
 import { useState } from "react";
-import { BellRing, Plus, X } from "lucide-react";
+import { Plus, Tag, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { api } from "./common";
 
-export type WatchPrefs = { keywords: string[]; scope: "all" | "title"; caseSensitive: boolean; notify: boolean };
+export type WatchPrefs = { keywords: string[]; scope: "all" | "title"; caseSensitive: boolean };
 
-export default function WatchCard({ initial, desktop }: { initial: WatchPrefs | null; desktop: boolean }) {
-  const [p, setP] = useState<WatchPrefs>(initial ?? { keywords: [], scope: "all", caseSensitive: false, notify: true });
+export default function WatchCard({ initial }: { initial: WatchPrefs | null }) {
+  const [p, setP] = useState<WatchPrefs>(initial ?? { keywords: [], scope: "all", caseSensitive: false });
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const save = async (next: Partial<WatchPrefs>) => {
@@ -33,8 +33,8 @@ export default function WatchCard({ initial, desktop }: { initial: WatchPrefs | 
   return (
     <Card className="mt-4" data-testid="watch-card">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><BellRing className="size-4 text-faint" />关键词提醒</CardTitle>
-        <CardDescription>新内容命中关键词时高亮{p.notify ? (desktop ? "并发送系统通知" : "并提醒（需开启网页通知）") : ""}</CardDescription>
+        <CardTitle className="flex items-center gap-2"><Tag className="size-4 text-faint" />关键词</CardTitle>
+        <CardDescription>命中的内容会带上关键词标签，可在信息流中筛选</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="flex gap-2">
@@ -52,10 +52,9 @@ export default function WatchCard({ initial, desktop }: { initial: WatchPrefs | 
             ))}
           </div>
         )}
-        <div className="grid gap-2.5 sm:grid-cols-3">
+        <div className="grid gap-2.5 sm:grid-cols-2">
           <Label className="gap-2 font-normal"><Switch size="sm" checked={p.scope === "title"} disabled={busy} onCheckedChange={(v) => void save({ scope: v ? "title" : "all" })} data-testid="watch-title" />只匹配标题</Label>
           <Label className="gap-2 font-normal"><Switch size="sm" checked={p.caseSensitive} disabled={busy} onCheckedChange={(v) => void save({ caseSensitive: !!v })} data-testid="watch-case" />区分大小写</Label>
-          <Label className="gap-2 font-normal"><Switch size="sm" checked={p.notify} disabled={busy} onCheckedChange={(v) => void save({ notify: !!v })} data-testid="watch-notify" />通知</Label>
         </div>
       </CardContent>
     </Card>

@@ -338,9 +338,9 @@ function Shell({ children }: { children: React.ReactNode }) {
     const es = new EventSource("/api/stream");
     es.onopen = () => setLive(true);
     es.onerror = () => setLive(false);
-    for (const ev of ["item", "update", "removed", "sources", "notify", "translate", "fav", "watch", "keyword"]) es.addEventListener(ev, (e) => {
+    for (const ev of ["item", "update", "removed", "sources", "notify", "translate", "fav"]) es.addEventListener(ev, (e) => {
       const d = JSON.parse((e as MessageEvent).data); listeners.current.forEach((fn) => fn(ev, d));
-      if ((ev === "notify" || ev === "keyword") && d.batch) handleBatch(d.batch, (id) => openByIdRef.current(id), ev === "keyword");
+      if (ev === "notify" && d.batch) handleBatch(d.batch, (id) => openByIdRef.current(id));
       if (ev === "item") reloadSourcesRef.current?.();
       if (ev === "sources") reloadNowRef.current?.();
       if (ev === "translate") reloadTrRef.current();

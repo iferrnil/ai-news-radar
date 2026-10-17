@@ -69,7 +69,6 @@ func (s *Store) Handler() http.Handler {
 	m.HandleFunc("GET /api/desktop/notify", s.hDesktopNotifyStatus)
 	m.HandleFunc("POST /api/desktop/notify-open-settings", s.hDesktopNotifyOpen)
 	m.HandleFunc("POST /api/desktop/open-data", s.hDesktopOpenData)
-	m.HandleFunc("POST /api/desktop/clipboard", s.hDesktopClipboard)
 	m.HandleFunc("GET /api/stats", s.hStats)
 	m.HandleFunc("POST /api/favorites", s.hFavoritePost)
 	m.HandleFunc("GET /api/favorites/export", s.hFavoritesExport)
@@ -255,6 +254,13 @@ func (s *Store) hItems(w http.ResponseWriter, r *http.Request) {
 		n, _ := jsNumber(v)
 		wh, a = append(wh, "i.published < ?"), append(a, n)
 	}
+	switch v := p.Get("kw"); v { // 关键词 filter: * = any keyword, otherwise one keyword (exact, as matched)
+	case "":
+	case "*":
+		wh = append(wh, "i.kw <> ''")
+	default:
+		wh, a = append(wh, "instr(char(10) || i.kw || char(10), char(10) || ? || char(10)) > 0"), append(a, v)
+	}
 	id := p.Get("id")
 	if id != "" {
 		n, _ := jsNumber(id)
@@ -423,6 +429,8 @@ func (s *Store) settingsOut(w http.ResponseWriter) {
 	out.Set("deepseek", s.deepseekPublic())
 	out.Set("notify", s.NotifyPrefs())
 	out.Set("watch", s.WatchPrefs())
+	lex, _ := s.GetSetting("hot_lexicon")
+	out.Set("hotLexicon", lex)
 	out.Set("desktop", s.Cfg.Desktop)
 	if s.Cfg.Desktop {
 		out.Set("dataDir", filepath.Dir(s.Cfg.DBPath))
@@ -476,6 +484,21 @@ func (s *Store) hSettingsPatch(w http.ResponseWriter, r *http.Request) {
 		s.updateDeepseek(p)
 		s.tr.resetAuth()
 	}
+	if v, ok := b["hotLexicon"].(string); ok {
+		// 热点 name lexicon: changes how every visitor's topics are grouped, so not under SETTINGS_LOCKED
+		if SettingsLocked() {
+			detail(w, 403, "设置已锁定（SETTINGS_LOCKED=1）")
+			return
+		}
+		if len(v) > 20000 {
+			detail(w, 400, "词表过长")
+			return
+		}
+		s.SetSetting("hot_lexicon", userLexiconText(parseUserLexicon(v)))
+		hotCache.Lock()
+		hotCache.topics = nil
+		hotCache.Unlock()
+	}
 	if n, ok := b["notify"].(map[string]any); ok {
 		if SettingsLocked() {
 			detail(w, 403, "设置已锁定（SETTINGS_LOCKED=1）")
@@ -494,7 +517,7 @@ func (s *Store) hSettingsPatch(w http.ResponseWriter, r *http.Request) {
 		s.SetNotifyPrefs(en, secs, sys, scope)
 	}
 	if wv, ok := b["watch"].(map[string]any); ok {
-		// 关键词 are the user's own view / alert control like the translation switches (allowed under SETTINGS_LOCKED)
+		// 关键词 are the user's own view / filter like the translation switches (allowed under SETTINGS_LOCKED)
 		if _, changed := s.SetWatchPrefs(wv); changed {
 			s.rematchAll()
 		}

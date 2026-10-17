@@ -2,7 +2,7 @@
 
 # AI News Radar · AI 新闻雷达
 
-**自托管、近实时的 AI 资讯雷达**：精选信息源按优先级轮询，SSE 实时推送，热点聚合、关键词提醒；macOS 桌面版另有 AI 简报与一键写稿。
+**自托管、近实时的 AI 资讯雷达**：精选信息源按优先级轮询，SSE 实时推送，热点聚合、关键词标签与筛选；macOS 桌面版另有 AI 简报与一键写稿。
 
 [![CI](https://github.com/iferrnil/ai-news-radar/actions/workflows/ci.yml/badge.svg)](https://github.com/iferrnil/ai-news-radar/actions/workflows/ci.yml)
 [![macOS 下载](https://img.shields.io/github/v/release/iferrnil/ai-news-radar?filter=desktop-v%2A&label=macOS%20%E4%B8%8B%E8%BD%BD&logo=apple)](https://github.com/iferrnil/ai-news-radar/releases/latest)
@@ -21,10 +21,10 @@
 网页版与桌面版共有：
 
 - **信息流**：22 个内置源（RSS/Atom、JSON API、X 账号经 FxEmbed，无需 X API），P0 每 2–5 分钟轮询，条件请求；新内容经 SSE 实时出现
-- **热点**：多个来源报道的同一事件合并为一个热点，显示来源数、首发来源与时间、24 小时报道量走势，按热度排序；可展开查看每条报道、一键生成简报
-- **关键词提醒**：在设置里添加关注词（如 GPT-6、DeepSeek），可选只匹配标题、区分大小写；命中的条目在信息流里高亮，同一事件只提醒一次
+- **热点**：多个来源报道的同一事件合并为一个热点，显示来源数、首发来源与时间、24 小时报道量走势，按热度排序；可展开查看每条报道。纯规则计算，不调用模型（规则见下文「热点规则」）
+- **关键词**：在设置里添加关注词（如 GPT-6、DeepSeek），可选只匹配标题、区分大小写；命中的条目带关键词标签，点标签或工具栏的「关键词」只看命中的内容
 - **收藏**：卡片或详情里加星，侧栏「收藏」集中查看；收藏的条目不受 48 小时清理，随订阅 JSON 一起导出 / 导入
-- **通知**：P0 新动态与关键词命中按批合并推送；桌面版为系统通知，网页版可选浏览器通知
+- **通知**：P0 新动态按批合并推送；桌面版为系统通知，网页版可选浏览器通知
 - **阅读**：已读 / 未读、只看未读、悬停预览、⌘K 命令面板、J/K 键盘导航、深浅色、移动端
 - **数据源管理**：添加（网站 URL 自动发现 RSS、@用户名、X 列表）、自定义分区、正则过滤规则、健康度与熔断；JSON / OPML 导入导出
 - **翻译（可选）**：配置 DeepSeek key 后翻译外文标题与摘要
@@ -34,7 +34,6 @@
 - **简报**：自动 / 手动（最多 10 条），先取原文全文再核对事实；可换用自己的 Skill
 - **生成文章**：选 1–2 条（或从热点、收藏里选），按推特串推 / 公众号 / 小红书 Skill 写成稿件；程序检查标题字数、禁用词和链接，问题显示在文章上方
 - **写作风格**：每个平台导入几篇自己的旧文（粘贴、.md / .txt 或网址），提炼成可编辑的风格档案，写稿时模仿语气，不搬运样本里的事实
-- **一键复制**：公众号复制为带内联样式的富文本（粘贴进公众号编辑器保留格式）；小红书分别复制标题、正文、话题；推特复制整串或单条
 - **抓取 API**：Jina Reader / Firecrawl / crawl4ai，自抓失败时依次补抓原文，显示剩余额度
 - 原生窗口、菜单栏图标、自动更新（签名校验，支持增量包）
 
@@ -44,7 +43,7 @@
 |---|---|
 | ![深色信息流](docs/screenshots/feed_dark.png) | ![热点](docs/screenshots/hot.png) |
 | ![浅色信息流](docs/screenshots/feed_light.png) | ![详情抽屉](docs/screenshots/drawer.png) |
-| ![关键词提醒设置](docs/screenshots/settings_watch.png) | ![数据源管理](docs/screenshots/sources_dark.png) |
+| ![关键词筛选](docs/screenshots/feed_keyword.png) | ![数据源管理](docs/screenshots/sources_dark.png) |
 | ![导入预览](docs/screenshots/sources_import.png) | <img src="docs/screenshots/feed_mobile.png" width="260" alt="移动端"> |
 
 ## 下载
@@ -97,7 +96,7 @@ server/bin/radar-server -ui out                           # http://localhost:300
 | `NEWS_DB` | `./data/news.db` | SQLite 路径 |
 | `SOURCES_JSON` | `./sources/sources.json` | 内置源目录（启动时同步，不覆盖你在界面上的修改；`SYNC_SEED=0` 关闭同步） |
 | `RETENTION_HOURS` / `SEEN_DAYS` | `48` / `30` | 内容保留时长 / 已见 ID 保留天数（收藏不受清理） |
-| `SETTINGS_LOCKED` | 本地 `0`，Docker `1` | `1` = 锁定站内密钥类设置（不能在网页里保存 / 测试 key，不能导入收藏）；关键词、收藏、翻译开关仍可用 |
+| `SETTINGS_LOCKED` | 本地 `0`，Docker `1` | `1` = 锁定站内密钥类设置（不能在网页里保存 / 测试 key，不能导入收藏，不能改热点词表）；关键词、收藏、翻译开关仍可用 |
 | `DEEPSEEK_API_KEY` | 空 | 翻译用；也可在「设置」里填写（存于数据目录 `secrets.json`，0600） |
 | `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | `https://api.deepseek.com` / `deepseek-chat` | 兼容 OpenAI 接口的模型服务 |
 | `TRANSLATE_BATCH` / `TRANSLATE_CONCURRENCY` / `TRANSLATE_SUMMARY_CHARS` | `10` / `2` / `1500` | 翻译批大小、并发、摘要截断 |
@@ -106,14 +105,14 @@ server/bin/radar-server -ui out                           # http://localhost:300
 | `FX_MIRRORS` / `FX_TIMEOUT_MS` / `FX_TRIES` | `https://api.fxtwitter.com/2` / `12000` / `3` | FxEmbed 镜像（逗号分隔，依次故障转移）、超时、重试 |
 | `BREAK_AFTER` | `5` | 连续失败多少次后熔断 |
 | `NOTIFY_BATCH_MS` / `NOTIFY_MIN_GAP_MS` / `NOTIFY_MAX_AGE` | `20000` / `60000` / `10800` | P0 通知合并窗口、最小间隔（毫秒）、只通知多少秒内的内容 |
-| `KW_NOTIFY_BATCH_MS` / `KW_NOTIFY_MIN_GAP_MS` | `5000` / `15000` | 关键词提醒的合并窗口与间隔 |
 | `DISABLE_POLLER` | `0` | `1` = 只提供网页、不抓取 |
 | `HOST_PORT` / `DATA_DIR` | `3080` / `./data` | 仅 docker compose |
 
 站内「设置」页：
 
 - **通知**：P0 通知开关与分区；网页版需授权浏览器通知（页面在前台时只显示站内提示）。
-- **关键词提醒**：关注词列表、只匹配标题、区分大小写、是否通知。修改后立即重新匹配已有内容。
+- **关键词**：关注词列表、只匹配标题、区分大小写。修改后立即重新匹配已有内容；信息流按 `?kw=` 筛选（`*` = 任一关键词）。
+- **热点词表**：补充热点用的产品 / 公司名，每行一个，别名用 `=` 连接（如 `元宝=Yuanbao=腾讯元宝`）；设置锁定时不显示。
 - **DeepSeek**：key、Base URL、模型，带测试连接；任何接口和日志都只显示“已配置”。
 - **抓取 API**（桌面版）：Jina Reader（Base URL 可改，国内可用 `https://r.jinaai.cn`）、Firecrawl、crawl4ai 三个 key，掩码保存；按 Jina → Firecrawl → crawl4ai 顺序补抓，额度用尽或限流时自动换下一个。
 - **图片模型**（桌面版，可选）：为公众号 / 小红书文章生成封面。
@@ -128,6 +127,16 @@ server/bin/radar-server -ui out                           # http://localhost:300
 ├── 文章/2026-10-17/223310-标题.md（封面图在旁边）
 └── 缓存/            # 原文全文与生成的封面，24 小时后清理
 ```
+
+## 热点规则
+
+热点完全由程序规则计算（`server/radar/hot.go`、`hotlex.go`），不调用模型、不消耗 token：
+
+- **名称**：从标题和摘要开头提取产品 / 模型 / 公司名（大写、带数字或版本号的词）。中文用内置词表按最长匹配识别（豆包、可灵、通义千问、文心、元宝、混元、智谱、月之暗面、字节跳动、阿里、腾讯、百度、华为、商汤、MiniMax / 海螺、阶跃、零一万物等），并与英文名对应：字节跳动 = ByteDance，通义千问 / 千问 = Qwen，月之暗面 = Moonshot / Kimi，智谱 = Zhipu / GLM，文心 = ERNIE，可灵 = Kling。版本写法统一：GPT-6、GPT 6、gpt6 是同一个名字。设置里的「热点词表」可以补充。
+- **主体**：两条内容只有在共同名称是双方的主体时才合并：出现在两边的标题里，或在一边的标题里、另一边的开头重复出现。比较对象不算（「超过 GPT-6」「beats Claude」之后的名称）。
+- **不串联**：同一热点里的每条报道都要提到同一个核心名称，且至少一半以它为主体，A 像 B、B 像 C 不会把 A 和 C 拉进同一个热点；只共享核心名称的同一事件片段会重新合并。
+- **热度**：官方 / 第一方来源 1.5，文章 1，X 转述账号 0.7，非 P0 来源再 ×0.6；同一来源的后续报道 ×0.3；12 小时半衰。最近 1 小时的报道另外加分，集中爆发的事件显示「飙升」。
+- **首发**：每个热点的首发报道（来源、时间、标题、链接）另存 7 天，条目被 48 小时清理后仍能看到最早的报道者。
 
 ## 文章 Skill
 
@@ -180,7 +189,7 @@ flowchart LR
 
 ## English
 
-AI News Radar is a self-hosted, near-real-time AI news radar: a single pure-Go server (SQLite) with a static Next.js UI. Curated sources polled by priority, live SSE updates, multi-source hot topics, keyword alerts, favorites, and notifications. The macOS desktop app adds AI briefs, article drafts for X / WeChat / Xiaohongshu with your own writing style, and rich-text copy. Quick start: `docker compose up -d`, then open http://localhost:3080.
+AI News Radar is a self-hosted, near-real-time AI news radar: a single pure-Go server (SQLite) with a static Next.js UI. Curated sources polled by priority, live SSE updates, multi-source hot topics (rule-based, with a Chinese / English name lexicon), keyword tags and filters, favorites, and notifications. The macOS desktop app adds AI briefs and article drafts for X / WeChat / Xiaohongshu in your own writing style. Quick start: `docker compose up -d`, then open http://localhost:3080.
 
 ## License
 

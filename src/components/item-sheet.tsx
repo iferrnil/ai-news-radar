@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { BellRing, ExternalLink, Star } from "lucide-react";
+import { ExternalLink, Star, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ const translated = new Map<number, ItemOut>(); // per-item translations fetched 
 
 // Item drawer, code-split: mounted after the first item is opened.
 export default function ItemSheet() {
-  const { open, setOpen, tr, onStream } = useApp();
+  const { open, setOpen, tr, onStream, f, setF } = useApp();
   // 收藏: local state, kept in sync with the SSE "fav" events (cards / other windows)
   const [fav, setFavOn] = useState(false);
   useEffect(() => { setFavOn(!!open?.fav); }, [open?.id, open?.fav]);
@@ -65,7 +65,10 @@ export default function ItemSheet() {
               <div className="flex flex-wrap gap-1.5">
                 {it.priority && <Badge variant={it.priority === "P0" ? "brand" : "outline"}>{it.priority}</Badge>}
                 <Badge variant="secondary"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>
-                {!!it.kw?.length && <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300"><BellRing />{it.kw.join(" · ")}</Badge>}
+                {it.kw?.map((k) => (
+                  <Badge key={k} variant="outline" data-testid="kw-tag" title={`只看「${k}」`} className="cursor-pointer border-amber-500/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                    render={<button type="button" onClick={() => { setOpen(null); setF({ kw: k, ...(f.view === "hot" ? { view: "" as const } : {}) }); }} />}><Tag />{k}</Badge>
+                ))}
                 {it.tr && <Badge variant="secondary" title="DeepSeek 机器翻译，原文见下方">译</Badge>}
                 {tr?.available && (
                   <Label className="ml-auto gap-1.5 type-caption font-normal text-muted-foreground">

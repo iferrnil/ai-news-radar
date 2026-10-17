@@ -1,5 +1,5 @@
 "use client";
-// 设置, grouped cards: 常规 · 通知 · 翻译 / AI (DeepSeek key, base URL, model, test) · Skills / 多模态 / 抓取 API / 工作目录 (desktop) · 数据 (+ 更新, desktop) · 关于.
+// 设置, grouped cards: 常规 · 通知 · 关键词 · 热点词表 (not when locked) · 翻译 / AI (DeepSeek key, base URL, model, test) · Skills / 多模态 / 抓取 API / 工作目录 (desktop) · 数据 (+ 更新, desktop) · 关于.
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -18,13 +18,14 @@ const SkillCard = dynamic(() => import("./settings-skill"), { ssr: false });
 const MultimodalCard = dynamic(() => import("./settings-media").then((m) => m.MultimodalCard), { ssr: false });
 const ArtifactsCard = dynamic(() => import("./settings-media").then((m) => m.ArtifactsCard), { ssr: false });
 const WatchCard = dynamic(() => import("./settings-watch"), { ssr: false });
+const HotLexCard = dynamic(() => import("./settings-hotlex"), { ssr: false });
 const StyleCard = dynamic(() => import("./settings-style"), { ssr: false });
 const FetchApiCard = dynamic(() => import("./settings-fetch").then((m) => m.FetchApiCard), { ssr: false });
 
 type DS = { configured: boolean; source: "app" | "env" | null; baseUrl: string; model: string; baseUrlCustom: boolean; modelCustom: boolean; locked: boolean };
 type TR = { available: boolean; reason: string | null; scopes: TrScopes; done: number; queued: number; failed: number; lastError: string | null };
 const trScopeText = (sc: TrScopes) => [sc.all && "全部", ...sc.sections.map((k) => `分区「${secZh(k)}」`), sc.sources.length && `${sc.sources.length} 个来源`].filter(Boolean).join("、") || "无";
-type S = { deepseek: DS; translate: TR; notify: NotifyPrefs; desktop: boolean; version?: string | null; dataDir?: string; watch?: import("./settings-watch").WatchPrefs };
+type S = { deepseek: DS; translate: TR; notify: NotifyPrefs; desktop: boolean; version?: string | null; dataDir?: string; watch?: import("./settings-watch").WatchPrefs; hotLexicon?: string };
 type Test = { ok: boolean; error?: string } | null;
 
 export default function Settings() {
@@ -56,7 +57,8 @@ export default function Settings() {
 
       <GeneralCard />
       <NotifyCard desktop={!!s?.desktop} server={s?.notify ?? null} locked={locked} onSaved={(n) => setS((cur) => (cur ? { ...cur, notify: n } : cur))} />
-      {s && <WatchCard initial={s.watch ?? null} desktop={!!s.desktop} />}
+      {s && <WatchCard initial={s.watch ?? null} />}
+      {s && !locked && <HotLexCard initial={s.hotLexicon ?? ""} />}
 
       <Card className="mt-4" data-testid="ai-card">
         <CardHeader>

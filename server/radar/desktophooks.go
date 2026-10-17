@@ -12,11 +12,10 @@ type NotifyState struct {
 // DesktopHooks are set by the desktop shell (zero on the web server).
 type DesktopHooksT struct {
 	NotifyState        func() NotifyState
-	NotifyTest         func() (NotifyState, error)   // shows a banner through UNUserNotificationCenter
-	OpenNotifySettings func() error                  // System Settings › Notifications
-	OpenDataDir        func() error                  // reveal the data folder
-	OpenPath           func(p string) error          // reveal a folder (工作目录)
-	CopyRich           func(html, text string) error // clipboard: text/html + text/plain (公众号 paste keeps the styles)
+	NotifyTest         func() (NotifyState, error) // shows a banner through UNUserNotificationCenter
+	OpenNotifySettings func() error                // System Settings › Notifications
+	OpenDataDir        func() error                // reveal the data folder
+	OpenPath           func(p string) error        // reveal a folder (工作目录)
 }
 
 var DesktopHooks DesktopHooksT
@@ -48,26 +47,6 @@ func (s *Store) hDesktopOpenData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := DesktopHooks.OpenDataDir(); err != nil {
-		writeJSON(w, 200, obj("ok", false, "error", err.Error()))
-		return
-	}
-	writeJSON(w, 200, obj("ok", true))
-}
-
-// POST /api/desktop/clipboard {html, text}: the native clipboard (WKWebView's async clipboard needs a fresh user
-// gesture; the shell's NSPasteboard does not).
-func (s *Store) hDesktopClipboard(w http.ResponseWriter, r *http.Request) {
-	if DesktopHooks.CopyRich == nil {
-		detail(w, 404, "仅桌面版可用")
-		return
-	}
-	b := readBody(r)
-	html, text := str(b["html"]), str(b["text"])
-	if text == "" || len(html) > 2<<20 || len(text) > 1<<20 {
-		detail(w, 400, "内容为空或过大")
-		return
-	}
-	if err := DesktopHooks.CopyRich(html, text); err != nil {
 		writeJSON(w, 200, obj("ok", false, "error", err.Error()))
 		return
 	}

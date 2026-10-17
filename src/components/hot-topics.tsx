@@ -1,9 +1,10 @@
 "use client";
-// 热点追踪: stories several sources reported (server-side clustering, /api/hot), sorted by heat. A topic shows its
-// source count, first report and reports per hour (24 h sparkline); it expands to its items and feeds 简报 / 生成文章.
+// 热点追踪: stories several sources reported (server-side clustering, /api/hot — pure rules, see server/radar/hot.go),
+// sorted by heat. A topic shows its source count, first report (kept 7 days, also after it left the 48 h window), a
+// 飙升 mark for a burst in the last hour and reports per hour (24 h sparkline); it expands to its items and feeds 生成文章.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { ChevronDown, FileText, Flame, PenLine, RefreshCw, WifiOff } from "lucide-react";
+import { ChevronDown, Flame, PenLine, RefreshCw, TrendingUp, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,7 +17,6 @@ import { EmptyState } from "./empty-state";
 import { SourceAvatar } from "./source-avatar";
 import { XLogo } from "./x-logo";
 
-const BriefDialog = dynamic(() => import("./brief-dialog"), { ssr: false });
 const ArticleDialog = dynamic(() => import("./article-dialog"), { ssr: false });
 const isDesktop = () => typeof window !== "undefined" && !!(window as unknown as { __radarDesktop?: boolean }).__radarDesktop;
 
@@ -24,7 +24,8 @@ type HotSource = { id: number; name: string; first: number; count: number; x?: b
 type HotRow = { id: number; title: string; source: string; published: number; x?: boolean; p0?: boolean };
 export type HotTopic = {
   id: number; title: string; items: number[]; rows: HotRow[]; sources: HotSource[]; reports: number;
-  first: { source: string; published: number; item: number }; last: number; heat: number; spark: number[];
+  first: { source: string; published: number; item?: number; title?: string; url?: string; archived?: boolean };
+  last: number; heat: number; velocity?: number; core?: string; spark: number[];
 };
 
 /** reports per hour, oldest → newest (24 bars) */
@@ -54,7 +55,6 @@ export default function HotTopics() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
-  const [brief, setBrief] = useState<HotTopic | null>(null);
   const [article, setArticle] = useState<HotTopic | null>(null);
   const [desktop, setDesktop] = useState(false);
   useEffect(() => { setDesktop(isDesktop()); }, []);
@@ -80,7 +80,7 @@ export default function HotTopics() {
           <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => void load()} className="ml-auto px-1.5 font-normal tabular-nums text-faint" aria-label="刷新" />}>
             <RefreshCw className={cn("size-3.5", busy && "animate-spin")} /><span className="font-mono">{topics?.length ?? 0}</span> 个
           </TooltipTrigger>
-          <TooltipContent>热度：每个来源的首次报道计 1、后续计 0.3，按 12 小时半衰</TooltipContent>
+          <TooltipContent>热度：官方来源 1.5 · 文章 1 · X 转述 0.7，后续报道 ×0.3，按 12 小时半衰；最近 1 小时的报道另加</TooltipContent>
         </Tooltip>
       </div>
       {topics == null ? (
@@ -103,7 +103,10 @@ export default function HotTopics() {
                     <span className="line-clamp-2 type-title font-semibold leading-[1.5] [text-wrap:pretty]" data-testid="hot-title">{tp.title}</span>
                     <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 type-meta text-faint">
                       <Badge size="sm" variant="outline" className="border-orange-500/40 font-mono tabular-nums text-orange-600 dark:text-orange-300" data-testid="hot-count">{tp.sources.length} 源 · {tp.reports} 条</Badge>
-                      <span title={`北京时间 ${bj(tp.first.published)}`}>首发 <span className="text-muted-foreground">{tp.first.source.replace(/^X @(\S+) \((.*)\)$/, "$2")}</span> · {ago(tp.first.published)}</span>
+                      {(tp.velocity ?? 0) >= 2 && <Badge size="sm" variant="outline" className="border-rose-500/40 text-rose-600 dark:text-rose-300" title={`最近 1 小时 ${tp.velocity} 条（加权）`} data-testid="hot-burst"><TrendingUp />飙升</Badge>}
+                      <span title={`北京时间 ${bj(tp.first.published)}${tp.first.title ? `\n${tp.first.title}` : ""}${tp.first.archived ? "\n（已不在 48 小时窗口）" : ""}`} data-testid="hot-first">
+                        首发 <span className="text-muted-foreground">{tp.first.source.replace(/^X @(\S+) \((.*)\)$/, "$2")}</span> · {ago(tp.first.published)}
+                      </span>
                       <span className="hidden sm:inline">· 最新 {ago(tp.last)}</span>
                     </span>
                   </span>
@@ -121,13 +124,23 @@ export default function HotTopics() {
                   </span>
                   {tp.sources.length > 6 && <span className="type-meta text-faint">+{tp.sources.length - 6}</span>}
                   <span className="ml-auto flex items-center gap-0.5">
-                    <Button variant="ghost" size="sm" className="px-1.5 type-caption font-normal text-faint" onClick={() => setBrief(tp)} data-testid="hot-brief"><FileText className="size-3.5" />简报</Button>
                     {desktop && <Button variant="ghost" size="sm" className="px-1.5 type-caption font-normal text-faint" onClick={() => setArticle(tp)} data-testid="hot-article"><PenLine className="size-3.5" />生成文章</Button>}
                     <Button variant="ghost" size="icon-sm" className="text-faint" aria-label={expanded ? "收起" : "展开"} onClick={() => setOpenId(expanded ? null : tp.id)}><ChevronDown className={cn("size-3.5 transition-transform", expanded && "rotate-180")} /></Button>
                   </span>
                 </div>
                 {expanded && (
                   <ul className="border-t border-border/50 py-1.5" data-testid="hot-items">
+                    {tp.first.archived && (
+                      <li>
+                        <a href={tp.first.url || undefined} target="_blank" rel="noreferrer" data-testid="hot-first-archived" title="首发报道已不在 48 小时窗口内（保留 7 天）"
+                          className="flex w-full items-center gap-2.5 px-4 py-1.5 pl-12 text-left type-body text-muted-foreground hover:bg-secondary/60">
+                          <time className="w-11 shrink-0 font-mono type-meta tabular-nums text-faint">{bj(tp.first.published).slice(6)}</time>
+                          <span className="w-36 shrink-0 truncate type-caption">{tp.first.source.replace(/^X @(\S+) \((.*)\)$/, "$2")}</span>
+                          <span className="min-w-0 flex-1 truncate">{tp.first.title}</span>
+                          <Badge size="sm" variant="muted" className="px-1">首发</Badge>
+                        </a>
+                      </li>
+                    )}
                     {tp.rows.map((r) => (
                       <li key={r.id}>
                         <button type="button" onClick={() => void openItem(r.id)} className="flex w-full items-center gap-2.5 px-4 py-1.5 pl-12 text-left type-body hover:bg-secondary/60">
@@ -145,7 +158,6 @@ export default function HotTopics() {
           })}
         </ol>
       )}
-      {brief && <BriefDialog key={`hot|${brief.id}`} open onOpenChange={(o) => { if (!o) setBrief(null); }} section={null} sectionLabel="热点" ids={brief.items.slice(0, 10)} />}
       {article && <ArticleDialog key={`hot|${article.id}`} open onOpenChange={(o) => { if (!o) setArticle(null); }} section="all" ids={articlePick(article)} />}
     </div>
   );

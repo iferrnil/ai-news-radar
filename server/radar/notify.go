@@ -14,13 +14,12 @@ import (
 // a batch waits NOTIFY_BATCH_MS for more and batches are >= NOTIFY_MIN_GAP_MS apart.
 
 type NotifyItem struct {
-	ID        any      `json:"id"`
-	Title     string   `json:"title"`
-	Source    string   `json:"source"`
-	Section   any      `json:"section"`
-	URL       string   `json:"url"`
-	Published float64  `json:"published"`
-	Keywords  []string `json:"keywords,omitempty"` // 关键词提醒: the matched watch keywords
+	ID        any     `json:"id"`
+	Title     string  `json:"title"`
+	Source    string  `json:"source"`
+	Section   any     `json:"section"`
+	URL       string  `json:"url"`
+	Published float64 `json:"published"`
 }
 type NotifyBatch struct {
 	At       float64      `json:"at"`
@@ -50,16 +49,14 @@ type nchan struct {
 }
 
 type notifier struct {
-	s          *Store
-	mu         sync.Mutex
-	polled     map[int64]bool
-	p0, dg, kw nchan
-	kwSeen     []kwSeen            // stories already alerted (watch.go)
-	kwIDs      map[int64]time.Time // items already alerted, for the 热点 topic dedupe
+	s      *Store
+	mu     sync.Mutex
+	polled map[int64]bool
+	p0, dg nchan
 }
 
 func newNotifier(s *Store) *notifier {
-	return &notifier{s: s, polled: map[int64]bool{}, p0: nchan{event: "notify"}, dg: nchan{event: "digest"}, kw: nchan{event: "keyword"}}
+	return &notifier{s: s, polled: map[int64]bool{}, p0: nchan{event: "notify"}, dg: nchan{event: "digest"}}
 }
 
 func (s *Store) NotifyPrefs() NotifyPrefs {
@@ -120,20 +117,6 @@ func (s *Store) SetNotifyPrefs(enabled *bool, sections []any, system *bool, scop
 func notifyGap() time.Duration   { return envMs("NOTIFY_MIN_GAP_MS", 60000) }
 func notifyBatch() time.Duration { return envMs("NOTIFY_BATCH_MS", 20000) }
 
-// keyword alerts are what the user asked for by name: shorter batching
-func (c *nchan) gap() time.Duration {
-	if c.event == "keyword" {
-		return envMs("KW_NOTIFY_MIN_GAP_MS", 15000)
-	}
-	return notifyGap()
-}
-func (c *nchan) batch() time.Duration {
-	if c.event == "keyword" {
-		return envMs("KW_NOTIFY_BATCH_MS", 5000)
-	}
-	return notifyBatch()
-}
-
 func makeBatch(items []NotifyItem) *NotifyBatch {
 	secs := []string{}
 	seen := map[string]bool{}
@@ -154,7 +137,7 @@ func (n *notifier) flush(c *nchan) {
 		n.mu.Unlock()
 		return
 	}
-	if wait := time.Until(c.last.Add(c.gap())); wait > 0 {
+	if wait := time.Until(c.last.Add(notifyGap())); wait > 0 {
 		c.timer = time.AfterFunc(wait, func() { n.flush(c) }) // throttled: keep collecting
 		n.mu.Unlock()
 		return
@@ -185,19 +168,17 @@ func (n *notifier) enqueue(c *nchan, items []*Row) {
 		if title == "" {
 			title = i.Str("title")
 		}
-		kw, _ := i.Get("kw").([]string)
-		c.queue = append(c.queue, NotifyItem{id, jsSlice(title, 200), i.Str("source"), i.Get("section"), i.Str("url"), i.Num("published"), kw})
+		c.queue = append(c.queue, NotifyItem{id, jsSlice(title, 200), i.Str("source"), i.Get("section"), i.Str("url"), i.Num("published")})
 		added = true
 	}
 	if added && c.timer == nil {
-		c.timer = time.AfterFunc(c.batch(), func() { n.flush(c) })
+		c.timer = time.AfterFunc(notifyBatch(), func() { n.flush(c) })
 	}
 }
 
 // onPolled is called by the poller after each successful poll with the items it stored.
 func (n *notifier) onPolled(sourceID int64, fresh []*Row) {
 	digest := n.s.Cfg.Desktop || n.s.NotifyPrefs().Scope == "all" // the digest only matters for desktop system notifications
-	topics := n.kwTopics(fresh)                                   // outside the lock: reads the DB
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	first := !n.polled[sourceID]
@@ -207,17 +188,9 @@ func (n *notifier) onPolled(sourceID int64, fresh []*Row) {
 	}
 	t := now()
 	maxAge := envNum("NOTIFY_MAX_AGE", 3*3600)
-	watchOn := n.s.WatchPrefs().Notify
-	var recent, p0, kw []*Row
+	var recent, p0 []*Row
 	for _, i := range fresh {
 		if t-i.Num("published") > maxAge {
-			continue
-		}
-		if k, _ := i.Get("kw").([]string); watchOn && len(k) > 0 {
-			// one keyword alert per story; an item alerted here is not repeated as a P0 / digest notification
-			if !n.kwDuplicate(i, topics) {
-				kw = append(kw, i)
-			}
 			continue
 		}
 		recent = append(recent, i)
@@ -225,7 +198,6 @@ func (n *notifier) onPolled(sourceID int64, fresh []*Row) {
 			p0 = append(p0, i)
 		}
 	}
-	n.enqueue(&n.kw, kw)
 	n.enqueue(&n.p0, p0)
 	if digest {
 		n.enqueue(&n.dg, recent)
@@ -242,7 +214,6 @@ func (s *Store) notifyState() *Row {
 	r.Set("recent", append([]NotifyBatch{}, n.p0.recent...))
 	r.Set("polled", len(n.polled))
 	r.Set("digest", obj("queued", len(n.dg.queue), "sent", n.dg.sent))
-	r.Set("keyword", obj("queued", len(n.kw.queue), "sent", n.kw.sent, "recent", append([]NotifyBatch{}, n.kw.recent...)))
 	return r
 }
 

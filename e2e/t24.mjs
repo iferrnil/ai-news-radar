@@ -1,13 +1,15 @@
-// Round 12 (0.12.0): 热点追踪 (multi-source topics, heat, spark, jump to items, 简报 / 生成文章), 关键词提醒 (settings, highlight,
-// web notification when opted in, rematch on change), 选题收藏夹 (card + drawer star, 收藏 view, export / import, lock),
-// 写作风格 (desktop only), 一键复制成平台格式 (公众号 rich HTML, 小红书 title/body/tags, 推特 per post).
+// Rounds 12–13: 热点追踪 (multi-source topics, Chinese / English names via the lexicon, heat + velocity, spark, jump to
+// items, 生成文章 — no 简报 button since 0.13.0), 热点词表 (settings; locked → hidden / 403), 关键词 (settings, tags on
+// cards, filter chip / tag click, rematch on change; no notifications since 0.13.0), 选题收藏夹 (card + drawer star,
+// 收藏 view, export / import, lock), 写作风格 (desktop only), the article dialog's copy / export (0.11 behaviour again —
+// the 0.12 platform copy was removed).
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
 import { rec, B, RESTART, DATA, mock, srcs, exportFile } from "./lib.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const SH = process.env.R12_SHOTS ?? "/tmp/shots-r12"; fs.mkdirSync(SH, { recursive: true });
+const SH = process.env.R13_SHOTS ?? "/tmp/shots-r13"; fs.mkdirSync(SH, { recursive: true });
 const shot = (n) => path.join(SH, n);
 const J = { "Content-Type": "application/json" };
 const ART = path.join(DATA, "artifacts"); fs.rmSync(ART, { recursive: true, force: true });
@@ -37,6 +39,14 @@ await sleep(1800);
   const w = (await (await fetch(B + "/api/settings")).json()).watch;
   rec("关键词: comma / 、 split, case-insensitive dedupe, saved", JSON.stringify(w.keywords) === '["Zephyrion","求索"]' && w.scope === "all" && !w.caseSensitive, JSON.stringify(w));
   rec("关键词: chips listed", (await p.getByTestId("watch-list").innerText()).includes("Zephyrion"));
+  rec("关键词 card: no 通知 switch, no 提醒 wording", await p.getByTestId("watch-notify").count() === 0 && !/提醒|通知/.test(await p.getByTestId("watch-card").innerText()), await p.getByTestId("watch-card").innerText());
+  await patch({ watch: { notify: true } });
+  rec("关键词 API: a notify flag is not stored", !("notify" in (await (await fetch(B + "/api/settings")).json()).watch));
+  // 热点词表
+  await p.getByTestId("hotlex-card").waitFor();
+  await p.getByTestId("hotlex-input").fill("星澜 = Xinglan\n星澜"); await p.getByTestId("hotlex-card").screenshot({ path: shot("settings-hotlex.png") });
+  await p.getByTestId("hotlex-save").click(); await sleep(600);
+  rec("热点词表: saved normalized", (await (await fetch(B + "/api/settings")).json()).hotLexicon === "星澜=Xinglan", JSON.stringify((await (await fetch(B + "/api/settings")).json()).hotLexicon));
   await p.getByTestId("watch-card").screenshot({ path: shot("settings-watch.png") });
   rec("web: 写作风格 card hidden, API 404", await p.getByTestId("style-card").count() === 0 && (await fetch(B + "/api/style?kind=wechat")).status === 404);
   await p.evaluate(() => localStorage.setItem("notify.web", JSON.stringify({ enabled: true, sections: [] })));
@@ -51,11 +61,16 @@ await sleep(1800);
   await mock(`add=OpenAI&age=${a1}&title=` + encodeURIComponent("Orbitlab releases Zephyrion-9, an open model with 2M context"));
   await mock(`add=AnthropicAI&age=${a2}&title=` + encodeURIComponent("Zephyrion-9 from Orbitlab tops the coding leaderboard"));
   await mock(`add=deepseek_ai&age=${a3}&title=` + encodeURIComponent("Orbitlab's Zephyrion-9 is out: weights and benchmarks"));
+  // a Chinese and an English report of one story: 「字节跳动 / 豆包」 = ByteDance / Doubao (lexicon), 「星澜」 = Xinglan (user lexicon)
+  const [b1, b2] = [clear(9000), clear(4500)];
+  await mock(`add=OpenAI&age=${b1}&title=` + encodeURIComponent("字节跳动发布豆包 Quill-4 与星澜引擎"));
+  await mock(`add=AnthropicAI&age=${b2}&title=` + encodeURIComponent("ByteDance ships Doubao Quill-4 and the Xinglan engine"));
   for (const h of HANDLES) await poll(h);
-  await sleep(6500); // keyword batches collect for 5 s
+  await sleep(6500); // a keyword batch would have collected for 5 s
   const notes = await p.evaluate(() => window.__notes.map((n) => ({ title: n.title, body: n.body, tag: n.tag })));
-  const kn = notes.filter((n) => n.tag === "ai-radar-kw");
-  rec("web 关键词: one batched notification (opt-in), tagged separately from P0", kn.length === 1 && /关键词/.test(kn[0].title), JSON.stringify(notes).slice(0, 300) + " " + JSON.stringify((await (await fetch(B + "/api/stats")).json()).notify.keyword));
+  const kn = notes.filter((n) => n.tag === "ai-radar-kw" || /关键词/.test(n.title ?? ""));
+  const stn = (await (await fetch(B + "/api/stats")).json()).notify ?? {};
+  rec("关键词: matches raise no notification (channel removed)", kn.length === 0 && !("keyword" in stn), JSON.stringify(notes).slice(0, 300) + " " + JSON.stringify(stn).slice(0, 200));
   await p.evaluate(() => { window.__bg = false; }); await p.reload(); await p.locator("[data-item]").first().waitFor(); await sleep(600);
   const items = await (await fetch(B + "/api/items?limit=1000")).json();
   const zs = items.filter((it) => /Zephyrion-9/.test(it.title));
@@ -64,6 +79,21 @@ await sleep(1800);
   const shown = (await Promise.all(zs.map((z) => p.locator(`[data-item="${z.id}"]`).count()))).reduce((a, b) => a + b, 0);
   rec("feed: every matched card shown is highlighted with a keyword badge", await badge.count() === 1 && (await badge.innerText()).includes("Zephyrion") && shown >= 1 && await p.locator("[data-testid=kw-badge]").count() === shown, `${await p.locator(`[data-item="${zs[0].id}"]`).count()} ${await p.locator("[data-testid=kw-badge]").count()} ${await p.locator("[data-item]").count()}`);
   await p.locator(`[data-item="${zs[0].id}"]`).screenshot({ path: shot("feed-keyword-card.png") });
+  // filter: the toolbar chip (any keyword) and a tag click (that keyword)
+  const chip = p.getByTestId("kw-filter");
+  rec("关键词 chip: shown with the match count", await chip.count() === 1 && (await chip.innerText()).includes(String(zs.length)), await chip.innerText().catch(() => ""));
+  await chip.click(); await sleep(500);
+  const visKw = await p.locator("[data-item]").count();
+  rec("关键词 chip: only the matched cards, ?kw=* in the URL", visKw === zs.length && visKw === await p.locator("[data-testid=kw-badge]").count() && new URL(p.url()).searchParams.get("kw") === "*", `${visKw} ${p.url()}`);
+  await p.screenshot({ path: shot("feed-keyword-filter.png") });
+  await chip.click(); await sleep(400);
+  rec("关键词 chip: off again", !new URL(p.url()).searchParams.get("kw") && await p.locator("[data-item]").count() > visKw);
+  await p.locator(`[data-item="${zs[0].id}"] [data-testid=kw-badge] button`).first().click(); await sleep(500);
+  rec("tag click → that keyword only, drawer not opened", new URL(p.url()).searchParams.get("kw") === "Zephyrion" && await p.getByRole("dialog").count() === 0 && await p.locator("[data-item]").count() === visKw && (await chip.innerText()).includes("Zephyrion"));
+  rec("api/items?kw= filters server-side too", (await (await fetch(B + "/api/items?kw=Zephyrion&limit=50")).json()).length === 3 && (await (await fetch(B + "/api/items?kw=*&limit=50")).json()).length === 3);
+  await p.goto(B + "/?kw=Zephyrion"); await p.locator("[data-item]").first().waitFor(); await sleep(400);
+  rec("?kw= survives a reload (web parity: URL state)", await p.locator("[data-item]").count() === visKw);
+  await p.getByTestId("kw-filter").click(); await sleep(300);
   await patch({ watch: { keywords: ["Orbitlab"], scope: "title" } }); await sleep(500);
   const re = await (await fetch(B + `/api/items?id=${zs[0].id}`)).json();
   rec("关键词 change rematches retained items", JSON.stringify(re[0]?.kw) === '["Orbitlab"]', JSON.stringify(re[0]?.kw));
@@ -80,7 +110,10 @@ await sleep(1800);
   rec("热点: 首发 = the earliest source", /首发 OpenAI/.test(await top.innerText()), (await top.innerText()).replace(/\n/g, " "));
   rec("热点: 24 h spark bars", await top.getByTestId("spark").locator("rect").count() >= 3);
   rec("api/hot: spark sums to the reports, heat > 0", hot.spark.reduce((a, b) => a + b, 0) === 3 && hot.heat > 0 && hot.first.source.includes("OpenAI"), JSON.stringify({ spark: hot.spark, heat: hot.heat }));
-  rec("web 热点: 简报 yes, 生成文章 hidden", await top.getByTestId("hot-brief").count() === 1 && await top.getByTestId("hot-article").count() === 0);
+  rec("web 热点: no 简报 button, 生成文章 hidden", await p.getByTestId("hot-brief").count() === 0 && await top.getByTestId("hot-article").count() === 0);
+  const zh = hots.find((t) => t.rows.some((r) => /豆包/.test(r.title)));
+  rec("热点: Chinese + English names (字节跳动/豆包 = ByteDance/Doubao) → one topic", !!zh && zh.rows.some((r) => /Doubao/.test(r.title)) && zh.sources.length === 2, JSON.stringify(hots.map((t) => t.rows.map((r) => r.title))).slice(0, 400));
+  rec("api/hot: velocity + first report fields", typeof hot.velocity === "number" && hot.first.title && hot.first.url && hot.core, JSON.stringify({ v: hot.velocity, first: hot.first, core: hot.core }));
   await top.getByRole("button", { name: "展开" }).click(); await top.getByTestId("hot-items").waitFor();
   rec("热点: expanded rows list each report", await top.getByTestId("hot-items").locator("li").count() === 3);
   await p.getByTestId("hot-view").screenshot({ path: shot("hot-view.png") });
@@ -130,6 +163,10 @@ execSync(`bash ${RESTART} DISABLE_POLLER=1 SETTINGS_LOCKED=1`);
   rec("locked: favorite toggle allowed, favorites import 403", t1.status === 200 && t2.status === 403, `${t1.status} ${t2.status}`);
   await fetch(B + "/api/favorites", { method: "POST", headers: J, body: JSON.stringify({ id: one.id, on: false }) });
   rec("locked: 写作风格 still 404 on web", (await fetch(B + "/api/style?kind=xhs")).status === 404);
+  rec("locked: 热点词表 PATCH 403, 关键词 still editable", (await patch({ hotLexicon: "x" })).status === 403 && (await patch({ watch: { keywords: ["Zephyrion"] } })).status === 200);
+  const p = await br.newPage({ viewport: { width: 1280, height: 900 } }); await p.goto(B + "/settings"); await p.getByTestId("watch-card").waitFor({ timeout: 15000 }); await sleep(500);
+  rec("locked web: 热点词表 card hidden", await p.getByTestId("hotlex-card").count() === 0);
+  await p.close();
 }
 
 // ---------------- desktop: 写作风格 + 生成文章 from a hot topic + platform copy
@@ -162,29 +199,13 @@ execSync(`bash ${RESTART} DISABLE_POLLER=1 AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_K
   const ids = rq ? JSON.parse(rq.postData() ?? "{}").ids ?? [] : [];
   rec("hot → 生成文章 uses ≤2 of the topic's items", ids.length >= 1 && ids.length <= 2, JSON.stringify(ids));
   rec("wechat article: the style profile reached the prompt", (await p.getByTestId("article-body").innerText()).includes("STYLE-IN"));
-  await p.getByTestId("copy-wechat").click(); await sleep(400);
+  // copy / export as in 0.11: one 复制 (the Markdown as plain text) and 导出; no platform-specific copy
+  rec("article dialog: no platform copy buttons", await p.locator("[data-testid^=copy-], [data-testid=tweet-copy]").count() === 0);
+  await p.getByTestId("article-dialog").getByRole("button", { name: "复制" }).click(); await sleep(400);
   const c1 = await clip();
-  rec("复制到公众号: text/html with inline styles + text/plain", /style="/.test(c1["text/html"] ?? "") && !/<h1/.test(c1["text/html"] ?? "") && (c1["text/plain"] ?? "").length > 10, Object.keys(c1).join(","));
-  rec("复制到公众号: no Markdown syntax left in the plain text", !/^#{1,6}\s|\*\*/m.test(c1["text/plain"] ?? ""));
-  await p.getByTestId("copy-title").click(); await sleep(300);
-  rec("公众号 标题 copy", ((await clip())["text/plain"] ?? "").length > 0);
-  await gen("xhs");
-  for (const [id, what] of [["copy-xhs-title", "title"], ["copy-xhs-body", "body"], ["copy-xhs-tags", "tags"]]) {
-    await p.getByTestId(id).click(); await sleep(300);
-    const t = (await clip())["text/plain"] ?? "";
-    rec(`小红书 ${what} copy`, what === "tags" ? true : t.length > 0, t.slice(0, 60).replace(/\n/g, " "));
-  }
-  await gen("twitter");
-  const tw = p.getByTestId("tweet");
-  rec("推特 preview: one card per post with its own copy + weighted length", await tw.count() >= 1 && await tw.first().getByTestId("tweet-copy").count() === 1 && /\d+\/280/.test(await tw.first().innerText()), String(await tw.count()));
-  await tw.first().getByTestId("tweet-copy").click(); await sleep(300);
-  const t1 = (await clip())["text/plain"] ?? "";
-  await p.getByTestId("copy-thread").click(); await sleep(300);
-  const all = (await clip())["text/plain"] ?? "";
-  rec("推特: per-post copy is a part of 复制全部", t1.length > 0 && all.includes(t1.slice(0, 20)) && all.length >= t1.length);
-  await p.getByTestId("article-dialog").screenshot({ path: shot("article-copy-twitter.png") });
-  await p.getByTestId("pf-wechat").click(); await sleep(300);
-  await p.getByTestId("article-dialog").screenshot({ path: shot("article-copy-wechat.png") });
+  rec("复制: plain Markdown text only (0.11 behaviour)", !c1["text/html"] && (c1["text/plain"] ?? "").includes("STYLE-IN"), Object.keys(c1).join(","));
+  rec("native clipboard hook removed", [404, 405].includes((await fetch(B + "/api/desktop/clipboard", { method: "POST", headers: J, body: "{}" })).status));
+  await p.getByTestId("article-dialog").screenshot({ path: shot("article-dialog.png") });
   await ctx.close();
 }
 

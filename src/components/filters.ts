@@ -1,13 +1,14 @@
 // Feed filter model (deliberately simple): ONE sidebar view at a time.
 //   view = "" (全部) | an exclusive section (lab/cn/dev/media/x — every item is in exactly one, all X posts are "x") | a single source.
-// Plus an optional P0-only toggle and 只看未读. State lives in the URL: /?section=cn | /?section=x | /?source=12 [&p0=1][&unread=1].
+// Plus an optional P0-only toggle, 只看未读 and a 关键词 filter (kw = one keyword | "*" any). State lives in the URL:
+// /?section=cn | /?section=x | /?source=12 [&p0=1][&unread=1][&kw=GPT-6].
 import type { ItemOut } from "@/lib/types";
 import { type SectionKey, inAll, isSectionKeyLike, sectionOf } from "./common";
 
 export type View = "" | SectionKey;
 /** 选题 views: 热点 (hot topics) · 收藏 (favorites, any age) — they replace the section / source view */
 export type TopicView = "" | "hot" | "fav";
-export type Filters = { section: View; source: number | null; p0: boolean; unread?: boolean; view?: TopicView };
+export type Filters = { section: View; source: number | null; p0: boolean; unread?: boolean; view?: TopicView; kw?: string };
 export const EMPTY: Filters = { section: "", source: null, p0: false, unread: false, view: "" };
 
 /** `hide(id)` = treat as read for 只看未读 (the Feed passes a snapshot, so items read while looking stay visible). */
@@ -17,6 +18,7 @@ export function passes(it: ItemOut, f: Filters, hide?: (id: number) => boolean) 
   else if (f.section ? sectionOf(it) !== f.section : !inAll(sectionOf(it))) return false; // 全部 skips includeInAll:false sections
   if (f.p0 && it.priority !== "P0") return false;
   if (f.unread && hide?.(it.id)) return false;
+  if (f.kw && !(f.kw === "*" ? it.kw?.length : it.kw?.includes(f.kw))) return false;
   return true;
 }
 export const countOf = (items: ItemOut[], f: Filters, hide?: (id: number) => boolean) => items.reduce((n, it) => n + (passes(it, f, hide) ? 1 : 0), 0);
@@ -29,6 +31,7 @@ export function parseFilters(sp: URLSearchParams): Filters {
     p0: sp.get("p0") === "1",
     unread: sp.get("unread") === "1",
     view: sp.get("view") === "hot" ? "hot" : sp.get("view") === "fav" ? "fav" : "",
+    kw: sp.get("kw") || "",
   };
 }
 export function toQuery(f: Filters) {
@@ -37,6 +40,7 @@ export function toQuery(f: Filters) {
   else if (f.source != null) p.set("source", String(f.source)); else if (f.section) p.set("section", f.section);
   if (f.p0) p.set("p0", "1");
   if (f.unread) p.set("unread", "1");
+  if (f.kw && f.view !== "hot") p.set("kw", f.kw);
   const s = p.toString();
   return s ? `/?${s}` : "/";
 }

@@ -37,6 +37,7 @@ bash e2e/runall.sh                 # 端到端测试：Go 服务 + 全新数据�
 - AI 相关功能（简报、生成文章、Skill、写作风格、抓取 API）只在桌面版开放，网页版接口返回 404；其余功能两端保持一致。
 - 界面文字尽量少；不引入需要访问外部 CDN / 字体服务的资源。
 - 修改内置 Skill（`server/radar/defaultskill/`）时请更新 `version`，并用真实条目生成几篇样稿检查效果。
+- 热点保持纯规则（不调用模型）。改动 `hot.go` / `hotlex.go` 的规则后运行 `go test -run Hot ./radar`：`TestHotGoldenProd` 用真实窗口的样本（`server/radar/testdata/hot_prod.json`）核对分组，确认变化合理后再更新期望值。词表新增名称时写成 `id[*] 别名…`（`*` = 公司 / 大模型家族，只能辅助、不能单独合并两条内容）。
 - 不要提交密钥、`.env*`、`data/` 或本机路径。
 
 ## 提交与 PR

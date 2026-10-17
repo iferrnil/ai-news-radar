@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
 
-// ---- 关键词提醒
+// ---- 关键词 (tags + filter; no notifications since 0.13.0)
 
 func TestWatchMatching(t *testing.T) {
 	for _, c := range []struct {
@@ -63,9 +64,7 @@ func firstSources(st *Store, n int) []int64 {
 	return out
 }
 
-func TestWatchStoreRematchAndNotify(t *testing.T) {
-	t.Setenv("KW_NOTIFY_BATCH_MS", "600000") // keep the batch queued so the test can look at it
-	t.Setenv("NOTIFY_BATCH_MS", "600000")
+func TestWatchStoreRematchFilter(t *testing.T) {
 	st := testStore(t)
 	srv := httptest.NewServer(st.Server(nil))
 	defer srv.Close()
@@ -96,31 +95,33 @@ func TestWatchStoreRematchAndNotify(t *testing.T) {
 	if got["OpenAI teases GPT-6"] != "GPT-6" || got["Something else"] != "Kling" || got["Nothing here"] != "" {
 		t.Fatalf("kw: %v", got)
 	}
-	st.notif.mu.Lock()
-	nkw := len(st.notif.kw.queue)
-	st.notif.mu.Unlock()
-	if nkw != 2 {
-		t.Fatalf("keyword queue %d", nkw)
+	// filter: one keyword / any keyword
+	kwTitles := func(q string) string {
+		var l []map[string]any
+		r, _ := http.Get(srv.URL + "/api/items?limit=10&kw=" + q)
+		json.NewDecoder(r.Body).Decode(&l)
+		r.Body.Close()
+		var ts []string
+		for _, it := range l {
+			ts = append(ts, it["title"].(string))
+		}
+		sort.Strings(ts)
+		return strings.Join(ts, "|")
 	}
-	// the same story again (another URL, same title) is not alerted twice
-	src2 := firstSources(st, 2)[1]
-	st.notif.onPolled(src2, nil)
-	r12Items(st, src2, FetchedItem{UID: "https://b.test/1", Title: "OpenAI teases GPT-6", URL: "https://b.test/1", Summary: "y", Published: p})
-	st.notif.mu.Lock()
-	nkw = len(st.notif.kw.queue)
-	st.notif.mu.Unlock()
-	if nkw != 2 {
-		t.Fatalf("duplicate story alerted: %d", nkw)
+	if g := kwTitles("GPT-6"); g != "OpenAI teases GPT-6" {
+		t.Fatalf("kw=GPT-6: %q", g)
 	}
-	// a different headline of the same event (a 热点 topic with an alerted item) is not alerted either
-	src3 := firstSources(st, 3)[2]
-	st.notif.onPolled(src3, nil)
-	r12Items(st, src3, FetchedItem{UID: "https://c.test/1", Title: "GPT-6 teased by OpenAI's Altman in a new video", URL: "https://c.test/1", Summary: "z", Published: p})
-	st.notif.mu.Lock()
-	nkw = len(st.notif.kw.queue)
-	st.notif.mu.Unlock()
-	if nkw != 2 {
-		t.Fatalf("same 热点 topic alerted again: %d (topics %v)", nkw, len(st.hotTopics(now())))
+	if g := kwTitles("*"); g != "OpenAI teases GPT-6|Something else" {
+		t.Fatalf("kw=*: %q", g)
+	}
+	if g := kwTitles("GPT"); g != "" {
+		t.Fatalf("kw=GPT (not a keyword): %q", g)
+	}
+	// no keyword notification channel any more (0.13.0): the setting no longer stores a notify flag
+	var stored string
+	st.DB.QueryRow("SELECT v FROM settings WHERE k='watch'").Scan(&stored)
+	if strings.Contains(stored, "notify") {
+		t.Fatalf("watch setting still carries notify: %s", stored)
 	}
 	// changing the list re-matches every retained item
 	postJSON(t, srv.URL+"/api/settings", "PATCH", map[string]any{"watch": map[string]any{"keywords": []string{"nothing"}}}, nil)
@@ -207,75 +208,6 @@ func TestFavoritesPruneFilterExportImport(t *testing.T) {
 	st.DB.QueryRow("SELECT COUNT(*) FROM favorites").Scan(&n)
 	if n != 0 {
 		t.Fatal("unfavorite")
-	}
-}
-
-// ---- 热点追踪
-
-func TestHotTopicsClustering(t *testing.T) {
-	t.Setenv("RETENTION_HOURS", "48")
-	st := testStore(t)
-	srcs := firstSources(st, 4)
-	st.DB.Exec("UPDATE items SET published=0") // seed noise out of the window
-	t0 := now() - 5*3600
-	add := func(sid int64, uid, title, sum string, at float64) {
-		if _, err := st.DB.Exec(`INSERT INTO items(uid,source_id,title,url,summary,published,fetched) VALUES(?,?,?,?,?,?,?)`, uid, sid, title, uid, sum, at, at); err != nil {
-			t.Fatal(err)
-		}
-	}
-	add(srcs[1], "https://h.test/b", "Zentrix releases Quorra-7, a 300B open model", "The Quorra-7 weights are on Hugging Face.", t0+1800)
-	add(srcs[0], "https://h.test/a", "Zentrix 发布 Quorra-7 开源模型", "Quorra-7 参数 300B。", t0)
-	add(srcs[2], "https://h.test/c", "Quorra-7 benchmarks: what the 300B model scores", "Zentrix says Quorra-7 beats rivals.", t0+3*3600)
-	add(srcs[2], "https://h.test/c2", "OpenAI updates ChatGPT memory", "OpenAI said memory is better.", t0+3*3600)
-	add(srcs[3], "https://h.test/d", "OpenAI hires a new CFO", "OpenAI announced a hire.", t0+3600)     // shares only an org name
-	add(srcs[3], "https://h.test/e", "This week in AI: Quorra-7, Sora and more", "Roundup.", t0+4*3600) // a roundup never joins
-	topics := st.hotTopics(now())
-	if len(topics) != 1 {
-		for _, x := range topics {
-			t.Logf("%s %d", x.Title, len(x.Sources))
-		}
-		t.Fatalf("topics: %d", len(topics))
-	}
-	h := topics[0]
-	if len(h.Sources) != 3 || h.Reports != 3 || len(h.Items) != 3 {
-		t.Fatalf("topic: %+v", h)
-	}
-	if h.First.Published != t0 || h.First.Source == "" {
-		t.Fatalf("first report: %+v", h.First)
-	}
-	if !strings.Contains(h.Title, "发布") { // a Chinese headline when there is one
-		t.Fatalf("title %q", h.Title)
-	}
-	sum := 0
-	for _, v := range h.Spark {
-		sum += v
-	}
-	if len(h.Spark) != hotSparkHours || sum != 3 || h.Heat <= 0 {
-		t.Fatalf("spark %v heat %v", h.Spark, h.Heat)
-	}
-	// /api/hot serves the same
-	srv := httptest.NewServer(st.Server(nil))
-	defer srv.Close()
-	var out struct{ Topics []HotTopic }
-	r, _ := http.Get(srv.URL + "/api/hot")
-	json.NewDecoder(r.Body).Decode(&out)
-	r.Body.Close()
-	if len(out.Topics) != 1 || len(out.Topics[0].Sources) != 3 {
-		t.Fatalf("api: %+v", out)
-	}
-}
-
-func TestHotTokens(t *testing.T) {
-	tk := hotTokens(hotPrep("Build your own agent. Reflection AI releases Beam with GPT-6 and Kling 4.0 https://x.test/Zeta9 @Someone"))
-	for _, want := range []string{"reflection", "beam", "gpt6", "kling4.0"} {
-		if !tk[want] {
-			t.Errorf("missing name %q in %v", want, tk)
-		}
-	}
-	for _, no := range []string{"build", "zeta9", "someone"} {
-		if tk[no] {
-			t.Errorf("%q should not be a name: %v", no, tk)
-		}
 	}
 }
 
@@ -370,60 +302,3 @@ func TestFixTitleAndTweetLinks(t *testing.T) {
 }
 
 var _ = filepath.Join
-
-// ---- 一键复制: the desktop shell's native rich clipboard (web has no hook → 404)
-
-func TestDesktopClipboardHook(t *testing.T) {
-	_, srv, _, _ := composeStore(t, false)
-	post := func(body string) (int, map[string]any) {
-		r, err := http.Post(srv.URL+"/api/desktop/clipboard", "application/json", strings.NewReader(body))
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer r.Body.Close()
-		var m map[string]any
-		json.NewDecoder(r.Body).Decode(&m)
-		return r.StatusCode, m
-	}
-	if c, _ := post(`{"html":"<p>x</p>","text":"x"}`); c != 404 {
-		t.Fatalf("web clipboard: %d", c)
-	}
-	var gotHTML, gotText string
-	DesktopHooks.CopyRich = func(h, tx string) error { gotHTML, gotText = h, tx; return nil }
-	defer func() { DesktopHooks.CopyRich = nil }()
-	if c, m := post(`{"html":"<p style=\"color:red\">标题</p>","text":"标题"}`); c != 200 || m["ok"] != true || gotHTML != `<p style="color:red">标题</p>` || gotText != "标题" {
-		t.Fatalf("desktop clipboard: %d %v %q %q", c, m, gotHTML, gotText)
-	}
-	if c, _ := post(`{"html":"<p>x</p>","text":""}`); c != 400 {
-		t.Fatalf("empty text: %d", c)
-	}
-	DesktopHooks.CopyRich = func(string, string) error { return fmt.Errorf("pasteboard busy") }
-	if c, m := post(`{"text":"t"}`); c != 200 || m["ok"] != false {
-		t.Fatalf("hook error: %d %v", c, m)
-	}
-}
-
-// one X account: posts a few seconds apart are one thread; minutes apart only when they share a name
-func TestHotSameSourceThread(t *testing.T) {
-	doc := func(id int, title string, pub float64) *hotDoc {
-		r := &Row{}
-		r.Set("id", float64(id))
-		r.Set("title", title)
-		r.Set("url", fmt.Sprintf("https://x.com/a/status/%d", id))
-		r.Set("published", pub)
-		r.Set("source_id", float64(1))
-		r.Set("is_x", float64(1))
-		return newHotDoc(r)
-	}
-	idx := newHotIdx(nil)
-	a := doc(1, "Orbitlab releases Zephyrion-9 with 2M context", 1000)
-	if !idx.same(a, doc(2, "the weights are on the hub today", 1030)) {
-		t.Error("30 s apart: thread part")
-	}
-	if idx.same(a, doc(3, "shipping update 3 for our API", 1120)) {
-		t.Error("2 min apart, nothing shared: not a thread")
-	}
-	if !idx.same(a, doc(4, "Zephyrion-9 benchmarks below", 1150)) {
-		t.Error("2.5 min apart with a shared name: thread part")
-	}
-}
