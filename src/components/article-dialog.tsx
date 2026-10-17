@@ -2,20 +2,20 @@
 // 生成文章 (desktop): the picked items → 推特 / 公众号 / 小红书 article, each written by its own Skill (设置 › Skill).
 // A Skill may ask for a cover; it is made with the 多模态模型 when configured, else skipped with a note.
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Download, Eye, FolderOpen, ImageOff, Loader2, PenLine, Pencil, Sparkles, Undo2 } from "lucide-react";
+import { Check, Copy, Download, Eye, ImageOff, Loader2, PenLine, Pencil, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { api } from "./common";
+import { api, exportMarkdown, revealExported } from "./common";
 import { Markdown } from "./md-view";
 
 type Cover = { kind: "image" | "video"; prompt: string; status: "ok" | "skipped" | "error"; note?: string; path?: string; size?: string };
 type Article = {
   markdown: string; title: string; platform: string; label: string; skill: string; count: number; verified?: boolean;
-  noFullText?: { n: number; title: string; source: string; url: string; reason: string }[]; covers?: Cover[]; visionNote?: string; saved?: string;
+  noFullText?: { n: number; title: string; source: string; url: string; reason: string }[]; covers?: Cover[]; visionNote?: string; selfCheck?: string[];
 };
 export const PLATFORMS = [["twitter", "推特文章"], ["wechat", "公众号文章"], ["xhs", "小红书文章"]] as const;
 type P = (typeof PLATFORMS)[number][0];
@@ -29,6 +29,7 @@ export default function ArticleDialog({ open, onOpenChange, section, ids }: { op
   const [busy, setBusy] = useState<P | null>(null);
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [exported, setExported] = useState<Partial<Record<P, string>>>({});
   const live = useRef(true);
   useEffect(() => () => { live.current = false; }, []);
   const a = res[pf], t = text[pf] ?? "";
@@ -39,19 +40,21 @@ export default function ArticleDialog({ open, onOpenChange, section, ids }: { op
     try {
       const r = await api<Article>("/api/compose", { method: "POST", body: JSON.stringify({ platform: p, ids, section }) });
       if (!live.current || r.platform !== p) return; // closed meanwhile / not this request
-      setRes((m) => ({ ...m, [p]: r })); setText((m) => ({ ...m, [p]: r.markdown }));
+      setRes((m) => ({ ...m, [p]: r })); setText((m) => ({ ...m, [p]: r.markdown })); setExported((m) => ({ ...m, [p]: undefined }));
       const skipped = r.covers?.find((c) => c.status !== "ok");
       if (skipped?.note) toast(skipped.note);
     } catch (e) { if (live.current) toast.error((e as Error).message); }
     finally { if (live.current) setBusy((b) => (b === p ? null : b)); }
   };
   const copy = async () => { try { await navigator.clipboard.writeText(t); setCopied(true); toast.success("已复制 Markdown"); setTimeout(() => setCopied(false), 1500); } catch { toast.error("复制失败"); } };
-  const download = () => {
+  const doExport = async () => {
     if (!a) return;
-    const el = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([t], { type: "text/markdown" })), download: `${a.label}-${new Date().toISOString().slice(0, 10)}.md` });
-    document.body.append(el); el.click(); el.remove();
+    try {
+      const covers = a.covers?.filter((c) => c.status === "ok" && c.path).map((c) => c.path!) ?? [];
+      const p = await exportMarkdown("article", a.title || a.label, t, `${a.label}-${new Date().toISOString().slice(0, 10)}.md`, covers);
+      if (p) { setExported((m) => ({ ...m, [pf]: p })); toast.success("已导出", { description: p, action: { label: "打开", onClick: () => void revealExported(p) } }); }
+    } catch (e) { toast.error((e as Error).message); }
   };
-  const openDir = async () => { try { await api("/api/artifacts/open", { method: "POST" }); } catch (e) { toast.error((e as Error).message); } };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,13 +82,14 @@ export default function ArticleDialog({ open, onOpenChange, section, ids }: { op
           {busy === pf && !a && <div className="flex items-center gap-2 type-body text-muted-foreground"><Loader2 className="size-4 animate-spin" />抓取原文并写作中…</div>}
           {a && (
             <>
-              <p className="mb-3 type-meta text-faint" data-testid="article-meta">{a.skill}{a.verified ? " · 已核对事实" : ""}{edited ? " · 已编辑" : ""}{a.saved && <span title={a.saved}> · 已保存</span>}</p>
+              <p className="mb-3 type-meta text-faint" data-testid="article-meta">{a.skill}{a.verified ? " · 已核对事实" : ""}{edited ? " · 已编辑" : ""}{exported[pf] && <span title={exported[pf]}> · 已导出</span>}</p>
               {(a.noFullText?.length ?? 0) > 0 && (
                 <details className="mb-3 rounded-md bg-muted px-3 py-2 type-caption text-muted-foreground" data-testid="article-nofull">
                   <summary className="cursor-pointer select-none">{a.noFullText!.length} 条未取到原文全文，只按标题 / 摘要写</summary>
                   <ul className="mt-1.5 space-y-0.5">{a.noFullText!.map((m) => <li key={m.n} className="truncate"><span className="font-mono text-faint">[{m.n}]</span> <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">{m.title}</a> <span className="text-faint">· {m.reason}</span></li>)}</ul>
                 </details>
               )}
+              {(a.selfCheck?.length ?? 0) > 0 && <p className="mb-3 type-caption text-faint" data-testid="article-selfcheck">自检待改：{a.selfCheck!.join("；")}</p>}
               {a.visionNote && <p className="mb-3 type-caption text-faint">{a.visionNote}</p>}
               {a.covers?.map((c, i) => c.status === "ok" && c.path ? (
                 c.kind === "image"
@@ -107,12 +111,9 @@ export default function ArticleDialog({ open, onOpenChange, section, ids }: { op
             <Button variant={editing ? "secondary" : "outline"} size="sm" disabled={!a} onClick={() => setEditing(!editing)} aria-pressed={editing}>{editing ? <Eye className="size-3.5" /> : <Pencil className="size-3.5" />}{editing ? "预览" : "编辑"}</Button>
             {edited && <Button variant="ghost" size="sm" onClick={() => a && setText((m) => ({ ...m, [pf]: a.markdown }))}><Undo2 className="size-3.5" />还原</Button>}
             <Button variant="outline" size="sm" disabled={!a} onClick={copy}>{copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}</Button>
-            <Button variant="outline" size="sm" disabled={!a} onClick={download}><Download className="size-3.5" />导出</Button>
+            <Button variant="outline" size="sm" disabled={!a} onClick={doExport} data-testid="article-export"><Download className="size-3.5" />导出</Button>
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={openDir} data-testid="article-open-dir"><FolderOpen className="size-3.5" />制品目录</Button>
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>关闭</Button>
-          </div>
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>关闭</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

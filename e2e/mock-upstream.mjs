@@ -85,13 +85,13 @@ http.createServer((req, res) => {
   const md = (who, target) => `# ${who} 抓取\n\n` + Array.from({ length: 8 }, (_, i) => `E2E-${who.toUpperCase()} 第 ${i + 1} 段：${target} 的正文内容，包含足够多的文字用来通过全文长度判断。`).join("\n\n");
   if (host === "r.jina.ai" || host === "r.jinaai.cn") return send(res, 200, { code: 200, data: { title: "J", url: u.pathname.slice(1), content: md("jina", u.pathname.slice(1)) } });
   if (host === "api.firecrawl.dev") {
-    if (u.pathname === "/v2/team/credit-usage") return send(res, 200, { success: true, data: { remainingCredits: 4321, planCredits: 100000, billingPeriodStart: "2026-10-01T00:00:00Z", billingPeriodEnd: "2026-11-01T00:00:00Z" } });
+    if (u.pathname === "/v2/team/credit-usage") return send(res, 200, { success: true, data: { remainingCredits: 101000, planCredits: 1000, billingPeriodStart: "2026-09-24T00:00:00Z", billingPeriodEnd: "2026-10-24T00:00:00Z" } });
     if (u.pathname === "/v2/scrape") return send(res, 200, { success: true, data: { markdown: md("firecrawl", "page"), metadata: { title: "F", statusCode: 200 } } });
   }
   if (host === "api.crawl4ai.com") {
-    res.setHeader("x-c4-balance", "812"); res.setHeader("x-c4-allowance-left", "300");
-    if (u.pathname === "/v1/billing/balance") return send(res, 200, { balance: { credits: 812 }, allowance_per_month: 1000, allowance_left: 300, resets_at: "2026-11-01T00:00:00Z" });
-    if (u.pathname === "/scrape") return send(res, 200, { ok: true, markdown: md("crawl4ai", "page") });
+    // shapes of the real API: millicredits in the balance body, the running figures as x-c4-* headers on a scrape
+    if (u.pathname === "/v1/billing/balance") return send(res, 200, { allowance_mc: 300000, credit: "0.00", credit_mc: 0, free: "812.50", free_mc: 812500, free_period: "2026-10", has_card: false, plan: "", plan_month_mc: 0, spend_month: "0.00", spend_month_mc: 0, tier: "community", topups: 0 });
+    if (u.pathname === "/scrape") { res.setHeader("x-c4-cost", "0.250"); res.setHeader("x-c4-balance", "812.250"); res.setHeader("x-c4-allowance-left", "299.750"); return send(res, 200, { ok: true, markdown: md("crawl4ai", "page"), html: "", content_hash: "e2e", ms: 12 }); }
   }
   if (host === "dash.jina.ai" && u.pathname === "/api/v1/api_key/fe_user") return send(res, 200, { wallet: { total_balance: 9876543 } });
 
@@ -122,6 +122,7 @@ http.createServer((req, res) => {
           const ns = [...content.matchAll(/<item n="(\d+)"[^>]*title="([^"]*)"/g)];
           return reply(JSON.stringify({ items: ns.map((m) => ({ n: Number(m[1]), summary: "【摘要】" + m[2] })) }));
         }
+        if (sys.includes("<stage>revise</stage>")) return reply((/<draft>\n?([\s\S]*?)\n?<\/draft>/.exec(content)?.[1] ?? "") + "\n\n> 【已自检】");
         if (sys.includes("<stage>verify</stage>")) return reply((/<brief>\n?([\s\S]*?)\n?<\/brief>/.exec(content)?.[1] ?? "") + "\n\n> 【已核对】");
         try {
           const items = JSON.parse(content);

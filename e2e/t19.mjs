@@ -66,7 +66,9 @@ await ctx.addInitScript(() => { window.__radarDesktop = true; });
 const p = await ctx.newPage(); p.on("pageerror", (e) => errors.push(String(e)));
 await p.goto(B + "/settings"); await p.getByTestId("skill-card").waitFor({ timeout: 15000 }); await sleep(800);
 const titles = await p.locator("[data-slot=card-title]").allInnerTexts();
-rec("desktop settings: 常规 / 通知 / 翻译 / AI / 简报·推特·公众号·小红书 Skill / 多模态模型 / 抓取 API / 制品目录 / 更新 / 数据 / 关于", titles.join(",") === "常规,通知,翻译 / AI,简报 Skill,推特 Skill,公众号 Skill,小红书 Skill,多模态模型,抓取 API,制品目录,更新,数据,关于", titles.join(","));
+rec("desktop settings: 常规 / 通知 / 翻译 / AI / 简报·推特·公众号·小红书 Skill / 多模态模型 / 抓取 API / 工作目录 / 数据 / 关于", titles.join(",") === "常规,通知,翻译 / AI,简报 Skill,推特 Skill,公众号 Skill,小红书 Skill,多模态模型,抓取 API,工作目录,数据,关于", titles.join(","));
+rec("desktop: 更新 is a section of the 数据 card (version + menu hint)", await p.getByTestId("update-card").count() === 0 && /更新\s*v0\.5\.0 · 自动检查/.test(await p.getByTestId("data-card").getByTestId("update-section").innerText()), await p.getByTestId("data-card").innerText());
+{ const sh = process.env.R11_SHOTS ?? "/tmp/shots-r11"; fs.mkdirSync(sh, { recursive: true }); await p.getByTestId("data-card").scrollIntoViewIfNeeded(); await p.getByTestId("data-card").screenshot({ path: path.join(sh, "settings-data-update.png") }); }
 rec("desktop: no 发送方式 / AppleScript option (native only)", await p.getByTestId("notify-method").count() === 0 && !/AppleScript/.test(await p.getByTestId("notify-card").innerText()));
 { const r = (await fetchR(B + "/api/desktop/notify", { method: "PATCH", headers: J, body: JSON.stringify({ method: "applescript" }) })).status; rec("notify method API removed", r === 405 || r === 404, String(r)); }
 rec("desktop: notification status + 发送测试通知 button", /不支持|尚未询问|已允许|已拒绝/.test(await p.getByTestId("notify-perm").innerText()) && await p.getByTestId("notify-test").count() === 1);
@@ -112,7 +114,8 @@ await p.goto(B + "/"); await p.locator("[data-slot=card]").first().waitFor({ tim
 await p.getByTestId("brief-btn").click(); await p.getByTestId("brief-body").waitFor({ timeout: 15000 });
 await p.getByTestId("brief-ai").click(); await p.getByTestId("brief-rule").waitFor({ timeout: 15000 });
 rec("dialog: AI result rendered (skill named)", /AI 润色（brief-polish）/.test(await p.getByTestId("brief-dialog").innerText()));
-rec("dialog: lists items without full text", /未取到原文全文/.test(await p.getByTestId("brief-nofull").innerText().catch(() => "")));
+{ const sh = process.env.R11_SHOTS ?? "/tmp/shots-r11"; await p.getByTestId("brief-nofull").locator("summary").click().catch(() => {}); await sleep(200); await p.getByTestId("brief-dialog").screenshot({ path: path.join(sh, "brief-dropped-items.png") }); }
+rec("dialog: lists items without full text / left out", /未取到原文全文|未取到内容，未写入/.test(await p.getByTestId("brief-nofull").innerText().catch(() => "")));
 await p.getByTestId("brief-nofull").locator("summary").click().catch(() => {}); await sleep(200);
 await p.getByTestId("brief-dialog").screenshot({ path: SHOT("r7_brief_nofull.png") });
 await p.getByTestId("brief-dialog").screenshot({ path: SHOT("r5_brief_ai.png") });

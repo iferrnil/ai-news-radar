@@ -187,6 +187,8 @@ func classify(id string, r *Resp, err error) (provOutcome, string) {
 		return provRate, "限流（429）"
 	case id == "crawl4ai" && r.Status == 502: // no-answer / origin-error: the site, not the service
 		return provPage, "站点无响应（502" + suffix(msg) + "）"
+	case id == "crawl4ai" && r.Status == 503: // fleet-busy: retry in a few seconds
+		return provRate, "繁忙（503" + suffix(msg) + "）"
 	case r.Status >= 500:
 		return provDown, fmt.Sprintf("服务错误（HTTP %d）", r.Status)
 	}
@@ -255,7 +257,7 @@ func (s *Store) callProvider(ctx context.Context, id string, k FetchKeys, target
 	case "crawl4ai":
 		b, _ := json.Marshal(map[string]any{"url": target, "format": "md"})
 		r, err = netFetch(ctx, "POST", crawl4aiBase+"/scrape", map[string]string{"Authorization": "Bearer " + key, "Content-Type": "application/json"},
-			strings.NewReader(string(b)), 90*time.Second)
+			strings.NewReader(string(b)), 120*time.Second) // a cold page can take a while; their docs ask for 120 s
 	default:
 		return provResult{outcome: provPage, why: "unknown provider"}
 	}
@@ -296,8 +298,11 @@ func (s *Store) callProvider(ctx context.Context, id string, k FetchKeys, target
 		if j["success"] == false {
 			return provResult{outcome: provPage, why: "抓取失败" + suffix(provErrMsg(r.Body))}
 		}
-	case "crawl4ai": // {ok, markdown, html}
+	case "crawl4ai": // {ok, markdown, html, content_hash, ms, …}: no title field — the first "# " heading
 		res.text = str(j["markdown"])
+		if m := reH1.FindStringSubmatch(res.text); m != nil {
+			res.title = strings.TrimSpace(m[1])
+		}
 		if j["ok"] == false {
 			return provResult{outcome: provPage, why: "抓取失败" + suffix(provErrMsg(r.Body))}
 		}
@@ -389,6 +394,27 @@ func (s *Store) fetchOneViaProviders(ctx context.Context, k FetchKeys, u string)
 	if c, ok := gArticles.get(u); ok && c.Status == "full" {
 		return c
 	}
+	best, tried := s.providersOnly(ctx, k, u)
+	if best.Status == "full" {
+		return best
+	}
+	self := fetchArticleRes(ctx, u) // fallback: the self-written fetcher
+	if tried && self.Status != "full" {
+		self.Reason = strings.TrimLeft(best.Reason+"；自抓："+self.Reason, "；")
+	}
+	if best.Text != "" && self.Status != "full" && utf8.RuneCountInString(best.Text) > utf8.RuneCountInString(self.Text) {
+		best.Reason = self.Reason
+		return best
+	}
+	return self
+}
+
+// providersOnly walks the provider order for u (no self-written fetcher). tried = some provider was called. A
+// result that is not full carries the providers' notes in Reason.
+func (s *Store) providersOnly(ctx context.Context, k FetchKeys, u string) (articleRes, bool) {
+	if c, ok := gArticles.get(u); ok && c.Status == "full" {
+		return c, true
+	}
 	t0 := time.Now()
 	tried := map[string]bool{}
 	var best articleRes
@@ -410,7 +436,7 @@ func (s *Store) fetchOneViaProviders(ctx context.Context, k FetchKeys, u string)
 			}
 			if res.Status == "full" {
 				gArticles.put(u, res)
-				return res
+				return res, true
 			}
 			if utf8.RuneCountInString(res.Text) > utf8.RuneCountInString(best.Text) {
 				best = res
@@ -421,7 +447,10 @@ func (s *Store) fetchOneViaProviders(ctx context.Context, k FetchKeys, u string)
 			s.prov.markExhausted(id, key, r.why)
 		case provRate:
 			d := r.retryAfter
-			if d < 30*time.Second {
+			switch {
+			case id == "crawl4ai" && strings.Contains(r.why, "503"):
+				d = 15 * time.Second
+			case d < 30*time.Second:
 				d = 60 * time.Second
 			}
 			s.prov.markCool(id, key, d, r.why)
@@ -430,15 +459,11 @@ func (s *Store) fetchOneViaProviders(ctx context.Context, k FetchKeys, u string)
 		}
 		notes = append(notes, provLabel[id]+"："+r.why)
 	}
-	self := fetchArticleRes(ctx, u) // fallback: the self-written fetcher
-	if len(notes) > 0 && self.Status != "full" {
-		self.Reason = strings.Join(append(notes, "自抓："+self.Reason), "；")
+	best.Reason = strings.Join(notes, "；")
+	if best.Text == "" {
+		best.Status = "failed"
 	}
-	if best.Text != "" && self.Status != "full" && utf8.RuneCountInString(best.Text) > utf8.RuneCountInString(self.Text) {
-		best.Reason = strings.Join(append(notes, "自抓："+self.Reason), "；")
-		return best
-	}
-	return self
+	return best, len(tried) > 0
 }
 
 // ---- quota
@@ -490,21 +515,50 @@ func (s *Store) refreshQuota(id string) *quota {
 		if dec.Decode(&j) != nil {
 			return fail("无法解析")
 		}
-		// undocumented body: look for the likely names anywhere in it
-		q.Remaining = findNum(j, "balance", "credits", "credit", "remaining", "balance_credits", "credits_balance", "available")
-		q.Allowance = findNum(j, "allowance_left", "allowanceLeft", "allowance_remaining", "credits_month", "remaining_month")
-		q.Total = findNum(j, "allowance_per_month", "allowance", "plan_credits", "monthly_credits", "credits_per_month")
-		q.ResetAt = findStr(j, "resets_at", "reset_at", "period_end", "renews_at", "current_period_end", "next_reset")
-		q.Unit = "credits"
-		if q.Remaining == nil && q.Allowance == nil {
-			s.prov.mu.Lock() // the headers of this very call may have filled it in
-			prev := s.prov.state(id, key).quota
-			s.prov.mu.Unlock()
-			if prev != nil && prev.OK && (prev.Remaining != nil || prev.Allowance != nil) {
-				return prev
+		// {"free":"999.75","free_mc":999750,"credit":"0.00","credit_mc":0,"free_period":"2026-10","allowance_mc":2500000,
+		//  "spend_month_mc":250,"plan_month_mc":0,"tier":"community",…}: _mc = millicredits. What can be spent = the
+		// monthly free credit + bought credit; the free credit renews on the 1st of the month after free_period.
+		// allowance_mc is the monthly spend cap (x-c4-allowance-left = allowance − this month's spend).
+		mc := func(k, plain string) *float64 {
+			if v := num(j[k]); v != nil {
+				f := *v / 1000
+				return &f
 			}
+			return num(j[plain])
+		}
+		free, credit := mc("free_mc", "free"), mc("credit_mc", "credit")
+		if free == nil && credit == nil {
 			return fail("无法解析")
 		}
+		rem := 0.0
+		for _, v := range []*float64{free, credit} {
+			if v != nil {
+				rem += *v
+			}
+		}
+		q.Remaining = &rem
+		if allow := mc("allowance_mc", ""); allow != nil && *allow > 0 {
+			left := *allow
+			if spent := mc("spend_month_mc", "spend_month"); spent != nil {
+				left -= *spent
+			}
+			q.Allowance = &left
+		}
+		if plan := mc("plan_month_mc", ""); plan != nil && *plan > 0 {
+			q.Total = plan
+		}
+		if t, err := time.Parse("2006-01", str(j["free_period"])); err == nil {
+			q.ResetAt = t.AddDate(0, 1, 0).Format("2006-01-02")
+		}
+		q.Unit = "credits"
+		// the balance endpoint trails the per-call x-c4-balance header by about a minute: a lower figure seen on
+		// a call in the last two minutes is the current one
+		s.prov.mu.Lock()
+		if prev := s.prov.state(id, key).quota; prev != nil && prev.OK && prev.Remaining != nil && now()-prev.At < 120 && *prev.Remaining < rem {
+			v := *prev.Remaining
+			q.Remaining = &v
+		}
+		s.prov.mu.Unlock()
 		q.OK = true
 	case "jina":
 		// no official endpoint: the dashboard's own call (best effort). The URL carries the key: never log it.

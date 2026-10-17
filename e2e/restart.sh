@@ -12,7 +12,7 @@ BIN="${RADAR_BIN:-$ROOT/server/bin/radar-server}"; PIDF="$DATA/server.pid"; mkdi
 stop() { [ -f "$PIDF" ] || return 0; local p; p=$(cat "$PIDF"); kill "$p" 2>/dev/null || true
   for i in $(seq 20); do kill -0 "$p" 2>/dev/null || break; sleep 0.25; done; kill -9 "$p" 2>/dev/null || true; rm -f "$PIDF"; }
 stop
-env -u DEEPSEEK_API_KEY TRANSLATE_ENABLED=0 NEWS_DB="$DATA/news.db" SECRETS_FILE="$DATA/secrets.json" PORT="$PORT" "$@" \
+env -u DEEPSEEK_API_KEY TRANSLATE_ENABLED=0 ARTIFACTS_DIR="${ARTIFACTS_DIR:-$DATA/artifacts}" NEWS_DB="$DATA/news.db" SECRETS_FILE="$DATA/secrets.json" PORT="$PORT" "$@" \
   nohup "$BIN" -ui "${UI_DIR:-$ROOT/out}" > "$LOG" 2>&1 &
 echo $! > "$PIDF"
 for i in $(seq 120); do curl -sf "http://localhost:$PORT/api/health" -o /dev/null && break; sleep 0.25; done

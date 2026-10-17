@@ -38,9 +38,9 @@ func TestFeedContentColumn(t *testing.T) {
 }
 
 // An item whose page fails takes the longer text of a duplicate (same title, other source); the brief still lists
-// it as lacking full text, and every original is saved under 原文/.
+// it as lacking full text. Nothing is written outside 缓存/ (the feed text is not a fetched original: not cached).
 func TestGatherFactsSiblingAndOriginals(t *testing.T) {
-	st, srv, _, outDir := composeStore(t, true)
+	st, srv, m, outDir := composeStore(t, true)
 	var sid2 int64
 	st.DB.QueryRow("SELECT id FROM sources WHERE type NOT LIKE 'x%' ORDER BY id DESC LIMIT 1").Scan(&sid2)
 	var t1 string
@@ -52,18 +52,18 @@ func TestGatherFactsSiblingAndOriginals(t *testing.T) {
 	r, _ := http.Get(srv.URL + "/api/brief?ai=1&section=all&ids=" + fmt.Sprint(id1))
 	json.NewDecoder(r.Body).Decode(&br)
 	r.Body.Close()
-	if r.StatusCode != 200 || len(br.NoFullText) != 1 || !strings.Contains(br.NoFullText[0].Reason, "同一事件") {
+	if r.StatusCode != 200 || len(br.NoFullText) != 1 || !strings.Contains(br.NoFullText[0].Reason, "同一事件") || br.NoFullText[0].Dropped {
 		t.Fatalf("%d %+v", r.StatusCode, br.NoFullText)
 	}
-	files, _ := filepath.Glob(filepath.Join(outDir, "原文", "*", "*.md"))
-	if len(files) != 1 {
-		t.Fatalf("originals: %v", files)
+	if len(m.sumIn) == 0 || !strings.Contains(m.sumIn[len(m.sumIn)-1], "SIBLING-TEXT") {
+		t.Fatal("sibling text not used")
 	}
-	b, _ := os.ReadFile(files[0])
-	md := string(b)
-	for _, want := range []string{"title: \"" + t1 + "\"", "url: https://e.com/1", "method: feed", "SIBLING-TEXT"} {
-		if !strings.Contains(md, want) {
-			t.Fatalf("original lacks %q:\n%s", want, md)
+	if br.Condensed == nil || br.Condensed.Before == 0 {
+		t.Fatalf("condense stat: %+v", br.Condensed)
+	}
+	for _, d := range []string{"原文", "简报"} {
+		if _, err := os.Stat(filepath.Join(outDir, d)); err == nil {
+			t.Fatalf("%s/ written", d)
 		}
 	}
 }

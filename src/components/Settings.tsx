@@ -1,5 +1,5 @@
 "use client";
-// 设置, grouped cards: 常规 · 通知 · 翻译 / AI (DeepSeek key, base URL, model, test) · 简报 Skill (desktop) · 更新 (desktop) · 数据 · 关于.
+// 设置, grouped cards: 常规 · 通知 · 翻译 / AI (DeepSeek key, base URL, model, test) · Skills / 多模态 / 抓取 API / 工作目录 (desktop) · 数据 (+ 更新, desktop) · 关于.
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -13,7 +13,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type TrScopes, api, secZh } from "./common";
-import { GeneralCard, NotifyCard, UpdateCard, type NotifyPrefs } from "./settings-extra";
+import { GeneralCard, NotifyCard, UpdateRow, type NotifyPrefs } from "./settings-extra";
 const SkillCard = dynamic(() => import("./settings-skill"), { ssr: false });
 const MultimodalCard = dynamic(() => import("./settings-media").then((m) => m.MultimodalCard), { ssr: false });
 const ArtifactsCard = dynamic(() => import("./settings-media").then((m) => m.ArtifactsCard), { ssr: false });
@@ -103,23 +103,27 @@ export default function Settings() {
       </Card>
 
       {s?.desktop && <><SkillCard /><SkillCard kind="twitter" /><SkillCard kind="wechat" /><SkillCard kind="xhs" /><MultimodalCard /><FetchApiCard /><ArtifactsCard /></>}
-      {s?.desktop && <UpdateCard version={s.version ?? null} />}
-      {s?.dataDir && <DataCard dataDir={s.dataDir} />}
+      {(s?.dataDir || s?.desktop) && <DataCard dataDir={s?.dataDir} version={s?.desktop ? s.version ?? null : undefined} />}
       <AboutCard version={s?.version ?? null} desktop={!!s?.desktop} />
     </div>
   );
 }
 
-function DataCard({ dataDir }: { dataDir: string }) {
+function DataCard({ dataDir, version }: { dataDir?: string; version?: string | null }) {
   const openDir = async () => { try { await api("/api/desktop/open-data", { method: "POST" }); } catch (e) { toast.error((e as Error).message); } };
   return (
     <Card className="mt-4" data-testid="data-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Database className="size-4 text-faint" />数据</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-wrap items-center gap-2">
-        <div className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground" title={dataDir}>{dataDir}</div>
-        <Button size="sm" variant="outline" onClick={openDir}><FolderOpen />打开数据目录</Button>
+      <CardContent className="grid gap-3">
+        {dataDir && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground" title={dataDir}>{dataDir}</div>
+            <Button size="sm" variant="outline" onClick={openDir}><FolderOpen />打开数据目录</Button>
+          </div>
+        )}
+        {version !== undefined && <UpdateRow version={version} />}
       </CardContent>
     </Card>
   );

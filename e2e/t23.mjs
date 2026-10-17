@@ -1,12 +1,12 @@
 // Round 10: selection mode only selects (corner click never navigates), 生成文章 ≤2, settings 抓取 API (fake providers:
-// keys, Jina base URL, quota refresh, 不可用), provider failover + 原文 files, drawer 翻译 switch (desktop; hidden on web).
+// keys, Jina base URL, quota refresh, 不可用), provider failover + 原文缓存, drawer 翻译 switch (desktop; hidden on web).
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
 import { rec, B, RESTART, DATA, mock } from "./lib.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const SH = process.env.R10_SHOTS ?? "/tmp/shots-r10"; fs.mkdirSync(SH, { recursive: true });
+const SH = process.env.R11_SHOTS ?? "/tmp/shots-r11"; fs.mkdirSync(SH, { recursive: true });
 const shot = (n) => path.join(SH, n);
 const ART = path.join(DATA, "artifacts"); fs.rmSync(ART, { recursive: true, force: true });
 const errors = [];
@@ -72,9 +72,10 @@ execSync(`bash ${RESTART} AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_KEY", process.env.
   await p.getByTestId("fetchapi-refresh").click(); await p.getByTestId("fetchapi-firecrawl-quota").waitFor({ timeout: 10000 }); await sleep(300);
   const q = async (id) => (await p.getByTestId(`fetchapi-${id}-quota`).innerText()).trim();
   const fq = await q("firecrawl"), cq = await q("crawl4ai"), jq = await q("jina");
-  rec("Firecrawl quota: remaining / plan · reset date", /剩余 4,321 \/ 10万/.test(fq) && /11\/1重置/.test(fq), fq);
-  rec("crawl4ai quota: balance + monthly allowance", /剩余 812 \/ 1,000/.test(cq) && /本月 300/.test(cq), cq);
-  rec("Jina quota (dashboard, best effort)", /剩余 987\.7万 tokens/.test(jq), jq);
+  rec("Firecrawl quota: remaining above the plan shown apart from it, comma style, reset date", fq === "剩余 101,000 credits · 套餐 1,000 · 10/24重置", fq);
+  rec("crawl4ai quota: free + bought credits, monthly cap below it, reset on the 1st", cq === "剩余 812.5 credits · 本月可用 300 · 11/1重置", cq);
+  rec("Jina quota: tokens, comma style (no 万)", jq === "剩余 9,876,543 tokens", jq);
+  await p.getByTestId("fetchapi-card").screenshot({ path: shot("settings-quota.png") });
   await card.screenshot({ path: shot("settings-fetch-api.png") });
   await mock("fail=dash.jina.ai&mode=500");
   await p.getByTestId("fetchapi-refresh").click(); await sleep(800);
@@ -95,14 +96,26 @@ execSync(`bash ${RESTART} AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_KEY", process.env.
   rec("article dialog shows 2 items", /2 条/.test(await p.getByTestId("article-dialog").innerText()));
   await p.getByTestId("pf-twitter").click(); await p.getByTestId("article-go").click(); await p.getByTestId("article-body").waitFor({ timeout: 30000 }); await sleep(300);
   await p.getByTestId("article-dialog").screenshot({ path: shot("article-2-items.png") });
-  const origDir = path.join(ART, "原文");
-  const files = fs.existsSync(origDir) ? execSync(`find "${origDir}" -name '*.md'`).toString().trim().split("\n").filter(Boolean) : [];
+  const cacheDir = path.join(ART, "缓存", "原文");
+  const files = fs.existsSync(cacheDir) ? execSync(`find "${cacheDir}" -name '*.md'`).toString().trim().split("\n").filter(Boolean) : [];
   const txt = files.map((f) => fs.readFileSync(f, "utf8"));
-  rec("原文 saved: one file per item under 原文/<date>/", files.length === 2 && files.every((f) => /原文\/\d{4}-\d{2}-\d{2}\/\d{4,6}-/.test(f)), files.map((f) => path.relative(ART, f)).join(" | "));
-  rec("原文 files record method + text (Jina 402 → Firecrawl)", txt.every((t) => /method: firecrawl/.test(t) && /url: https?:\/\//.test(t) && /source: /.test(t) && t.includes("E2E-FIRECRAWL")), txt[0]?.slice(0, 160).replace(/\n/g, " ⏎ "));
+  rec("原文 cached: one file per item under 缓存/原文/<host>/, nothing in 原文/ or 文章/", files.length === 2 && files.every((f) => /缓存\/原文\/[^/]+\/[0-9a-f]{16}\.md$/.test(f)) && !fs.existsSync(path.join(ART, "原文")) && !fs.existsSync(path.join(ART, "文章")), files.map((f) => path.relative(ART, f)).join(" | "));
+  rec("cache files record url + method + text (Jina 402 → Firecrawl)", txt.every((t) => /method: firecrawl/.test(t) && /url: https?:\/\//.test(t) && t.includes("E2E-FIRECRAWL")), txt[0]?.slice(0, 160).replace(/\n/g, " ⏎ "));
+  // generating again reads the cache: no provider is called
+  const provHits = async () => { const h = (await mock("x=1")).hits; return ["api.firecrawl.dev", "api.crawl4ai.com", "r.jinaai.cn"].reduce((a, k) => a + (h[k] ?? 0), 0); };
+  const h0 = await provHits();
+  await p.getByTestId("article-go").click(); await sleep(600);
+  await p.waitForFunction(() => !document.querySelector("[data-testid=article-go] .animate-spin"), null, { timeout: 30000 });
+  rec("regenerate: originals from the cache, no 抓取 API call", (await provHits()) === h0 && await p.getByTestId("article-nofull").count() === 0, String((await provHits()) - h0));
   const st = await (await fetch(B + "/api/fetchapi")).json();
   rec("Jina marked 额度用尽 after 402", st.providers[0].status === "exhausted", st.providers.map((x) => x.status).join(","));
   await mock("fail=r.jinaai.cn&mode=ok");
+  // AI 简报: originals the self-written fetcher cannot get are retried through the 抓取 API, then condensed
+  const more = [...nonX].filter((id) => !ids.includes(id)).slice(0, 3);
+  const brr = await (await fetch(B + `/api/brief?ai=1&section=all&ids=${more.join(",")}`)).json();
+  const methods = (brr.groups ?? []).flatMap((g) => g.items.map((i) => `${i.fetch?.method}/${i.fetch?.status}`));
+  rec("AI brief: self-fetch failures retried via the 抓取 API", methods.length > 0 && methods.every((m) => /^(self|firecrawl|crawl4ai)\/full$/.test(m)) && methods.some((m) => /^(firecrawl|crawl4ai)\//.test(m)), methods.join(","));
+  rec("AI brief: originals condensed before the model", !!brr.condensed && brr.condensed.before > 0 && brr.condensed.after <= brr.condensed.before, JSON.stringify(brr.condensed));
   await p.keyboard.press("Escape"); await sleep(300); await p.keyboard.press("Escape"); await sleep(300);
 
   // drawer 翻译 switch

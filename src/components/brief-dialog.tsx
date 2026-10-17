@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { api } from "./common";
+import { api, exportMarkdown, revealExported } from "./common";
 import { Markdown } from "./md-view";
 import { useApp } from "./app-shell";
 
@@ -16,12 +16,17 @@ export type BriefOut = {
   markdown: string; title: string; scope: string; scopeLabel: string; groups: BriefGroup[] | null;
   count: number; sources: number; generatedAt: number; ai: boolean; cached: boolean;
   aiAvailable: boolean; aiReason: string | null; translate: boolean; translateNote?: string; skill?: string;
-  verified?: boolean; manual?: boolean; saved?: string; noFullText?: { n: number; title: string; source: string; url: string; status: string; reason: string }[];
+  verified?: boolean; manual?: boolean; noFullText?: { n: number; title: string; source: string; url: string; status: string; reason: string; dropped?: boolean }[];
 };
 
 const TR_KEY = "brief-translate";
 
 /** Dialog: rule-based section brief (optionally translated) + optional AI 润色; copy / export markdown. */
+function nofullSummary(xs: { dropped?: boolean }[]) {
+  const d = xs.filter((m) => m.dropped).length, p = xs.length - d;
+  return [p ? `${p} 条未取到原文全文，只按标题 / 摘要写` : "", d ? `${d} 条未取到内容，未写入` : ""].filter(Boolean).join(" · ");
+}
+
 export default function BriefDialog({ open, onOpenChange, section, sectionLabel, ids }: {
   open: boolean; onOpenChange: (o: boolean) => void; section: string | null; sectionLabel: string; ids?: number[];
 }) {
@@ -66,11 +71,14 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel,
     try { await navigator.clipboard.writeText(text); setCopied(true); toast.success("已复制 Markdown"); setTimeout(() => setCopied(false), 1500); }
     catch { toast.error("复制失败"); }
   };
-  const download = () => {
+  const [exported, setExported] = useState("");
+  useEffect(() => setExported(""), [b]);
+  const download = async () => {
     if (!b) return;
-    const name = `简报-${b.scopeLabel}-${new Date().toISOString().slice(0, 10)}.md`;
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([text], { type: "text/markdown" })), download: name });
-    document.body.append(a); a.click(); a.remove();
+    try {
+      const p = await exportMarkdown("brief", `${b.scopeLabel}${b.ai ? "-AI" : ""}`, text, `简报-${b.scopeLabel}-${new Date().toISOString().slice(0, 10)}.md`);
+      if (p) { setExported(p); toast.success("已导出", { description: p, action: { label: "打开", onClick: () => void revealExported(p) } }); }
+    } catch (e) { toast.error((e as Error).message); }
   };
   const trHint = tr?.available ? "用 DeepSeek 翻译外文条目" : "仅使用已有译文（未配置 DeepSeek key）";
 
@@ -80,7 +88,7 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel,
         <DialogHeader className="gap-1 border-b border-border/60 px-5 py-4">
           <DialogTitle className="flex items-center gap-2 pr-6"><FileText className="size-4 text-brand" />{b?.title ?? `「${sectionLabel}」简报`}</DialogTitle>
           <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>{busy && !b ? (ids?.length ? "正在汇总所选内容…" : "正在汇总近 48 小时内容…") : b ? `${b.count} 条 · ${b.sources} 个来源${b.ai ? ` · AI 润色${b.skill ? `（${b.skill}）` : ""}` : " · 规则生成"}${b.cached ? " · 缓存" : ""}${edited ? " · 已编辑" : ""}` : ""}{b?.saved && <span className="ml-2 text-faint" title={b.saved} data-testid="brief-saved">已保存</span>}</span>
+            <span>{busy && !b ? (ids?.length ? "正在汇总所选内容…" : "正在汇总近 48 小时内容…") : b ? `${b.count} 条 · ${b.sources} 个来源${b.ai ? ` · AI 润色${b.skill ? `（${b.skill}）` : ""}` : " · 规则生成"}${b.cached ? " · 缓存" : ""}${edited ? " · 已编辑" : ""}` : ""}{exported && b && <span className="ml-2 text-faint" title={exported} data-testid="brief-saved">已导出</span>}</span>
             <label className="ml-auto inline-flex cursor-pointer items-center gap-2 type-caption text-muted-foreground" title={trHint}>
               <Languages className="size-3.5" />翻译
               <Switch size="sm" checked={trOn} disabled={busy || aiBusy} onCheckedChange={(v) => toggleTr(!!v)} aria-label="翻译简报" data-testid="brief-tr" />
@@ -92,10 +100,10 @@ export default function BriefDialog({ open, onOpenChange, section, sectionLabel,
           {busy && !b && <div className="flex items-center gap-2 type-body text-muted-foreground"><Loader2 className="size-4 animate-spin" />{trOn && tr?.available ? "生成并翻译中…" : "生成中…"}</div>}
           {b?.ai && (b.noFullText?.length ?? 0) > 0 && (
             <details className="mb-3 rounded-md bg-muted px-3 py-2 type-caption text-muted-foreground" data-testid="brief-nofull">
-              <summary className="cursor-pointer select-none">{b.noFullText!.length} 条未取到原文全文，只按标题 / 摘要写{b.verified ? " · 已核对事实" : ""}</summary>
+              <summary className="cursor-pointer select-none">{nofullSummary(b.noFullText!)}{b.verified ? " · 已核对事实" : ""}</summary>
               <ul className="mt-1.5 space-y-0.5">
                 {b.noFullText!.map((m) => (
-                  <li key={m.n} className="truncate"><span className="font-mono text-faint">[{m.n}]</span> <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">{m.title}</a> <span className="text-faint">· {m.source} · {m.reason}</span></li>
+                  <li key={m.url + m.n} className="truncate"><span className="font-mono text-faint">{m.dropped ? "[—]" : `[${m.n}]`}</span> <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">{m.title}</a> <span className="text-faint">· {m.source} · {m.reason}</span></li>
                 ))}
               </ul>
             </details>

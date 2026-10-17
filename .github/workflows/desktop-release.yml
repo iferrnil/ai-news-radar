@@ -95,6 +95,7 @@ jobs:
       - name: Build (Next static export + Go + MyGo, darwin/arm64 + darwin/amd64)
         env:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }} # ed25519 update signing (independent of Apple signing)
+          GH_TOKEN: ${{ github.token }} # delta updates read the published releases from the GitHub API; anonymous calls from shared runners get 403 (rate limit)
         run: desktop/scripts/package.sh darwin/arm64,darwin/amd64
       - name: Verify + collect
         env:

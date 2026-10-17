@@ -18,15 +18,20 @@ type FA = { providers: Prov[]; locked: boolean };
 const STATUS: Record<Prov["status"], [string, "outline" | "secondary" | "destructive" | "muted"]> = {
   off: ["未配置", "muted"], ok: ["可用", "secondary"], exhausted: ["额度用尽", "destructive"], cooling: ["冷却中", "outline"],
 };
-const n = (v: number) => (v >= 1e5 ? new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }) : new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 })).format(v);
-const day = (s: string) => { const d = new Date(s); return isNaN(+d) ? s : d.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" }); };
+// one number style everywhere: comma groups, up to 2 decimals (no 万 / compact notation)
+const n = (v: number) => new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(v);
+const day = (s: string) => { const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00+08:00` : s); return isNaN(+d) ? s : d.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" }); };
 
-function quotaText(q?: Quota) {
+// 剩余 is what can be spent now (it can exceed the plan: coupons / top-ups); the plan amount and a monthly cap
+// below the balance are shown as their own parts, never as "remaining / plan".
+export function quotaText(q?: Quota) {
   if (!q) return "";
   if (!q.ok || (q.remaining == null && q.allowance == null)) return "额度 不可用";
+  const unit = q.unit ? ` ${q.unit}` : "";
   const parts = [];
-  if (q.remaining != null) parts.push(`剩余 ${n(q.remaining)}${q.total != null ? ` / ${n(q.total)}` : ""}${q.unit === "tokens" ? " tokens" : ""}`);
-  if (q.allowance != null) parts.push(`本月 ${n(q.allowance)}`);
+  if (q.remaining != null) parts.push(`剩余 ${n(q.remaining)}${unit}`);
+  if (q.total != null && q.total > 0) parts.push(`套餐 ${n(q.total)}`);
+  if (q.allowance != null && (q.remaining == null || q.allowance < q.remaining)) parts.push(`本月可用 ${n(q.allowance)}`);
   if (q.resetAt) parts.push(`${day(q.resetAt)}重置`);
   return parts.join(" · ");
 }
@@ -60,7 +65,7 @@ export function FetchApiCard() {
     <Card className="mt-4" data-testid="fetchapi-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Globe className="size-4 text-faint" />抓取 API</CardTitle>
-        <CardDescription>生成文章依次使用，额度用尽自动切换；都不可用时自抓。</CardDescription>
+        <CardDescription>生成文章依次使用，简报自抓失败时补抓；额度用尽自动切换。</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {fa?.providers.map((p) => {
@@ -71,7 +76,7 @@ export function FetchApiCard() {
               <div className="flex min-w-0 items-center gap-2">
                 <Label htmlFor={`fa-${p.id}`}>{p.label}</Label>
                 <Badge size="sm" variant={variant} title={p.why} data-testid={`fetchapi-${p.id}-status`}>{st}</Badge>
-                {qt && <span className="ml-auto truncate font-mono type-meta tabular-nums text-faint" title={p.quota?.error} data-testid={`fetchapi-${p.id}-quota`}>{qt}</span>}
+                {qt && <span className="ml-auto truncate font-mono type-meta tabular-nums text-faint" title={p.quota?.error ?? qt} data-testid={`fetchapi-${p.id}-quota`}>{qt}</span>}
               </div>
               <InputGroup>
                 <InputGroupInput id={`fa-${p.id}`} type={show[p.id] ? "text" : "password"} autoComplete="off" spellCheck={false} disabled={locked}

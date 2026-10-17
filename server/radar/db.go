@@ -120,11 +120,13 @@ func Open(cfg Config) (*Store, error) {
 	s.notif = newNotifier(s)
 	s.tr = newTranslator(s)
 	s.prov = newProvSched()
+	s.useDiskCache()
 	return s, nil
 }
 
 // Close checkpoints the WAL and closes the database.
 func (s *Store) Close() error {
+	s.dropDiskCache()
 	s.DB.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
 	return s.DB.Close()
 }

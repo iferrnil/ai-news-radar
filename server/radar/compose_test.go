@@ -24,6 +24,8 @@ type mmMock struct {
 	mu        sync.Mutex
 	sys       map[string]string // last writing system prompt per platform marker
 	lastWrite string
+	sumIn     []string // user messages of the summarize stage
+	revised   int
 	images    []map[string]any
 	polls     int
 	vision    []any
@@ -68,7 +70,11 @@ func (m *mmMock) handler(w http.ResponseWriter, r *http.Request) {
 		sys := msgs[0].(map[string]any)["content"].(string)
 		user := msgs[1].(map[string]any)["content"].(string)
 		switch {
+		case strings.Contains(sys, "<stage>revise</stage>"):
+			m.revised++
+			chat(regexp.MustCompile(`(?s)<draft>\n(.*)\n</draft>`).FindStringSubmatch(user)[1] + "\n#话题一 #话题二 #话题三")
 		case strings.Contains(sys, "<stage>summarize</stage>"):
+			m.sumIn = append(m.sumIn, user)
 			chat(`{"items":[{"n":1,"summary":"SUM-ONE 事实摘要"}]}`)
 		case strings.Contains(sys, "<stage>verify</stage>"):
 			chat(regexp.MustCompile(`(?s)<brief>\n(.*)\n</brief>`).FindStringSubmatch(user)[1] + "\nVERIFIED")
@@ -156,9 +162,10 @@ func TestComposeSkillPerPlatform(t *testing.T) {
 		if p == "twitter" && len(a.Covers) != 0 {
 			t.Fatalf("twitter asked for a cover: %+v", a.Covers)
 		}
-		if !strings.HasPrefix(a.Saved, filepath.Join(outDir, "文章")) {
-			t.Fatalf("not saved under the artifacts dir: %q", a.Saved)
-		}
+	}
+	// nothing is written until 导出
+	if fs, _ := filepath.Glob(filepath.Join(outDir, "文章", "*", "*")); len(fs) != 0 {
+		t.Fatalf("article auto-saved: %v", fs)
 	}
 	// an installed skill set active for 小红书 only
 	skDir := filepath.Join(filepath.Dir(st.Cfg.DBPath), "skills", "my-xhs")
@@ -208,15 +215,27 @@ func TestComposeCoverWithMultimodal(t *testing.T) {
 	}
 	var a articleOut
 	postJSON(t, srv.URL+"/api/compose", "POST", map[string]any{"platform": "xhs", "ids": ids(st, 2)}, &a)
-	if len(a.Covers) != 1 || a.Covers[0].Status != "ok" || !strings.HasPrefix(a.Covers[0].Path, filepath.Join(outDir, "封面")) || !strings.HasSuffix(a.Covers[0].Path, ".png") {
+	if len(a.Covers) != 1 || a.Covers[0].Status != "ok" || !strings.HasPrefix(a.Covers[0].Path, filepath.Join(outDir, "缓存", "封面")) || !strings.HasSuffix(a.Covers[0].Path, ".png") {
 		t.Fatalf("cover: %+v", a.Covers)
 	}
 	if len(m.images) != 1 || m.images[0]["model"] != "img-1" || m.images[0]["size"] != "1024x1536" || m.images[0]["prompt"] != "a calm robot reading news" {
 		t.Fatalf("image request: %+v", m.images)
 	}
-	saved, _ := os.ReadFile(a.Saved)
-	if !strings.Contains(string(saved), "![封面](../../封面/") {
-		t.Fatalf("saved article does not link the cover: %s", saved)
+	// 导出: the Markdown goes to 文章/<date>/, the cover is copied next to it and linked
+	var ex struct{ Path string }
+	if c := postJSON(t, srv.URL+"/api/artifacts/export", "POST", map[string]any{"kind": "article", "title": "标题/一", "markdown": a.Markdown, "covers": []string{a.Covers[0].Path, st.Cfg.SecretsPath}}, &ex); c != 200 || !strings.HasPrefix(ex.Path, filepath.Join(outDir, "文章")) || !strings.HasSuffix(ex.Path, "-标题-一.md") {
+		t.Fatalf("export %d %q", c, ex.Path)
+	}
+	saved, _ := os.ReadFile(ex.Path)
+	stem := strings.TrimSuffix(filepath.Base(ex.Path), ".md")
+	if !strings.HasPrefix(string(saved), "![封面]("+stem+"-封面.png)") || strings.Count(string(saved), "![封面]") != 1 {
+		t.Fatalf("exported article does not link the cover (only): %s", saved)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(ex.Path), stem+"-封面.png")); err != nil {
+		t.Fatal("cover not copied", err)
+	}
+	if c := postJSON(t, srv.URL+"/api/artifacts/export", "POST", map[string]any{"kind": "x", "markdown": "a"}, nil); c != 400 {
+		t.Fatal("bad kind accepted", c)
 	}
 	// served to the dialog from inside the artifacts dir only
 	if r, _ := http.Get(srv.URL + "/api/artifacts/file?path=" + url.QueryEscape(a.Covers[0].Path)); r.StatusCode != 200 {
@@ -225,13 +244,14 @@ func TestComposeCoverWithMultimodal(t *testing.T) {
 	if r, _ := http.Get(srv.URL + "/api/artifacts/file?path=" + url.QueryEscape(st.Cfg.SecretsPath)); r.StatusCode != 404 {
 		t.Fatal("file outside the artifacts dir served")
 	}
-	// the brief is saved too
-	var br briefOut
+	// the brief is not saved until 导出
 	r, _ = http.Get(srv.URL + "/api/brief?section=all")
-	json.NewDecoder(r.Body).Decode(&br)
 	r.Body.Close()
-	if !strings.HasPrefix(br.Saved, filepath.Join(outDir, "简报")) {
-		t.Fatalf("brief not saved: %q", br.Saved)
+	if fs, _ := filepath.Glob(filepath.Join(outDir, "简报", "*", "*")); len(fs) != 0 {
+		t.Fatalf("brief auto-saved: %v", fs)
+	}
+	if c := postJSON(t, srv.URL+"/api/artifacts/export", "POST", map[string]any{"kind": "brief", "title": "AI 简报", "markdown": "# B\n"}, &ex); c != 200 || !strings.HasPrefix(ex.Path, filepath.Join(outDir, "简报")) {
+		t.Fatalf("brief export %d %q", c, ex.Path)
 	}
 }
 
@@ -266,11 +286,14 @@ func TestManualBriefAndWebGating(t *testing.T) {
 	r, _ := http.Get(srv.URL + "/api/brief?section=all&ids=" + joinIDs(sel))
 	json.NewDecoder(r.Body).Decode(&br)
 	r.Body.Close()
-	if r.StatusCode != 200 || br.Count != 4 || !br.Manual || br.Saved != "" || !strings.Contains(br.Markdown, "手动选择") {
+	if r.StatusCode != 200 || br.Count != 4 || !br.Manual || !strings.Contains(br.Markdown, "手动选择") {
 		t.Fatalf("manual brief on web: %d %+v", r.StatusCode, br.Count)
 	}
 	if r, _ := http.Get(srv.URL + "/api/brief?ids=" + joinIDs(ids(st, 11))); r.StatusCode != 400 {
 		t.Fatal(">10 ids accepted", r.Status)
+	}
+	if c := postJSON(t, srv.URL+"/api/artifacts/export", "POST", map[string]any{"kind": "brief", "markdown": "# B"}, nil); c != 404 {
+		t.Fatal("export on web", c)
 	}
 	for _, p := range []string{"/api/compose", "/api/multimodal", "/api/artifacts"} {
 		meth := "GET"

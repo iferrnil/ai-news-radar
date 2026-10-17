@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import type { ItemOut } from "@/lib/types";
 
 // Exclusive sections: each SOURCE belongs to exactly one section (sources.section = section key), so every item is in exactly one.
@@ -47,6 +48,17 @@ export async function api<T = any>(path: string, init?: RequestInit): Promise<T>
   if (!r.ok) throw new Error(j.detail || r.statusText);
   return j as T;
 }
+// 导出: desktop writes it to the 工作目录 (returns the path); the web server has no 工作目录 (404) → a download.
+export async function exportMarkdown(kind: "brief" | "article", title: string, markdown: string, filename: string, covers?: string[]): Promise<string | null> {
+  const r = await fetch("/api/artifacts/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, title, markdown, covers }) });
+  const j = await r.json().catch(() => ({}));
+  if (r.ok) return j.path as string;
+  if (r.status !== 404) throw new Error(j.detail || r.statusText);
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([markdown], { type: "text/markdown" })), download: filename });
+  document.body.append(a); a.click(); a.remove();
+  return null;
+}
+export const revealExported = (path: string) => api("/api/artifacts/open", { method: "POST", body: JSON.stringify({ path }) }).catch((e) => toast.error((e as Error).message));
 export type SourceRow = {
   id: number; name: string; type: string; username: string | null; category: string | null; region: string | null; url: string; homepage: string | null;
   enabled: number; supported: number; unsupported_reason: string | null; priority: string | null; poll_interval: number; grp: string | null; section: string | null;

@@ -1,5 +1,5 @@
 "use client";
-// 设置 › 多模态模型 and 制品目录 (desktop only).
+// 设置 › 多模态模型 and 工作目录 (desktop only).
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, FolderOpen, ImageIcon, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -79,11 +79,11 @@ export function ArtifactsCard() {
   return (
     <Card className="mt-4" data-testid="artifacts-card">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><FolderOpen className="size-4 text-faint" />制品目录</CardTitle>
-        <CardDescription>简报、文章、封面、原文按类型和日期保存在这里。</CardDescription>
+        <CardTitle className="flex items-center gap-2"><FolderOpen className="size-4 text-faint" />工作目录</CardTitle>
+        <CardDescription>导出的简报和文章存在这里；抓取的原文和生成的封面在「缓存」中保留 24 小时。</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
-        <Input className="min-w-0 flex-1 font-mono text-[12px]" placeholder={a?.default ?? ""} value={dir} onChange={(e) => setDir(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save(dir.trim())} aria-label="制品目录" data-testid="artifacts-dir" />
+        <Input className="min-w-0 flex-1 font-mono text-[12px]" placeholder={a?.default ?? ""} value={dir} onChange={(e) => setDir(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save(dir.trim())} aria-label="工作目录" data-testid="artifacts-dir" />
         <Button variant="outline" size="sm" className="h-9" disabled={!a || dir.trim() === (a.custom ? a.dir : "")} onClick={() => save(dir.trim())}>保存</Button>
         {a?.canOpen && <Button variant="outline" size="sm" className="h-9" onClick={open} data-testid="artifacts-open"><FolderOpen />打开</Button>}
       </CardContent>

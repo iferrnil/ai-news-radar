@@ -99,6 +99,10 @@ func (c *articleCacheT) get(u string) (articleRes, bool) {
 	defer c.mu.Unlock()
 	e, ok := c.m[u]
 	if !ok {
+		if r, ok := gDisk.load(u); ok { // 原文缓存 (desktop, 24 h)
+			c.m[u] = articleCached{time.Now(), r}
+			return r, true
+		}
 		return articleRes{}, false
 	}
 	ttl := articleTTL
@@ -123,6 +127,9 @@ func (c *articleCacheT) put(u string, r articleRes) {
 	}
 	c.m[u] = articleCached{time.Now(), r}
 	c.mu.Unlock()
+	if r.Status == "full" {
+		gDisk.save(u, r)
+	}
 }
 
 func fetchArticle(ctx context.Context, u string) string { return fetchArticleRes(ctx, u).Text }

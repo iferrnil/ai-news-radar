@@ -82,6 +82,7 @@ type provRig struct {
 func newProvRig(t *testing.T) *provRig {
 	t.Setenv("UPSTREAM_MOCK", "")
 	d := t.TempDir()
+	t.Setenv("ARTIFACTS_DIR", filepath.Join(d, "work"))
 	st, err := Open(Config{DBPath: filepath.Join(d, "news.db"), SeedPath: "../../sources/sources.json", SecretsPath: filepath.Join(d, "secrets.json"), Desktop: true})
 	if err != nil {
 		t.Fatal(err)
@@ -107,6 +108,7 @@ func newProvRig(t *testing.T) *provRig {
 }
 
 func (g *provRig) fetch(t *testing.T) articleRes {
+	os.RemoveAll(g.st.cacheDir())
 	gArticles.mu.Lock()
 	gArticles.m = map[string]articleCached{}
 	gArticles.mu.Unlock()
@@ -199,7 +201,10 @@ func TestClassify(t *testing.T) {
 	}{
 		{"jina", 402, `{}`, provExhausted}, {"jina", 401, `{}`, provExhausted}, {"firecrawl", 403, `{"error":"Insufficient credits"}`, provExhausted},
 		{"firecrawl", 403, `{"error":"site blocked"}`, provPage}, {"crawl4ai", 429, `{"detail":"monthly plan_cap reached"}`, provExhausted},
-		{"crawl4ai", 429, `{}`, provRate}, {"crawl4ai", 502, `{}`, provPage}, {"jina", 503, ``, provDown}, {"jina", 422, `{}`, provPage},
+		{"crawl4ai", 429, `{}`, provRate}, {"crawl4ai", 502, `{}`, provPage},
+		{"crawl4ai", 402, `{"error":"no_credit"}`, provExhausted}, {"crawl4ai", 402, `{"error":"spend_cap"}`, provExhausted},
+		{"crawl4ai", 403, `{"error":"blocked"}`, provPage}, {"crawl4ai", 403, `{"error":"login-wall"}`, provPage},
+		{"crawl4ai", 503, `{"error":"fleet-busy"}`, provRate}, {"crawl4ai", 500, `{}`, provDown}, {"jina", 503, ``, provDown}, {"jina", 422, `{}`, provPage},
 	} {
 		if got, _ := classify(c.id, &Resp{Status: c.code, Body: []byte(c.body), Header: http.Header{}}, nil); got != c.want {
 			t.Fatalf("%s %d %s: %v want %v", c.id, c.code, c.body, got, c.want)
@@ -210,14 +215,14 @@ func TestClassify(t *testing.T) {
 func TestQuotaRefresh(t *testing.T) {
 	t.Setenv("UPSTREAM_MOCK", "")
 	var c4Body atomic.Value
-	c4Body.Store(`{"balance": {"credits": 1234.5}, "plan": {"allowance_per_month": 5000, "allowance_left": 420}, "resets_at": "2026-11-01T00:00:00Z"}`)
+	// the shape of a real /v1/billing/balance answer (community tier, numbers changed)
+	c4Body.Store(`{"allowance_mc":2500000,"billing_email":"","credit":"10.00","credit_mc":10000,"free":"999.75","free_mc":999750,"free_period":"2026-10","has_card":false,"plan":"","plan_cancels":false,"plan_month_mc":0,"plan_name":"","plan_renews":"","recharge":{},"spend_cap_mc":0,"spend_month":"0.25","spend_month_mc":250,"tier":"community","topups":0}`)
 	var jinaFail atomic.Bool
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/v2/team/credit-usage":
 			fmt.Fprint(w, `{"success":true,"data":{"remainingCredits":4321,"planCredits":100000,"billingPeriodStart":"2026-10-01T00:00:00Z","billingPeriodEnd":"2026-11-01T00:00:00Z"}}`)
-		case r.URL.Path == "/v1/billing/balance":
-			w.Header().Set("x-c4-balance", "999")
+		case r.URL.Path == "/v1/billing/balance": // (no x-c4-* headers on this one, like the real endpoint)
 			fmt.Fprint(w, c4Body.Load().(string))
 		case r.URL.Path == "/api/v1/api_key/fe_user":
 			if jinaFail.Load() || r.URL.Query().Get("api_key") != "jina-key-1" {
@@ -246,12 +251,24 @@ func TestQuotaRefresh(t *testing.T) {
 	if q := st.refreshQuota("firecrawl"); !q.OK || *q.Remaining != 4321 || *q.Total != 100000 || q.ResetAt != "2026-11-01T00:00:00Z" {
 		t.Fatalf("firecrawl: %+v", q)
 	}
-	if q := st.refreshQuota("crawl4ai"); !q.OK || *q.Remaining != 1234.5 || *q.Allowance != 420 || *q.Total != 5000 || q.ResetAt == "" {
+	if q := st.refreshQuota("crawl4ai"); !q.OK || *q.Remaining != 1009.75 || *q.Allowance != 2499.75 || q.Total != nil || q.ResetAt != "2026-11-01" || q.Unit != "credits" {
 		t.Fatalf("crawl4ai: %+v", q)
 	}
-	c4Body.Store(`{"weird": true}`) // unknown body: the balance header still counts
-	if q := st.refreshQuota("crawl4ai"); !q.OK || *q.Remaining != 999 {
-		t.Fatalf("crawl4ai header fallback: %+v", q)
+	// a lower x-c4-balance seen on a call in the last two minutes wins over the trailing balance endpoint
+	st.c4Headers("c4", http.Header{"X-C4-Balance": {"1009.25"}})
+	if q := st.refreshQuota("crawl4ai"); !q.OK || *q.Remaining != 1009.25 {
+		t.Fatalf("crawl4ai header: %+v", q)
+	}
+	c4Body.Store(`{"free":"5","credit":"1.5","plan_month_mc":100000000,"free_period":"2026-12"}`) // a paid plan, string amounts
+	st.prov.mu.Lock()
+	st.prov.state("crawl4ai", "c4").quota = nil
+	st.prov.mu.Unlock()
+	if q := st.refreshQuota("crawl4ai"); !q.OK || *q.Remaining != 6.5 || *q.Total != 100000 || q.ResetAt != "2027-01-01" || q.Allowance != nil {
+		t.Fatalf("crawl4ai plan: %+v", q)
+	}
+	c4Body.Store(`{"weird": true}`)
+	if q := st.refreshQuota("crawl4ai"); q.OK || q.Error != "无法解析" {
+		t.Fatalf("crawl4ai unknown body: %+v", q)
 	}
 	c4Body.Store(`not json`)
 	if q := st.refreshQuota("crawl4ai"); q == nil {

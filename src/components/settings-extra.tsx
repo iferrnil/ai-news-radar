@@ -161,16 +161,12 @@ export function GeneralCard() {
   );
 }
 
-export function UpdateCard({ version }: { version: string | null }) {
+export function UpdateRow({ version }: { version: string | null }) {
   return (
-    <Card className="mt-4" data-testid="update-card">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Download className="size-4 text-faint" />更新</CardTitle>
-        <CardDescription>
-          {version ? <span className="font-mono">v{version}</span> : null} · 自动检查；手动：菜单「检查更新…」。
-        </CardDescription>
-      </CardHeader>
-    </Card>
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t pt-3 text-[13px]" data-testid="update-section">
+      <Download className="size-4 text-faint" /><span className="font-medium">更新</span>
+      <span className="text-muted-foreground">{version ? <span className="font-mono">v{version}</span> : null} · 自动检查；手动：菜单「检查更新…」</span>
+    </div>
   );
 }
 

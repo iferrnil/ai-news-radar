@@ -58,6 +58,7 @@ func (s *Store) Handler() http.Handler {
 	m.HandleFunc("PATCH /api/artifacts", s.hArtifactsPatch)
 	m.HandleFunc("POST /api/artifacts/open", s.hArtifactsOpen)
 	m.HandleFunc("GET /api/artifacts/file", s.hArtifactFile)
+	m.HandleFunc("POST /api/artifacts/export", s.hArtifactsExport)
 	m.HandleFunc("GET /api/translate/progress", s.hTranslateProgress)
 	m.HandleFunc("GET /api/skills", s.hSkillsList)
 	m.HandleFunc("GET /api/skills/{name}", s.hSkillGet)

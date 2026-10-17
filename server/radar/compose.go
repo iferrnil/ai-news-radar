@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -42,7 +41,7 @@ type articleOut struct {
 	NoFullText  []briefMiss `json:"noFullText,omitempty"`
 	Covers      []coverReq  `json:"covers,omitempty"`
 	VisionNote  string      `json:"visionNote,omitempty"`
-	Saved       string      `json:"saved,omitempty"`
+	SelfCheck   []string    `json:"selfCheck,omitempty"` // what the self-check still flags after its revision pass
 	GeneratedAt float64     `json:"generatedAt"`
 }
 
@@ -61,7 +60,7 @@ func extractCovers(md string) (string, []coverReq) {
 	return strings.TrimSpace(md) + "\n", out
 }
 
-const articleOutputRules = "\n输出要求：用简体中文写（英文资料译成中文，专有名词保留原文）；只输出文章本身（Markdown），不要解释；每条新闻引用处保留 [[n]](url) 链接，编号与输入一致，不要改动 url。" +
+const articleOutputRules = "\n输出要求：用简体中文写（英文资料译成中文，专有名词保留原文）；只输出文章本身（Markdown），不要解释，不要输出自检过程；按 Skill 的规定放置 [[n]](url) 链接（Skill 没有规定时放在每条新闻引用处），编号与输入一致，不要改动 url。" +
 	"若 Skill 要求封面，按 Skill 写明的格式单独一行输出 <!-- cover-image: 画面描述 --> 或 <!-- cover-video: 画面描述 -->；Skill 没有要求就不要输出。" + factRules
 
 const articleVerify = `<stage>verify</stage>
@@ -136,6 +135,7 @@ func (s *Store) composeArticle(section, platform string, ids []int64) (*articleO
 		}
 	}
 	md, covers := extractCovers(md)
+	md, out.SelfCheck = s.selfCheck(md, platform)
 	if os.Getenv("BRIEF_VERIFY") != "0" {
 		var vb strings.Builder
 		fmt.Fprintf(&vb, "<brief>\n%s\n</brief>\n\n", md)
@@ -153,22 +153,6 @@ func (s *Store) composeArticle(section, platform string, ids []int64) (*articleO
 	}
 	out.Covers = s.makeCovers(covers, platform, mm)
 	out.Markdown = md
-	saved := md // the saved copy also links the generated cover(s), relative to the article
-	if s.Cfg.Desktop {
-		p := s.artifactPath("文章", label) + ".md"
-		for _, c := range out.Covers {
-			if c.Status == "ok" {
-				if rel, err := filepath.Rel(filepath.Dir(p), c.Path); err == nil {
-					if c.Kind == "image" {
-						saved = fmt.Sprintf("![封面](%s)\n\n", filepath.ToSlash(rel)) + saved
-					} else {
-						saved += fmt.Sprintf("\n[封面视频](%s)\n", filepath.ToSlash(rel))
-					}
-				}
-			}
-		}
-		out.Saved = s.saveArtifact("文章", label, saved)
-	}
 	return out, nil
 }
 
@@ -184,8 +168,8 @@ func (s *Store) makeCovers(reqs []coverReq, platform string, mm MMConfig) []cove
 			c.Status, c.Note = "skipped", "仅桌面版可用"
 			continue
 		}
-		typ := map[string]string{"image": "封面", "video": "视频"}[c.Kind]
-		dst := s.artifactPath(typ, platformSkill[platform])
+		// generated into 缓存/ (cleaned after a day); 导出 copies it next to the article
+		dst := s.cachePath(map[string]string{"image": "封面", "video": "视频"}[c.Kind], platformSkill[platform])
 		var p string
 		var err error
 		if c.Kind == "image" {

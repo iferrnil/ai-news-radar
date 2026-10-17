@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { rec, B, RESTART, DATA } from "./lib.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const SH = process.env.R9_SHOTS ?? "/tmp/shots-r9"; fs.mkdirSync(SH, { recursive: true });
+const SH = process.env.R11_SHOTS ?? "/tmp/shots-r11"; fs.mkdirSync(SH, { recursive: true });
 const shot = (n) => path.join(SH, n);
 const ART = path.join(DATA, "artifacts"); fs.rmSync(ART, { recursive: true, force: true });
 const errors = [];
@@ -92,18 +92,24 @@ execSync(`bash ${RESTART} AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_KEY", process.env.
     if (pf !== "twitter") rec(`article ${pf}: cover requested, skipped without multimodal model`, r.note.some((t) => /未配置图片模型/.test(t)) && !r.body.includes("e2e cover prompt"), r.note.join("|"));
   }
   await p.getByTestId("article-dialog").screenshot({ path: shot("article-dialog.png") });
-  const saved = fs.existsSync(path.join(ART, "文章")) ? execSync(`find "${ART}/文章" -name '*.md' | wc -l`).toString().trim() : "0";
-  rec("articles saved to the 制品目录 (文章/<date>/…md)", Number(saved) === 3, saved);
+  const count = (d) => (fs.existsSync(path.join(ART, d)) ? Number(execSync(`find "${ART}/${d}" -name '*.md' | wc -l`).toString().trim()) : 0);
+  rec("articles not saved until 导出", count("文章") === 0, String(count("文章")));
+  rec("article dialog: no 工作目录 / 制品目录 button", await p.getByTestId("article-open-dir").count() === 0 && !/制品目录|工作目录/.test(await p.getByTestId("article-dialog").innerText()));
+  await p.getByTestId("article-export").click(); await p.locator("[data-sonner-toast]").filter({ hasText: "已导出" }).waitFor({ timeout: 10000 });
+  rec("导出: the article written to 文章/<date>/ (one file)", count("文章") === 1 && /已导出/.test(await p.getByTestId("article-meta").innerText()), String(count("文章")));
+  await p.getByTestId("article-dialog").screenshot({ path: shot("article-dialog-exported.png") });
   await p.keyboard.press("Escape"); await sleep(300);
-  await p.getByTestId("brief-btn").click(); await p.getByTestId("brief-saved").waitFor({ timeout: 10000 });
-  rec("desktop brief saved to 简报/<date>/", fs.readdirSync(path.join(ART, "简报")).length === 1);
+  await p.getByTestId("brief-btn").click(); await p.getByTestId("brief-body").waitFor({ timeout: 10000 }); await sleep(300);
+  rec("desktop brief not saved until 导出", count("简报") === 0 && await p.getByTestId("brief-saved").count() === 0);
+  await p.getByTestId("brief-export").click(); await p.getByTestId("brief-saved").waitFor({ timeout: 10000 });
+  rec("导出: the brief written to 简报/<date>/", count("简报") === 1, String(count("简报")));
   await p.keyboard.press("Escape");
 
   // settings
   await p.goto(B + "/settings"); await p.getByTestId("artifacts-card").waitFor({ timeout: 15000 }); await sleep(800);
   rec("settings: 推特 / 公众号 / 小红书 Skill cards with their built-in defaults",
     /twitter-article/.test(await p.getByTestId("skill-card-twitter").innerText()) && /wechat-article/.test(await p.getByTestId("skill-card-wechat").innerText()) && /xhs-article/.test(await p.getByTestId("skill-card-xhs").innerText()));
-  rec("settings: 制品目录 shows the configured dir", (await p.getByTestId("artifacts-dir").getAttribute("placeholder")) === ART);
+  rec("settings: 工作目录 shows the configured dir", (await p.getByTestId("artifacts-dir").getAttribute("placeholder")) === ART);
   await p.locator("#mm-baseUrl").fill("https://mm.example.com/v1"); await p.locator("#mm-imageModel").fill("img-model"); await p.locator("#mm-key").fill("sk-" + "e2emultimodalkey0000");
   await p.getByTestId("mm-save").click(); await p.getByTestId("mm-on").waitFor();
   const mm = await (await fetch(B + "/api/multimodal")).json();
