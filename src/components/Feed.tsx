@@ -26,7 +26,7 @@ import { EmptyState } from "./empty-state";
 import dynamic from "next/dynamic";
 const BriefDialog = dynamic(() => import("./brief-dialog"), { ssr: false });
 const ArticleDialog = dynamic(() => import("./article-dialog"), { ssr: false });
-const PICK_MAX = 10; // 手动简报 / 生成文章
+const PICK_MAX = { brief: 10, article: 2 } as const; // 手动简报 / 生成文章
 const isDesktop = () => typeof window !== "undefined" && !!(window as unknown as { __radarDesktop?: boolean }).__radarDesktop;
 import type { ItemOut } from "@/lib/types";
 import { useApp } from "./app-shell";
@@ -66,15 +66,17 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
   const linkOnly = x && /^https?:\/\//.test(t);
   const dek = x ? "" : dekText(it.summary);
   const card = (
-    <div ref={ref} data-slot="card" data-size="sm" onClick={() => onOpen(it)} data-active={active} data-read={read} data-item={it.id} role="button" tabIndex={-1}
+    <div ref={ref} data-slot="card" data-size="sm" onClickCapture={pick ? (e) => { e.preventDefault(); e.stopPropagation(); onOpen(it); } : undefined} onClick={() => onOpen(it)} data-active={active} data-read={read} data-item={it.id} role="button" tabIndex={-1}
       data-picked={pick === 2 || undefined} aria-pressed={pick ? pick === 2 : undefined}
       className={cn(CARD_H, "feed-card group/item relative flex flex-col overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 cursor-pointer gap-0 py-0 shadow-feed ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
         "hover:-translate-y-px hover:ring-foreground/[0.14] hover:shadow-raised",
         "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/55", fresh && "fresh-row",
         pick === 2 && "ring-2 ring-brand", pick === 3 && "opacity-50")}>
       {pick > 0 && (
-        <span data-testid="pick-mark" className={cn("absolute bottom-2 right-2.5 z-10 grid size-5 place-items-center rounded-full border shadow-sm", pick === 2 ? "border-brand bg-brand text-white" : "border-border bg-background")}>
-          {pick === 2 && <Check className="size-3" />}
+        <span data-testid="pick-mark" role="checkbox" aria-checked={pick === 2} aria-label="选择"
+          className={cn("absolute bottom-1.5 right-2 z-10 grid size-6 place-items-center rounded-full border-[1.5px] shadow-sm transition-colors duration-150 before:absolute before:-inset-2.5 before:content-['']",
+            pick === 2 ? "border-brand bg-brand text-white" : "border-foreground/25 bg-background text-transparent group-hover/item:border-foreground/45")}>
+          <Check className="size-3.5" strokeWidth={3} />
         </span>
       )}
       <div className="flex h-10 shrink-0 items-center gap-2 px-3.5 pt-0.5 type-caption leading-4">
@@ -106,10 +108,12 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
       <div className="flex h-9 shrink-0 items-center gap-1.5 border-t border-border/40 px-3.5 type-meta text-faint">
         <Badge size="sm" variant="outline" className="text-muted-foreground"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>
         {it.also_on_x.length > 0 && <Badge size="sm" variant="muted" className="min-w-0"><Twitter />也在 X</Badge>}
-        <a href={it.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} aria-label="打开原文"
-          className="-mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded-md opacity-60 transition-[opacity,background-color,color] duration-150 ease-out group-hover/item:opacity-100 hover:bg-secondary hover:text-foreground">
-          <ArrowUpRight className="size-3.5" />
-        </a>
+        {pick ? <span className="-mr-1.5 ml-auto size-6 shrink-0" aria-hidden /> : (
+          <a href={it.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} aria-label="打开原文"
+            className="-mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded-md opacity-60 transition-[opacity,background-color,color] duration-150 ease-out group-hover/item:opacity-100 hover:bg-secondary hover:text-foreground">
+            <ArrowUpRight className="size-3.5" />
+          </a>
+        )}
       </div>
     </div>
   );
@@ -135,15 +139,16 @@ export default function Feed() {
   // dialog can never show the previous section's result
   const viewId = `${briefScope}`;
   useEffect(() => { setBriefOpen(false); setArticleOpen(false); setPickMode(null); setPicked([]); }, [viewId]);
+  const pickMax = PICK_MAX[pickMode ?? "brief"];
   const togglePick = useCallback((it: ItemOut) => {
     setPicked((p) => {
       if (p.includes(it.id)) return p.filter((x) => x !== it.id);
-      if (p.length >= PICK_MAX) { toast(`最多选 ${PICK_MAX} 条`); return p; }
+      if (p.length >= pickMax) { toast(`最多选 ${pickMax} 条`); return p; }
       return [...p, it.id];
     });
-  }, []);
+  }, [pickMax]);
   const autoBrief = () => { setBriefIds(undefined); setBriefOpen(true); };
-  const startPick = (m: "brief" | "article") => { hoverPreview.close(); setPickMode((cur) => (cur === m ? null : m)); };
+  const startPick = (m: "brief" | "article") => { hoverPreview.close(); setPickMode((cur) => (cur === m ? null : m)); setPicked((p) => p.slice(0, PICK_MAX[m])); };
   const runPick = () => {
     if (!picked.length) return;
     if (pickMode === "brief") { setBriefIds([...picked]); setBriefOpen(true); } else setArticleOpen(true);
@@ -266,7 +271,7 @@ export default function Feed() {
   const openItem = useCallback((it: ItemOut) => { hoverPreview.close(); setCursor(idx.get(it.id) ?? -1); setOpen(it); }, [idx, setOpen]);
   const pickSet = useMemo(() => new Set(picked), [picked]);
   const onCard = pickMode ? togglePick : openItem;
-  const pickOf = (id: number): 0 | 1 | 2 | 3 => (!pickMode ? 0 : pickSet.has(id) ? 2 : picked.length >= PICK_MAX ? 3 : 1);
+  const pickOf = (id: number): 0 | 1 | 2 | 3 => (!pickMode ? 0 : pickSet.has(id) ? 2 : picked.length >= pickMax ? 3 : 1);
   useEffect(() => { document.title = (pend.length ? `(${pend.length}) ` : "") + "AI Radar · 国内外 AI 情报"; }, [pend.length]);
 
   const showPending = () => {
@@ -286,7 +291,7 @@ export default function Feed() {
       if (e.key === "Escape" && pickMode) { setPickMode(null); e.preventDefault(); return; }
       if (e.key === "j" || e.key === "ArrowRight") setCursor((c) => Math.min(c + 1, view.length - 1));
       else if (e.key === "k" || e.key === "ArrowLeft") setCursor((c) => Math.max(c - 1, 0));
-      else if ((e.key === "Enter" || e.key === "o") && cursor >= 0 && view[cursor]) setOpen(view[cursor]);
+      else if ((e.key === "Enter" || e.key === "o" || (pickMode && e.key === " ")) && cursor >= 0 && view[cursor]) (pickMode ? togglePick : setOpen)(view[cursor]);
       else if (e.key === "n" && pend.length) showPending();
       else if (e.key === "g") window.scrollTo({ top: 0, behavior: "smooth" });
       else return;
@@ -330,20 +335,20 @@ export default function Feed() {
               <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={autoBrief} aria-label="自动简报" data-testid="brief-btn" className="px-1.5 type-caption font-normal text-faint" />}>
                 <FileText className="size-3.5" /><span className="hidden md:inline">自动简报</span>
               </TooltipTrigger>
-              <TooltipContent>自动挑选 {PICK_MAX} 条{briefLabel === "全部" ? "" : `「${briefLabel}」`}内容：多源报道的热点优先，再取最早与最新</TooltipContent>
+              <TooltipContent>自动挑选 {PICK_MAX.brief} 条{briefLabel === "全部" ? "" : `「${briefLabel}」`}内容：多源报道的热点优先，再取最早与最新</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger render={<Button variant={pickMode === "brief" ? "secondary" : "ghost"} size="sm" onClick={() => startPick("brief")} aria-pressed={pickMode === "brief"} aria-label="手动简报" data-testid="brief-manual-btn" className="px-1.5 type-caption font-normal text-faint aria-pressed:text-foreground" />}>
                 <ListChecks className="size-3.5" /><span className="hidden md:inline">手动简报</span>
               </TooltipTrigger>
-              <TooltipContent>选择最多 {PICK_MAX} 条生成简报</TooltipContent>
+              <TooltipContent>选择最多 {PICK_MAX.brief} 条生成简报</TooltipContent>
             </Tooltip>
             {desktop && (
               <Tooltip>
                 <TooltipTrigger render={<Button variant={pickMode === "article" ? "secondary" : "ghost"} size="sm" onClick={() => startPick("article")} aria-pressed={pickMode === "article"} aria-label="生成文章" data-testid="article-btn" className="px-1.5 type-caption font-normal text-faint aria-pressed:text-foreground" />}>
                   <PenLine className="size-3.5" /><span className="hidden md:inline">生成文章</span>
                 </TooltipTrigger>
-                <TooltipContent>选择最多 {PICK_MAX} 条，写成推特 / 公众号 / 小红书文章</TooltipContent>
+                <TooltipContent>选择最多 {PICK_MAX.article} 条，写成推特 / 公众号 / 小红书文章</TooltipContent>
               </Tooltip>
             )}
           </div>
@@ -404,7 +409,7 @@ export default function Feed() {
         {pickMode && (
           <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 ease-out fixed inset-x-0 bottom-5 z-30 flex justify-center px-4" data-testid="pick-bar">
             <div className="flex items-center gap-2 rounded-full bg-popover py-1.5 pl-4 pr-1.5 shadow-raised ring-1 ring-border">
-              <span className="type-caption text-muted-foreground">{pickMode === "brief" ? "手动简报" : "生成文章"} · 已选 <span className="font-mono tabular-nums text-foreground" data-testid="pick-count">{picked.length}/{PICK_MAX}</span></span>
+              <span className="type-caption text-muted-foreground">{pickMode === "brief" ? "手动简报" : "生成文章"} · 已选 <span className="font-mono tabular-nums text-foreground" data-testid="pick-count">{picked.length}/{pickMax}</span></span>
               {picked.length > 0 && <Button variant="ghost" size="sm" className="h-7 rounded-full px-2 text-faint" onClick={() => setPicked([])}>清空</Button>}
               <Button size="sm" className="h-7 rounded-full" disabled={!picked.length} onClick={runPick} data-testid="pick-go">{pickMode === "brief" ? "生成简报" : "生成文章"}</Button>
               <Button variant="ghost" size="icon-sm" className="size-7 rounded-full text-faint" aria-label="退出选择" onClick={() => setPickMode(null)}><X /></Button>

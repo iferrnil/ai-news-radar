@@ -75,6 +75,7 @@ type Store struct {
 	sched    *scheduler
 	notif    *notifier
 	tr       *translator
+	prov     *provSched // 抓取 API scheduler state (fetchapi.go)
 	secMu    sync.Mutex
 	notFound http.Handler
 	sec      *Stored
@@ -118,6 +119,7 @@ func Open(cfg Config) (*Store, error) {
 	s.sched = newScheduler(s)
 	s.notif = newNotifier(s)
 	s.tr = newTranslator(s)
+	s.prov = newProvSched()
 	return s, nil
 }
 
@@ -152,6 +154,7 @@ func (s *Store) migrate() error {
 	add(sc["section"], "ALTER TABLE sources ADD COLUMN section TEXT")
 	add(ic["hidden"], "ALTER TABLE items ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
 	add(ic["title_zh"], "ALTER TABLE items ADD COLUMN title_zh TEXT", "ALTER TABLE items ADD COLUMN summary_zh TEXT")
+	add(ic["content"], "ALTER TABLE items ADD COLUMN content TEXT") // full feed / post text when longer than summary (briefs)
 	// translation scope flags (see translate.go): sources.tr / sections.tr = 1 when the user switched translation on for that view,
 	// settings tr_all = 「全部」. Replaces the per-source inherit/on/off `translate` column (only explicit "on" carries over).
 	add(sc["tr"], "ALTER TABLE sources ADD COLUMN tr INTEGER NOT NULL DEFAULT 0")

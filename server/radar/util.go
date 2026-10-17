@@ -100,6 +100,27 @@ func Clean(s string, n int) string {
 	return Trunc(t, n, "…")
 }
 
+var (
+	blockBreakRe = regexp.MustCompile(`(?i)<\s*(?:br\s*/?|/\s*(?:p|div|li|h[1-6]|blockquote|pre|tr|section|article|figcaption)\s*)>`)
+	lineWsRe     = regexp.MustCompile(`[^\S\n]+`)
+	manyNlRe     = regexp.MustCompile(`\s*\n\s*(?:\n\s*)+`)
+)
+
+// cleanBlock is Clean for long bodies: block-level ends become line breaks (paragraphs survive), the rest as Clean.
+func cleanBlock(s string, n int) string {
+	t := Decode(s)
+	t = scriptRe.ReplaceAllString(t, " ")
+	t = blockBreakRe.ReplaceAllString(t, "\n")
+	t = tagRe.ReplaceAllString(t, " ")
+	t = Decode(t)
+	t = strings.ReplaceAll(strings.ReplaceAll(t, "\r\n", "\n"), "\r", "\n")
+	t = lineWsRe.ReplaceAllString(t, " ")
+	t = manyNlRe.ReplaceAllString(t, "\n\n")
+	t = strings.TrimSpace(strings.ReplaceAll(t, " \n", "\n"))
+	t = strings.ReplaceAll(t, "\n ", "\n")
+	return Trunc(t, n, "…")
+}
+
 // Trunc caps s to n runes (JS slice counts UTF-16 units; runes are close enough for CJK/latin).
 func Trunc(s string, n int, suffix string) string {
 	if n <= 0 || utf8.RuneCountInString(s) <= n {

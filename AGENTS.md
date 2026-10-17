@@ -264,5 +264,14 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - Brief toolbar: 自动简报 (`autoPick` in briefpick.go: ≤10 → all; else one per multi-source story, then oldest/newest alternately), 手动简报 (`/api/brief?ids=`, ≤10, web too), 生成文章 (desktop, `POST /api/compose`).
 - Skill kinds (`skillKinds` in skills.go): brief / twitter / wechat / xhs, settings `<kind>_skill`, built-ins under `server/radar/defaultskill/`. `/api/skills*` take `kind`.
 - Covers: a Skill's output line `<!-- cover-image[ size=WxH]: prompt -->` or `cover-video`; `multimodal.go` (OpenAI-compatible images, async video submit→poll→download, vision chat). `vision: true` in front matter sends item images to the vision model.
-- 成果目录: `artifacts.go`, setting `artifacts_dir`, env `ARTIFACTS_DIR`, default `~/Documents/AI News Radar`; desktop only.
+- 制品目录: `artifacts.go`, setting `artifacts_dir`, env `ARTIFACTS_DIR`, default `~/Documents/AI News Radar`; desktop only.
 - Brief dialog: only the newest request may land (seq + scope check); Feed closes dialogs / selection on view change.
+
+## 0.10.0 notes
+- Self fetcher: `fetch.go` (HTTP: `artFetcher`, global `ARTICLE_CONC`=10, per host `ARTICLE_PER_HOST`=2, browser headers, gzip/br/deflate, charset → GB18030 for GBK family, one retry, 429 / 403 host cool-down) + `extract.go` (JSON-LD articleBody, `__NEXT_DATA__` / embedded JSON, readability scoring with Tailwind-safe class cleaning and a mass fallback, meta fallback). `article.go` routes (jiqizhixin JSON API, bilibili API, skip douyin / jandan), cache, `articleDeadline`. `measure_test.go`: `MEASURE_DB=<db> go test ./radar -run TestMeasureFetch -v` (per-source stats on real items, network).
+- `items.content`: full feed / X text (feed.go `longerContent`, ≤30000 runes) used by briefs; X items are never fetched.
+- `gatherFacts(rule, mode)`: "brief" = self fetcher, "article" = `fetchViaProviders` (fetchapi.go: Jina → Firecrawl → crawl4ai, `provSched` exhausted 6 h / cool-down, self fetcher fallback). Fallback text: fetched partial, stored content, or a same-story sibling (`siblingFinder` in originals.go). Desktop saves every original to `<制品目录>/原文/<date>/` (`saveOriginals`).
+- 抓取 API keys in secrets.json `fetchApis`; `/api/fetchapi` GET/PATCH, `/api/fetchapi/quota` (desktop only). Quota: Firecrawl `/v2/team/credit-usage`, crawl4ai `/v1/billing/balance` + `x-c4-*` headers, Jina dashboard `fe_user` (best effort; URL carries the key, never log it). Provider bases are vars so tests use fake servers.
+- 生成文章 ≤2 (`COMPOSE_MAX_ITEMS`, Feed `PICK_MAX.article`). `POST /api/translate/item {id}` = drawer 翻译 switch (shown when `tr.available`).
+- 制品目录 is the UI name; the setting key stays `artifacts_dir`.
+

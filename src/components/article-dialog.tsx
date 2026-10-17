@@ -110,7 +110,7 @@ export default function ArticleDialog({ open, onOpenChange, section, ids }: { op
             <Button variant="outline" size="sm" disabled={!a} onClick={download}><Download className="size-3.5" />导出</Button>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={openDir} data-testid="article-open-dir"><FolderOpen className="size-3.5" />成果目录</Button>
+            <Button variant="ghost" size="sm" onClick={openDir} data-testid="article-open-dir"><FolderOpen className="size-3.5" />制品目录</Button>
             <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>关闭</Button>
           </div>
         </DialogFooter>

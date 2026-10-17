@@ -137,13 +137,13 @@ func postJSON(t *testing.T, u string, method string, v any, out any) int {
 
 func TestComposeSkillPerPlatform(t *testing.T) {
 	st, srv, m, outDir := composeStore(t, true)
-	sel := ids(st, 3)
+	sel := ids(st, 2)
 	for p, want := range map[string]string{"twitter": "twitter-article", "wechat": "wechat-article", "xhs": "xhs-article"} {
 		var a articleOut
 		if c := postJSON(t, srv.URL+"/api/compose", "POST", map[string]any{"platform": p, "ids": sel, "section": "all"}, &a); c != 200 {
 			t.Fatalf("%s: HTTP %d", p, c)
 		}
-		if a.Skill != want || !strings.Contains(m.lastWrite, `<skill name="`+want+`">`) || !strings.Contains(a.Markdown, want) || a.Count != 3 || !a.Verified {
+		if a.Skill != want || !strings.Contains(m.lastWrite, `<skill name="`+want+`">`) || !strings.Contains(a.Markdown, want) || a.Count != 2 || !a.Verified {
 			t.Fatalf("%s used skill %q (prompt has %v): %+v", p, a.Skill, m.lastWrite[:80], a)
 		}
 		if !strings.Contains(m.lastWrite, "逐字照抄") {
@@ -185,8 +185,8 @@ func TestComposeSkillPerPlatform(t *testing.T) {
 	if len(list.Skills) != 2 || list.Skills[0].Name != "xhs-article" || !list.Skills[1].Active || list.Skills[0].Active {
 		t.Fatalf("xhs list: %+v", list.Skills)
 	}
-	if c := postJSON(t, srv.URL+"/api/compose", "POST", map[string]any{"platform": "xhs", "ids": ids(st, 11)}, nil); c != 400 {
-		t.Fatal("more than 10 accepted", c)
+	if c := postJSON(t, srv.URL+"/api/compose", "POST", map[string]any{"platform": "xhs", "ids": ids(st, 3)}, nil); c != 400 {
+		t.Fatal("more than 2 accepted", c)
 	}
 	if c := postJSON(t, srv.URL+"/api/compose", "POST", map[string]any{"platform": "weibo", "ids": sel}, nil); c != 400 {
 		t.Fatal("unknown platform accepted", c)

@@ -9,10 +9,13 @@ import (
 	"strings"
 )
 
-// 生成文章 (desktop only): the chosen items (≤10) → fetch the originals → factual per-item summaries → the
+// 生成文章 (desktop only): the chosen items (≤2) → fetch the originals → factual per-item summaries → the
 // platform's Skill (推特 / 公众号 / 小红书) writes the article → a fact-check pass. A Skill asks for a cover by
 // putting a marker line in its output (see coverRe); it is generated with the 多模态模型 when that is configured,
 // otherwise skipped with a short note.
+
+// composeMax: 生成文章 takes at most 2 items (the originals go through the 抓取 API).
+const composeMax = 2
 
 var platformSkill = map[string]string{"twitter": "推特文章", "wechat": "公众号文章", "xhs": "小红书文章"}
 
@@ -82,7 +85,7 @@ func (s *Store) composeArticle(section, platform string, ids []int64) (*articleO
 	if err != nil {
 		return nil, err
 	}
-	f, err := s.gatherFacts(rule)
+	f, err := s.gatherFacts(rule, "article")
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +218,7 @@ func (s *Store) hCompose(w http.ResponseWriter, r *http.Request) {
 			parts = append(parts, fmt.Sprint(x))
 		}
 	}
-	ids, err := parseIDs(strings.Join(parts, ","))
+	ids, err := parseIDsMax(strings.Join(parts, ","), envIntDef("COMPOSE_MAX_ITEMS", composeMax))
 	if err != nil {
 		detail(w, 400, err.Error())
 		return

@@ -1,20 +1,43 @@
 "use client";
+import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
+import type { ItemOut } from "@/lib/types";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useApp } from "./app-shell";
-import { ago, bj, bjFull, dekText, handleOf, sectionOf, srcName } from "./common";
+import { ago, api, bj, bjFull, dekText, handleOf, localize, sectionOf, srcName } from "./common";
 import { SectionName } from "./section-icon";
 import { Original, useFullItem } from "./item-preview";
 import { SourceAvatar } from "./source-avatar";
 
+const original = (it: ItemOut): ItemOut => (it.tr && it.orig ? { ...it, title: it.orig.title, summary: it.orig.summary, tr: false, orig: undefined } : it);
+const translated = new Map<number, ItemOut>(); // per-item translations fetched by the drawer switch
+
 // Item drawer, code-split: mounted after the first item is opened.
 export default function ItemSheet() {
-  const { open, setOpen } = useApp();
-  const { item: it } = useFullItem(open); // shared cache with the hover preview
+  const { open, setOpen, tr } = useApp();
+  const { item: base } = useFullItem(open); // shared cache with the hover preview
+  // 翻译 switch: off = original, on = this item translated (same pipeline and cache as the view switches)
+  const [trOn, setTrOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [, bump] = useState(0);
+  useEffect(() => { setTrOn(!!open?.tr); setBusy(false); }, [open?.id, open?.tr]);
+  const toggleTr = async (v: boolean) => {
+    if (!base || !v || base.tr || translated.has(base.id)) { setTrOn(v); return; }
+    setBusy(true);
+    try {
+      const r = await api<{ item: ItemOut; needed: boolean }>("/api/translate/item", { method: "POST", body: JSON.stringify({ id: base.id }) });
+      if (!r.needed) { toast("已是中文"); return; }
+      translated.set(base.id, localize(r.item)); bump((n) => n + 1);
+      if (open?.id === base.id) setTrOn(true);
+    } catch (e) { toast.error(`翻译失败：${(e as Error).message}`); } finally { setBusy(false); }
+  };
+  const it = !base ? null : trOn ? translated.get(base.id) ?? base : original(base);
   return (
     <Sheet open={!!it} onOpenChange={(b) => !b && setOpen(null)}>
       <SheetContent initialFocus={false} className="w-full gap-0 border-border bg-popover p-0 sm:max-w-[520px]">
@@ -34,6 +57,11 @@ export default function ItemSheet() {
                 {it.priority && <Badge variant={it.priority === "P0" ? "brand" : "outline"}>{it.priority}</Badge>}
                 <Badge variant="secondary"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>
                 {it.tr && <Badge variant="secondary" title="DeepSeek 机器翻译，原文见下方">译</Badge>}
+                {tr?.available && (
+                  <Label className="ml-auto gap-1.5 type-caption font-normal text-muted-foreground">
+                    <Switch size="sm" checked={trOn} disabled={busy} onCheckedChange={(v) => void toggleTr(!!v)} aria-label="翻译" data-testid="sheet-tr" />翻译
+                  </Label>
+                )}
               </div>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1">

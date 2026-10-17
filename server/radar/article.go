@@ -11,31 +11,46 @@ import (
 	"unicode/utf8"
 )
 
-// Original-article text for 「AI 润色」: fetch the item's link (timeout, size cap via netFetch), pull the
-// readable paragraphs out (readability-lite: drop boilerplate blocks, prefer <article>/<main>, keep the
-// substantial <p>s), cap the length. Every fetch reports how it went (articleRes.Status) so the brief can say
-// which items had no full text; social / login-walled hosts are skipped.
+// Original-article text for briefs (AI 润色) and 生成文章: fetch the item's link with the self-written fetcher
+// (fetch.go: browser headers, charsets, retry, host limits) and extract the main text (extract.go). Every fetch
+// reports how it went (articleRes.Status) so the brief can say which items had no full text; social /
+// login-walled hosts are skipped (an X post's own text is its full content).
 
 const (
 	articleMaxRunes = 6000
 	articleFullMin  = 400 // fewer readable runes than this = partial (teaser / meta description only)
-	articleTimeout  = 8 * time.Second
-	articleConc     = 6
+	articleTimeout  = 10 * time.Second
 	articleTTL      = 30 * time.Minute
+	articleFailTTL  = 2 * time.Minute // failures are retried sooner
 )
 
 var articleSkipHosts = []string{"x.com", "twitter.com", "t.co", "linkedin.com", "facebook.com", "instagram.com", "threads.net", "weibo.com", "youtube.com", "youtu.be", "bsky.app"}
 
+var reLoginWall = regexp.MustCompile(`(?i)(sign in to continue|log in to continue|subscribe to continue|请登录|登录后查看|登录以继续|this content is for subscribers)`)
+
+// articleRoute: per-site handling. Some pages are JavaScript apps whose text sits behind a public JSON endpoint
+// (fetched instead, then read by the embedded-JSON extractor); some links have no article at all.
 var (
-	reDropBlocks = regexp.MustCompile(`(?is)<(script|style|noscript|svg|nav|header|footer|aside|form|figure|iframe|template|button)\b[^>]*>.*?</\s*(?:script|style|noscript|svg|nav|header|footer|aside|form|figure|iframe|template|button)\s*>`)
-	reComments   = regexp.MustCompile(`(?s)<!--.*?-->`)
-	reArticle    = regexp.MustCompile(`(?is)<article\b[^>]*>(.*)</article>`)
-	reMain       = regexp.MustCompile(`(?is)<main\b[^>]*>(.*)</main>`)
-	reBody       = regexp.MustCompile(`(?is)<body\b[^>]*>(.*)</body>`)
-	rePara       = regexp.MustCompile(`(?is)<p\b[^>]*>(.*?)</p>`)
-	reMetaDesc   = regexp.MustCompile(`(?is)<meta[^>]+(?:property|name)=["'](?:og:description|description)["'][^>]*content=["']([^"']+)["']`)
-	reLoginWall  = regexp.MustCompile(`(?i)(sign in to continue|log in to continue|subscribe to continue|请登录|登录后查看|登录以继续|this content is for subscribers)`)
+	reJQZXArticle = regexp.MustCompile(`^https?://(?:www\.)?jiqizhixin\.com/articles/([\w-]+)`)
+	reBiliVideo   = regexp.MustCompile(`^https?://(?:www\.|m\.)?bilibili\.com/video/(BV\w+)`)
 )
+
+func articleRoute(u string) (fetch, skip string) {
+	if m := reJQZXArticle.FindStringSubmatch(u); m != nil {
+		return "https://www.jiqizhixin.com/api/article_library/articles/" + m[1] + ".json", ""
+	}
+	if m := reBiliVideo.FindStringSubmatch(u); m != nil {
+		return "https://api.bilibili.com/x/web-interface/view?bvid=" + m[1], ""
+	}
+	h := artHost(u)
+	switch {
+	case (h == "douyin.com" || strings.HasSuffix(h, ".douyin.com")) && strings.Contains(u, "/search/"):
+		return "", "抖音热搜词，没有正文页"
+	case h == "jandan.net" && strings.Contains(u, "/t/"):
+		return "", "煎蛋评论：条目本身就是全文"
+	}
+	return u, ""
+}
 
 func skipArticleHost(u string) bool {
 	p, err := url.Parse(u)
@@ -52,58 +67,19 @@ func skipArticleHost(u string) bool {
 }
 
 // extractArticle returns the main text of an HTML page ("" when nothing useful).
-func extractArticle(html string) string { t, _ := extractArticleKind(html); return t }
-
-// extractArticleKind also tells whether the text came from the page's paragraphs or only its meta description.
-func extractArticleKind(html string) (string, bool) {
-	html = reComments.ReplaceAllString(html, " ")
-	desc := ""
-	if m := reMetaDesc.FindStringSubmatch(html); m != nil {
-		desc = Clean(Decode(m[1]), 600)
-	}
-	html = reDropBlocks.ReplaceAllString(html, " ")
-	scope := html
-	for _, re := range []*regexp.Regexp{reArticle, reMain, reBody} {
-		if m := re.FindStringSubmatch(html); m != nil {
-			scope = m[1]
-			break
-		}
-	}
-	var parts []string
-	n := 0
-	for _, m := range rePara.FindAllStringSubmatch(scope, -1) {
-		t := Clean(m[1], 2000)
-		rc := utf8.RuneCountInString(t)
-		cjk := len(cjkRe.FindAllStringIndex(t, -1))
-		if rc < 40 && cjk < 18 {
-			continue // bylines, captions, buttons
-		}
-		parts = append(parts, t)
-		n += rc
-		if n >= articleMaxRunes {
-			break
-		}
-	}
-	text := strings.Join(parts, "\n")
-	fromDesc := false
-	if text == "" {
-		text, fromDesc = desc, true
-	}
-	if reLoginWall.MatchString(text) && utf8.RuneCountInString(text) < 400 {
-		return "", false
-	}
-	if r := []rune(text); len(r) > articleMaxRunes {
-		text = string(r[:articleMaxRunes]) + "…"
-	}
-	return strings.TrimSpace(text), !fromDesc
-}
+func extractArticle(page string) string { return extractPage(page).Text }
 
 // articleRes is one fetch: Status full (≥ articleFullMin readable runes) | partial (teaser or meta description)
-// | skipped (social / login host) | failed; Reason says why it is not full.
+// | skipped (social / login host) | failed; Reason says why it is not full. Method = self | jina | firecrawl |
+// crawl4ai (who fetched it); Extract = json-ld | dom | embedded | meta (self only).
 type articleRes struct {
-	Text   string `json:"-"`
-	Status string `json:"status"`
-	Reason string `json:"reason,omitempty"`
+	Text    string        `json:"-"`
+	Title   string        `json:"-"`
+	Status  string        `json:"status"`
+	Reason  string        `json:"reason,omitempty"`
+	Method  string        `json:"method,omitempty"`
+	Extract string        `json:"extract,omitempty"`
+	Took    time.Duration `json:"-"`
 }
 
 type articleCacheT struct {
@@ -118,86 +94,163 @@ type articleCached struct {
 
 var gArticles = &articleCacheT{m: map[string]articleCached{}}
 
+func (c *articleCacheT) get(u string) (articleRes, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.m[u]
+	if !ok {
+		return articleRes{}, false
+	}
+	ttl := articleTTL
+	if e.res.Status == "failed" {
+		ttl = articleFailTTL
+	}
+	if time.Since(e.at) >= ttl {
+		delete(c.m, u)
+		return articleRes{}, false
+	}
+	return e.res, true
+}
+
+func (c *articleCacheT) put(u string, r articleRes) {
+	c.mu.Lock()
+	if len(c.m) > 2000 { // simple bound: drop everything stale
+		for k, e := range c.m {
+			if time.Since(e.at) > articleTTL {
+				delete(c.m, k)
+			}
+		}
+	}
+	c.m[u] = articleCached{time.Now(), r}
+	c.mu.Unlock()
+}
+
 func fetchArticle(ctx context.Context, u string) string { return fetchArticleRes(ctx, u).Text }
 
 func fetchArticleRes(ctx context.Context, u string) articleRes {
 	if skipArticleHost(u) {
-		return articleRes{Status: "skipped", Reason: "社交平台 / 需登录的站点，不抓取"}
+		return articleRes{Status: "skipped", Reason: "社交平台 / 需登录的站点，不抓取", Method: "self"}
 	}
-	c := gArticles
-	c.mu.Lock()
-	if e, ok := c.m[u]; ok && time.Since(e.at) < articleTTL {
-		c.mu.Unlock()
-		return e.res
+	if r, ok := gArticles.get(u); ok {
+		return r
 	}
-	c.mu.Unlock()
-	res := articleRes{Status: "failed"}
+	t0 := time.Now()
+	res := articleRes{Status: "failed", Method: "self"}
 	if t, blurb := techmemeTarget(ctx, u); t != "" && t != u { // aggregator page → the story it links to
 		res = fetchArticleRes(ctx, t)
 		if res.Status != "full" {
 			res.Reason = "Techmeme 原文（" + artHost(t) + "）：" + res.Reason
 			if len([]rune(blurb)) > len([]rune(res.Text)) {
-				res.Text, res.Status = blurb, "partial" // Techmeme's own headline + excerpt
+				res.Text, res.Status, res.Extract = blurb, "partial", "techmeme" // Techmeme's own headline + excerpt
 			}
 		}
-		c.mu.Lock()
-		c.m[u] = articleCached{time.Now(), res}
-		c.mu.Unlock()
+		res.Took = time.Since(t0)
+		if ctx.Err() == nil {
+			gArticles.put(u, res)
+		}
 		return res
 	}
-	r, err := netFetch(ctx, "GET", u, map[string]string{"Accept": "text/html,application/xhtml+xml", "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15 AI-News-Radar"}, nil, articleTimeout)
+	target, skip := articleRoute(u)
+	if skip != "" {
+		res.Status, res.Reason = "skipped", skip
+		gArticles.put(u, res)
+		return res
+	}
+	r, err := gFetch.get(ctx, target, articleTimeout)
 	ct := ""
 	if r != nil {
 		ct = strings.ToLower(r.Header.Get("Content-Type"))
 	}
 	switch {
 	case err != nil:
-		res.Reason = "请求失败：" + jsSlice(err.Error(), 80)
-	case !r.OK():
+		res.Reason = "请求失败：" + jsSlice(fetchErrText(err), 80)
+	case r.Status < 200 || r.Status >= 300:
 		res.Reason = "HTTP " + strconv.Itoa(r.Status)
 	case strings.Contains(ct, "pdf"):
 		res.Reason = "PDF，未解析"
-	case !utf8.Valid(r.Body) && !strings.Contains(ct, "html"):
+	case strings.Contains(ct, "json"): // a site's JSON endpoint (articleRoute)
+		res.Extract = "embedded"
+		switch t := capArticle(embeddedBody([]string{r.Text})); {
+		case utf8.RuneCountInString(t) >= articleFullMin:
+			res.Text, res.Status = t, "full"
+		case t != "":
+			res.Text, res.Status, res.Reason = t, "partial", "只取到摘要 / 开头"
+		default:
+			res.Reason = "接口没有正文"
+		}
+	case ct != "" && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") && !strings.Contains(ct, "text/plain"):
 		res.Reason = "不是网页（" + ct + "）"
 	default:
-		b := r.Body
-		if len(b) > 3<<20 {
-			b = b[:3<<20]
-		}
-		text, paras := extractArticleKind(string(b))
+		ex := extractPage(r.Text)
+		res.Title, res.Extract = ex.Title, ex.Method
 		switch {
-		case text == "":
+		case ex.Text == "":
 			res.Reason = "页面没有可读正文（可能需要 JavaScript 渲染或登录）"
-		case !paras || utf8.RuneCountInString(text) < articleFullMin:
-			res.Text, res.Status, res.Reason = text, "partial", "只取到摘要 / 开头"
+		case !ex.Full || utf8.RuneCountInString(ex.Text) < articleFullMin:
+			res.Text, res.Status, res.Reason = ex.Text, "partial", "只取到摘要 / 开头"
 		default:
-			res.Text, res.Status = text, "full"
+			res.Text, res.Status = ex.Text, "full"
 		}
 	}
-	c.mu.Lock()
-	c.m[u] = articleCached{time.Now(), res}
-	c.mu.Unlock()
+	res.Took = time.Since(t0)
+	if ctx.Err() == nil { // a deadline cut is not the page's fault: don't remember it
+		gArticles.put(u, res)
+	}
 	return res
 }
 
-// fetchArticlesRes returns url → result for the given urls (bounded concurrency, overall deadline).
+func fetchErrText(err error) string {
+	s := err.Error()
+	switch {
+	case strings.Contains(s, "deadline exceeded") || strings.Contains(s, "Client.Timeout") || strings.Contains(s, "timeout"):
+		return "超时"
+	case strings.Contains(s, "no such host"):
+		return "域名解析失败"
+	case strings.Contains(s, "connection refused"):
+		return "连接被拒绝"
+	case strings.Contains(s, "connection reset") || strings.Contains(s, "EOF"):
+		return "连接被重置"
+	case strings.Contains(s, "certificate"):
+		return "证书错误"
+	}
+	return s
+}
+
+// articleDeadline: enough for every url to get its turn — one wave per two urls of the busiest host (per-host
+// cap), plus a retry; ten distinct hosts = one wave.
+func articleDeadline(urls []string) time.Duration {
+	per := map[string]int{}
+	waves := 1
+	for _, u := range urls {
+		h := artHost(u)
+		per[h]++
+		if w := (per[h] + gFetch.perHost - 1) / gFetch.perHost; w > waves {
+			waves = w
+		}
+	}
+	if g := (len(urls) + cap(gFetch.global) - 1) / cap(gFetch.global); g > waves {
+		waves = g
+	}
+	d := time.Duration(waves)*articleTimeout + articleTimeout + 5*time.Second // + retry / Techmeme hop
+	return min(d, 75*time.Second)
+}
+
+// fetchArticlesRes returns url → result for the given urls (global + per-host limits, overall deadline).
 func fetchArticlesRes(urls []string) map[string]articleRes {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	urls = uniq(urls)
+	dl := articleDeadline(urls)
+	ctx, cancel := context.WithTimeout(context.Background(), dl)
 	defer cancel()
 	out := map[string]articleRes{}
 	var mu sync.Mutex
-	sem := make(chan struct{}, articleConc)
 	var wg sync.WaitGroup
 	for _, u := range urls {
 		wg.Add(1)
 		go func(u string) {
 			defer wg.Done()
-			res := articleRes{Status: "failed", Reason: "超时（整体 30 秒）"}
-			select {
-			case sem <- struct{}{}:
-				res = fetchArticleRes(ctx, u)
-				<-sem
-			case <-ctx.Done():
+			res := fetchArticleRes(ctx, u)
+			if ctx.Err() != nil && res.Status == "failed" {
+				res.Reason = "超时（整体 " + strconv.Itoa(int(dl.Seconds())) + " 秒）"
 			}
 			mu.Lock()
 			out[u] = res
@@ -224,6 +277,42 @@ var (
 	reTMBlurb  = regexp.MustCompile(`(?is)<DIV CLASS="ii">(.*?)</DIV>`)
 )
 
+// the Techmeme front page is shared by all its items: fetched once per couple of minutes
+var tmPages = struct {
+	mu sync.Mutex
+	m  map[string]*tmPage
+}{m: map[string]*tmPage{}}
+
+type tmPage struct {
+	once sync.Once
+	at   time.Time
+	html string
+}
+
+func techmemePage(ctx context.Context, page string) string {
+	tmPages.mu.Lock()
+	p := tmPages.m[page]
+	if p == nil || (time.Since(p.at) > 3*time.Minute && !p.at.IsZero()) {
+		p = &tmPage{}
+		tmPages.m[page] = p
+	}
+	tmPages.mu.Unlock()
+	p.once.Do(func() {
+		if r, err := gFetch.get(ctx, page, articleTimeout); err == nil && r.Status == 200 {
+			p.html = r.Text
+		}
+		p.at = time.Now()
+		if p.html == "" { // failed: let the next caller try again
+			tmPages.mu.Lock()
+			if tmPages.m[page] == p {
+				delete(tmPages.m, page)
+			}
+			tmPages.mu.Unlock()
+		}
+	})
+	return p.html
+}
+
 // techmemeTarget: a Techmeme item link (…/261016/p13#a261016p13) → the headline's original article.
 func techmemeTarget(ctx context.Context, u string) (target, blurb string) {
 	p, err := url.Parse(u)
@@ -232,11 +321,10 @@ func techmemeTarget(ctx context.Context, u string) (target, blurb string) {
 	}
 	page := *p
 	page.Fragment = ""
-	r, err := netFetch(ctx, "GET", page.String(), map[string]string{"User-Agent": "Mozilla/5.0 (Macintosh) AI-News-Radar"}, nil, articleTimeout)
-	if err != nil || !r.OK() {
+	html := techmemePage(ctx, page.String())
+	if html == "" {
 		return "", ""
 	}
-	html := string(r.Body)
 	i := strings.Index(html, `NAME="`+p.Fragment+`"`)
 	if i < 0 {
 		return "", ""
@@ -253,7 +341,7 @@ func techmemeTarget(ctx context.Context, u string) (target, blurb string) {
 
 func artHost(u string) string {
 	if p, err := url.Parse(u); err == nil {
-		return strings.TrimPrefix(p.Hostname(), "www.")
+		return strings.TrimPrefix(strings.ToLower(p.Hostname()), "www.")
 	}
 	return u
 }

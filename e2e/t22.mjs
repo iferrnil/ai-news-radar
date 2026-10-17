@@ -1,5 +1,5 @@
 // Round 9: 自动简报 / 手动简报 / 生成文章 toolbar, manual selection (max 10), stale-brief race (#1), article dialog with
-// per-platform Skills + cover notice, settings (Skill ×4, 多模态模型, 成果目录), web gating.
+// per-platform Skills + cover notice, settings (Skill ×4, 多模态模型, 制品目录), web gating.
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -93,7 +93,7 @@ execSync(`bash ${RESTART} AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_KEY", process.env.
   }
   await p.getByTestId("article-dialog").screenshot({ path: shot("article-dialog.png") });
   const saved = fs.existsSync(path.join(ART, "文章")) ? execSync(`find "${ART}/文章" -name '*.md' | wc -l`).toString().trim() : "0";
-  rec("articles saved to the 成果目录 (文章/<date>/…md)", Number(saved) === 3, saved);
+  rec("articles saved to the 制品目录 (文章/<date>/…md)", Number(saved) === 3, saved);
   await p.keyboard.press("Escape"); await sleep(300);
   await p.getByTestId("brief-btn").click(); await p.getByTestId("brief-saved").waitFor({ timeout: 10000 });
   rec("desktop brief saved to 简报/<date>/", fs.readdirSync(path.join(ART, "简报")).length === 1);
@@ -103,7 +103,7 @@ execSync(`bash ${RESTART} AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_KEY", process.env.
   await p.goto(B + "/settings"); await p.getByTestId("artifacts-card").waitFor({ timeout: 15000 }); await sleep(800);
   rec("settings: 推特 / 公众号 / 小红书 Skill cards with their built-in defaults",
     /twitter-article/.test(await p.getByTestId("skill-card-twitter").innerText()) && /wechat-article/.test(await p.getByTestId("skill-card-wechat").innerText()) && /xhs-article/.test(await p.getByTestId("skill-card-xhs").innerText()));
-  rec("settings: 成果目录 shows the configured dir", (await p.getByTestId("artifacts-dir").getAttribute("placeholder")) === ART);
+  rec("settings: 制品目录 shows the configured dir", (await p.getByTestId("artifacts-dir").getAttribute("placeholder")) === ART);
   await p.locator("#mm-baseUrl").fill("https://mm.example.com/v1"); await p.locator("#mm-imageModel").fill("img-model"); await p.locator("#mm-key").fill("sk-" + "e2emultimodalkey0000");
   await p.getByTestId("mm-save").click(); await p.getByTestId("mm-on").waitFor();
   const mm = await (await fetch(B + "/api/multimodal")).json();

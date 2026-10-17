@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// 成果目录 (desktop only): every generated brief / article (Markdown) and cover image / video is saved under
+// 制品目录 (desktop only): every generated brief / article (Markdown) and cover image / video is saved under
 //   <dir>/简报|文章|封面|视频/<YYYY-MM-DD>/<HHMMSS>-<label>.<ext>
 // <dir> is the "artifacts_dir" setting, else $ARTIFACTS_DIR, else ~/Documents/AI News Radar.
 
@@ -77,13 +77,13 @@ func (s *Store) artifactsOut(w http.ResponseWriter) {
 }
 
 func (s *Store) hArtifactsGet(w http.ResponseWriter, r *http.Request) {
-	if desktopOnlyMsg(s, w, "成果目录仅桌面版可用") {
+	if desktopOnlyMsg(s, w, "制品目录仅桌面版可用") {
 		s.artifactsOut(w)
 	}
 }
 
 func (s *Store) hArtifactsPatch(w http.ResponseWriter, r *http.Request) {
-	if !desktopOnlyMsg(s, w, "成果目录仅桌面版可用") {
+	if !desktopOnlyMsg(s, w, "制品目录仅桌面版可用") {
 		return
 	}
 	d := strings.TrimSpace(jsString(readBody(r)["dir"]))
@@ -108,7 +108,7 @@ func (s *Store) hArtifactsPatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Store) hArtifactsOpen(w http.ResponseWriter, r *http.Request) {
-	if !desktopOnlyMsg(s, w, "成果目录仅桌面版可用") {
+	if !desktopOnlyMsg(s, w, "制品目录仅桌面版可用") {
 		return
 	}
 	if DesktopHooks.OpenPath == nil {
@@ -124,9 +124,9 @@ func (s *Store) hArtifactsOpen(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, obj("ok", true))
 }
 
-// GET /api/artifacts/file?path=… — a generated cover for the article dialog (only files inside the 成果目录).
+// GET /api/artifacts/file?path=… — a generated cover for the article dialog (only files inside the 制品目录).
 func (s *Store) hArtifactFile(w http.ResponseWriter, r *http.Request) {
-	if !desktopOnlyMsg(s, w, "成果目录仅桌面版可用") {
+	if !desktopOnlyMsg(s, w, "制品目录仅桌面版可用") {
 		return
 	}
 	p := filepath.Clean(r.URL.Query().Get("path"))

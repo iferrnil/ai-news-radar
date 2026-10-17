@@ -79,6 +79,21 @@ http.createServer((req, res) => {
   if (mode === "500") return send(res, 500, { error: "mock 500" });
   if (mode === "429") { res.writeHead(429, { "Retry-After": "1" }); return res.end(); }
   if (mode === "404" || mode === "gone" || (mode === "false404" && isStatuses)) return send(res, 404, { code: 404, message: "User not found" });
+  if (mode === "402") return send(res, 402, { error: "Payment required: insufficient credits" });
+
+  // fake 抓取 API providers (t23): Jina Reader, Firecrawl, crawl4ai and the Jina dashboard balance
+  const md = (who, target) => `# ${who} 抓取\n\n` + Array.from({ length: 8 }, (_, i) => `E2E-${who.toUpperCase()} 第 ${i + 1} 段：${target} 的正文内容，包含足够多的文字用来通过全文长度判断。`).join("\n\n");
+  if (host === "r.jina.ai" || host === "r.jinaai.cn") return send(res, 200, { code: 200, data: { title: "J", url: u.pathname.slice(1), content: md("jina", u.pathname.slice(1)) } });
+  if (host === "api.firecrawl.dev") {
+    if (u.pathname === "/v2/team/credit-usage") return send(res, 200, { success: true, data: { remainingCredits: 4321, planCredits: 100000, billingPeriodStart: "2026-10-01T00:00:00Z", billingPeriodEnd: "2026-11-01T00:00:00Z" } });
+    if (u.pathname === "/v2/scrape") return send(res, 200, { success: true, data: { markdown: md("firecrawl", "page"), metadata: { title: "F", statusCode: 200 } } });
+  }
+  if (host === "api.crawl4ai.com") {
+    res.setHeader("x-c4-balance", "812"); res.setHeader("x-c4-allowance-left", "300");
+    if (u.pathname === "/v1/billing/balance") return send(res, 200, { balance: { credits: 812 }, allowance_per_month: 1000, allowance_left: 300, resets_at: "2026-11-01T00:00:00Z" });
+    if (u.pathname === "/scrape") return send(res, 200, { ok: true, markdown: md("crawl4ai", "page") });
+  }
+  if (host === "dash.jina.ai" && u.pathname === "/api/v1/api_key/fe_user") return send(res, 200, { wallet: { total_balance: 9876543 } });
 
   if (fx) {
     if (isStatuses) return send(res, 200, { results: fxPosts(handle) });

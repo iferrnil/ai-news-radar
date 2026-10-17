@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // Section brief (分区简报): always-available rule-based digest + optional DeepSeek "AI 润色".
@@ -38,8 +39,8 @@ type briefOut struct {
 	Translate     bool         `json:"translate"`
 	TranslateNote string       `json:"translateNote,omitempty"`
 	Skill         string       `json:"skill,omitempty"`
-	Manual        bool         `json:"manual,omitempty"` // 手动简报: exactly the chosen items
-	Saved         string       `json:"saved,omitempty"`  // desktop: where the brief was saved (成果目录)
+	Manual        bool         `json:"manual,omitempty"`   // 手动简报: exactly the chosen items
+	Saved         string       `json:"saved,omitempty"`    // desktop: where the brief was saved (制品目录)
 	Verified      bool         `json:"verified,omitempty"` // AI 润色: second pass checked the claims against the sources
 	NoFullText    []briefMiss  `json:"noFullText,omitempty"`
 }
@@ -102,9 +103,12 @@ type briefItem struct {
 	Published  float64     `json:"published"`
 	Translated bool        `json:"translated"`
 	Fetch      *articleRes `json:"fetch,omitempty"` // AI 润色: how fetching the original went
-	raw        string      // feed text, untruncated (an X post's whole text)
+	raw        string      // feed text, untruncated (items.content when stored: an X post's / feed entry's whole text)
 	image      string      // the item's thumbnail (vision input for skills that ask for it)
 	isX        bool
+	id         int64
+	origTitle  string // untranslated title (sibling matching, 原文 file)
+	titleZh    string
 }
 
 type briefGroup struct {
@@ -114,7 +118,7 @@ type briefGroup struct {
 }
 
 func (s *Store) briefRows(scope string, ids []int64) ([]*Row, error) {
-	q := `SELECT i.id, i.title, i.summary, i.title_zh, i.summary_zh, i.published, i.url, i.is_x, i.image,
+	q := `SELECT i.id, i.title, i.summary, i.title_zh, i.summary_zh, i.published, i.url, i.is_x, i.image, i.content,
 		s.name AS source, s.id AS source_id, s.priority
 		FROM items i JOIN sources s ON s.id=i.source_id
 		WHERE i.merged_into IS NULL AND i.hidden=0 AND s.enabled=1`
@@ -203,8 +207,12 @@ func (s *Store) buildRuleBrief(scope string, tr bool, ids ...int64) (*briefOut, 
 			if sum == t {
 				sum = ""
 			}
+			raw := strings.TrimSpace(it.Str("summary"))
+			if c := strings.TrimSpace(it.Str("content")); utf8.RuneCountInString(c) > utf8.RuneCountInString(raw) {
+				raw = c // the full post / feed body (not the 280-char summary)
+			}
 			g.Items = append(g.Items, briefItem{Title: t, Summary: sum, URL: it.Str("url"), Source: g.Source, Published: it.Num("published"), Translated: zh,
-				raw: strings.TrimSpace(it.Str("summary")), isX: it.Num("is_x") == 1, image: it.Str("image")})
+				raw: raw, isX: it.Num("is_x") == 1, image: it.Str("image"), id: int64(it.Num("id")), origTitle: it.Str("title"), titleZh: it.Str("title_zh")})
 		}
 		count += len(g.Items)
 		out = append(out, g)
@@ -388,7 +396,12 @@ type briefFacts struct {
 	sums    []string
 }
 
-func (s *Store) gatherFacts(rule *briefOut) (*briefFacts, error) {
+// gatherFacts fetches the originals of the picked items: mode "brief" uses the self-written fetcher, "article"
+// the 抓取 API scheduler (Jina → Firecrawl → crawl4ai, self-written fetcher as the fallback). X posts are never
+// fetched: their stored text is the whole post. An item without full text falls back to the longest of what was
+// fetched, its stored feed content and the summary of another item of the same story (duplicate group); it is
+// still listed in NoFullText. Desktop: every text used is saved to <制品目录>/原文/<date>/.
+func (s *Store) gatherFacts(rule *briefOut, mode ...string) (*briefFacts, error) {
 	if reason := s.unavailableReason(); reason != "" {
 		return nil, &httpError{503, reason}
 	}
@@ -407,19 +420,36 @@ func (s *Store) gatherFacts(rule *briefOut) (*briefFacts, error) {
 			}
 		}
 	}
-	fetched := fetchArticlesRes(urls)
+	var fetched map[string]articleRes
+	if len(mode) > 0 && mode[0] == "article" {
+		fetched = s.fetchViaProviders(urls)
+	} else {
+		fetched = fetchArticlesRes(urls)
+	}
+	sib := s.siblingFinder()
 	content := make([]string, len(items))
+	methods := make([]string, len(items))
 	out.NoFullText = nil
 	for i, it := range items {
 		if it.isX {
-			it.Fetch = &articleRes{Status: "full", Reason: "X 帖子：使用帖子全文"}
-			content[i] = it.raw
+			it.Fetch = &articleRes{Status: "full", Reason: "X 帖子：使用帖子全文", Method: "feed"}
+			content[i], methods[i] = it.raw, "feed"
 		} else {
 			r := fetched[it.URL]
-			it.Fetch = &articleRes{Status: r.Status, Reason: r.Reason}
-			content[i] = r.Text
-			if r.Status != "full" && len([]rune(it.raw)) > len([]rune(content[i])) {
-				content[i] = it.raw // the feed's own text is all there is
+			it.Fetch = &articleRes{Status: r.Status, Reason: r.Reason, Method: r.Method, Extract: r.Extract}
+			content[i], methods[i] = r.Text, r.Method
+			if r.Status != "full" {
+				best, from := r.Text, ""
+				if utf8.RuneCountInString(it.raw) > utf8.RuneCountInString(best) {
+					best, from = it.raw, "订阅源全文"
+				}
+				if st, src := sib(it); utf8.RuneCountInString(st) > utf8.RuneCountInString(best) {
+					best, from = st, "同一事件「"+src+"」的内容"
+				}
+				if from != "" {
+					content[i], methods[i] = best, "feed"
+					it.Fetch.Reason = strings.TrimLeft(it.Fetch.Reason+"；已改用"+from, "；")
+				}
 			}
 		}
 		if it.Fetch.Status != "full" {
@@ -429,6 +459,7 @@ func (s *Store) gatherFacts(rule *briefOut) (*briefFacts, error) {
 			content[i] = it.Summary
 		}
 	}
+	s.saveOriginals(items, content, methods)
 
 	// 1. per-item factual summaries
 	var sb strings.Builder
@@ -596,8 +627,13 @@ func (s *Store) hBrief(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
-// parseIDs reads "1,2,3" (手动简报 / 生成文章): at most BRIEF_MAX_ITEMS (10) distinct ids, sorted.
+// parseIDs reads "1,2,3" (手动简报): at most BRIEF_MAX_ITEMS (10) distinct ids, sorted.
 func parseIDs(v string) ([]int64, error) {
+	return parseIDsMax(v, envIntDef("BRIEF_MAX_ITEMS", briefPick))
+}
+
+// parseIDsMax: parseIDs with an explicit cap (生成文章: composeMax).
+func parseIDsMax(v string, max int) ([]int64, error) {
 	if strings.TrimSpace(v) == "" {
 		return nil, nil
 	}
@@ -613,7 +649,7 @@ func parseIDs(v string) ([]int64, error) {
 			ids = append(ids, n)
 		}
 	}
-	if max := envIntDef("BRIEF_MAX_ITEMS", briefPick); len(ids) > max {
+	if len(ids) > max {
 		return nil, fmt.Errorf("最多选择 %d 条", max)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })

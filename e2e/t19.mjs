@@ -66,7 +66,7 @@ await ctx.addInitScript(() => { window.__radarDesktop = true; });
 const p = await ctx.newPage(); p.on("pageerror", (e) => errors.push(String(e)));
 await p.goto(B + "/settings"); await p.getByTestId("skill-card").waitFor({ timeout: 15000 }); await sleep(800);
 const titles = await p.locator("[data-slot=card-title]").allInnerTexts();
-rec("desktop settings: 常规 / 通知 / 翻译 / AI / 简报·推特·公众号·小红书 Skill / 多模态模型 / 成果目录 / 更新 / 数据 / 关于", titles.join(",") === "常规,通知,翻译 / AI,简报 Skill,推特 Skill,公众号 Skill,小红书 Skill,多模态模型,成果目录,更新,数据,关于", titles.join(","));
+rec("desktop settings: 常规 / 通知 / 翻译 / AI / 简报·推特·公众号·小红书 Skill / 多模态模型 / 抓取 API / 制品目录 / 更新 / 数据 / 关于", titles.join(",") === "常规,通知,翻译 / AI,简报 Skill,推特 Skill,公众号 Skill,小红书 Skill,多模态模型,抓取 API,制品目录,更新,数据,关于", titles.join(","));
 rec("desktop: no 发送方式 / AppleScript option (native only)", await p.getByTestId("notify-method").count() === 0 && !/AppleScript/.test(await p.getByTestId("notify-card").innerText()));
 { const r = (await fetchR(B + "/api/desktop/notify", { method: "PATCH", headers: J, body: JSON.stringify({ method: "applescript" }) })).status; rec("notify method API removed", r === 405 || r === 404, String(r)); }
 rec("desktop: notification status + 发送测试通知 button", /不支持|尚未询问|已允许|已拒绝/.test(await p.getByTestId("notify-perm").innerText()) && await p.getByTestId("notify-test").count() === 1);

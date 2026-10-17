@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -367,8 +368,12 @@ func (t *translator) run(ids []int64) error {
 
 // runIDs translates the given items regardless of the view switches (the brief's 「翻译」 option uses it directly).
 func (t *translator) runIDs(ids []int64) error {
+	return t.runIDsCap(ids, envInt("TRANSLATE_SUMMARY_CHARS", 1500))
+}
+
+// runIDsCap: runIDs with the body cut at capN chars (the drawer's per-item switch translates the whole post).
+func (t *translator) runIDsCap(ids []int64, capN int) error {
 	db := t.s.DB
-	capN := envInt("TRANSLATE_SUMMARY_CHARS", 1500)
 	args := make([]any, len(ids))
 	for i, id := range ids {
 		args[i] = id
@@ -444,4 +449,31 @@ func (t *translator) runIDs(ids []int64) error {
 		}
 	}
 	return nil
+}
+
+// POST /api/translate/item {id} — the drawer's 翻译 switch: translate one item now (same pipeline and cache as the
+// view switches, independent of them) and return it with title_zh / summary_zh. needed=false: already Chinese.
+func (s *Store) hTranslateItem(w http.ResponseWriter, r *http.Request) {
+	if reason := s.unavailableReason(); reason != "" {
+		detail(w, 503, reason)
+		return
+	}
+	id, ok := numOf(readBody(r)["id"])
+	if !ok || id <= 0 {
+		detail(w, 400, "id 无效")
+		return
+	}
+	if err := s.tr.runIDsCap([]int64{int64(id)}, 4000); err != nil {
+		detail(w, 502, err.Error())
+		return
+	}
+	rs := s.QueryItems("AND i.id=?", []any{int64(id)}, 1, true, true)
+	if len(rs) == 0 {
+		detail(w, 404, "条目不存在")
+		return
+	}
+	var zh string
+	s.DB.QueryRow("SELECT COALESCE(title_zh,'') FROM items WHERE id=?", int64(id)).Scan(&zh)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, 200, obj("item", rs[0], "needed", zh != ""))
 }

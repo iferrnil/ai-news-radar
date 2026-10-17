@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // node is a tiny generic XML tree (local names only, like fast-xml-parser with prefixes collapsed).
@@ -105,6 +106,7 @@ type FetchedItem struct {
 	IsX                      bool
 	Author, Image            string
 	Links                    []string
+	Content                  string // full feed / post text when it is longer than Summary ("" otherwise); items.content
 }
 
 type ParsedFeed struct {
@@ -182,6 +184,13 @@ func ParseFeed(body []byte) *ParsedFeed {
 			t = l
 		}
 		body := firstNonEmpty(e.text("description"), e.text("summary"), e.text("content:encoded"), e.text("content"))
+		// items.content: the longest body the entry carries (content:encoded / Atom content usually beat the description)
+		full := ""
+		for _, c := range []string{e.text("content:encoded"), e.text("content"), e.text("description"), e.text("summary")} {
+			if len(c) > len(full) {
+				full = c
+			}
+		}
 		author := ""
 		if a := e.first("author"); a != nil {
 			author = firstNonEmpty(a.text("name"), strings.TrimSpace(a.Text))
@@ -190,12 +199,28 @@ func ParseFeed(body []byte) *ParsedFeed {
 			author = e.text("dc:creator")
 		}
 		out.Items = append(out.Items, FetchedItem{
-			UID: NormURL(l), Title: t, URL: l, Summary: Clean(body, 280),
+			UID: NormURL(l), Title: t, URL: l, Summary: Clean(body, 280), Content: longerContent(full, 280),
 			Published: ParseDate(firstNonEmpty(e.text("pubDate"), e.text("published"), e.text("updated"), e.text("dc:date"))),
 			Author:    author,
 		})
 	}
 	return out
+}
+
+// contentMaxRunes caps items.content (a long-form post / full article body in the feed).
+const contentMaxRunes = 30000
+
+// longerContent: the cleaned full text when it says more than the summary cut at n runes ("" otherwise, so short
+// items don't store the same text twice).
+func longerContent(raw string, n int) string {
+	if raw == "" {
+		return ""
+	}
+	t := cleanBlock(raw, contentMaxRunes)
+	if utf8.RuneCountInString(t) <= n {
+		return ""
+	}
+	return t
 }
 
 func firstNonEmpty(xs ...string) string {

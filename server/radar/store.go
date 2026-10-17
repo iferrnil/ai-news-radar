@@ -91,7 +91,7 @@ func (s *Store) StoreItems(src *Row, items []FetchedItem) (newIDs []int64, merge
 	}
 	defer tx.Rollback()
 	srcID := src.Get("id")
-	ins := `INSERT OR IGNORE INTO items(uid,source_id,title,url,summary,published,fetched,is_x,author,merged_into,image) VALUES(?,?,?,?,?,?,?,?,?,?,?)`
+	ins := `INSERT OR IGNORE INTO items(uid,source_id,title,url,summary,published,fetched,is_x,author,merged_into,image,content) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`
 	for n, it := range items {
 		var one int
 		if tx.QueryRow("SELECT 1 FROM seen WHERE uid=?", it.UID).Scan(&one) == nil {
@@ -131,7 +131,7 @@ func (s *Store) StoreItems(src *Row, items []FetchedItem) (newIDs []int64, merge
 			if artID != 0 {
 				mergedInto = artID
 			}
-			res, err := tx.Exec(ins, it.UID, srcID, it.Title, it.URL, it.Summary, pub, t, 1, nz(it.Author), mergedInto, nz(it.Image))
+			res, err := tx.Exec(ins, it.UID, srcID, it.Title, it.URL, it.Summary, pub, t, 1, nz(it.Author), mergedInto, nz(it.Image), nz(it.Content))
 			if err != nil {
 				return nil, 0, nil, err
 			}
@@ -158,7 +158,7 @@ func (s *Store) StoreItems(src *Row, items []FetchedItem) (newIDs []int64, merge
 				newIDs = append(newIDs, xid)
 			}
 		} else {
-			res, err := tx.Exec(ins, it.UID, srcID, it.Title, it.URL, it.Summary, pub, t, 0, nz(it.Author), nil, nz(it.Image))
+			res, err := tx.Exec(ins, it.UID, srcID, it.Title, it.URL, it.Summary, pub, t, 0, nz(it.Author), nil, nz(it.Image), nz(it.Content))
 			if err != nil {
 				return nil, 0, nil, err
 			}

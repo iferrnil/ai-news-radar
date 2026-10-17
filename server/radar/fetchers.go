@@ -253,7 +253,7 @@ func ParseAPI(u string, raw []byte) ([]FetchedItem, error) {
 				tm, _ := time.ParseInLocation("2006-01-02 15:04", m[1]+"-"+m[2]+"-"+m[3]+" "+m[4]+":"+m[5], cst)
 				pub = tm.Unix()
 			}
-			out = append(out, FetchedItem{UID: NormURL(link), Title: js(a["title"]), URL: link, Summary: Clean(js(a["content"]), 280), Published: pub, Author: js(a["author"])})
+			out = append(out, FetchedItem{UID: NormURL(link), Title: js(a["title"]), URL: link, Summary: Clean(js(a["content"]), 280), Published: pub, Author: js(a["author"]), Content: longerContent(js(a["content"]), 280)})
 		}
 	case strings.Contains(u, "openrouter.ai/api/v1/models"):
 		for _, x := range ja(jo(d)["data"]) {
@@ -433,7 +433,11 @@ func xItem(text, u, id, author string, ts int64, links []string) FetchedItem {
 	if links == nil {
 		links = []string{}
 	}
-	return FetchedItem{UID: "x:" + id, Title: title, URL: u, Summary: jsSlice(text, 4000), Published: ts, IsX: true, Author: author, Links: links}
+	content := "" // a long-form post: the whole text (Summary keeps the 4000-char cut the feed shows)
+	if jsLen(text) > 4000 {
+		content = Trunc(text, contentMaxRunes, "…")
+	}
+	return FetchedItem{UID: "x:" + id, Title: title, URL: u, Summary: jsSlice(text, 4000), Published: ts, IsX: true, Author: author, Links: links, Content: content}
 }
 
 func fxProfile(ctx context.Context, handle string) (jm, error) {
