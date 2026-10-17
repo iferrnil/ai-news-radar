@@ -29,6 +29,8 @@ type mmMock struct {
 	images    []map[string]any
 	polls     int
 	vision    []any
+	titles    int
+	styleIn   string
 }
 
 func (m *mmMock) handler(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +78,12 @@ func (m *mmMock) handler(w http.ResponseWriter, r *http.Request) {
 		case strings.Contains(sys, "<stage>summarize</stage>"):
 			m.sumIn = append(m.sumIn, user)
 			chat(`{"items":[{"n":1,"summary":"SUM-ONE 事实摘要"}]}`)
+		case strings.Contains(sys, "<stage>title</stage>"):
+			m.titles++
+			chat("1. 这是一个明显超过了任何平台标题字数上限的候选标题会被跳过\n「短标题候选标题」\n第二个短标题")
+		case strings.Contains(sys, "<stage>style</stage>"):
+			m.styleIn = user
+			chat("## 语气与人称\n- 第一人称，口语\n## 开头\n- 先抛结论")
 		case strings.Contains(sys, "<stage>verify</stage>"):
 			chat(regexp.MustCompile(`(?s)<brief>\n(.*)\n</brief>`).FindStringSubmatch(user)[1] + "\nVERIFIED")
 		default:

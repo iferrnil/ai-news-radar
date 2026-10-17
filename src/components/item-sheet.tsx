@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { BellRing, ExternalLink, Star } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import type { ItemOut } from "@/lib/types";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useApp } from "./app-shell";
-import { ago, api, bj, bjFull, dekText, handleOf, localize, sectionOf, srcName } from "./common";
+import { ago, api, bj, bjFull, dekText, handleOf, localize, sectionOf, setFav, srcName } from "./common";
 import { SectionName } from "./section-icon";
 import { Original, useFullItem } from "./item-preview";
 import { SourceAvatar } from "./source-avatar";
@@ -20,7 +20,16 @@ const translated = new Map<number, ItemOut>(); // per-item translations fetched 
 
 // Item drawer, code-split: mounted after the first item is opened.
 export default function ItemSheet() {
-  const { open, setOpen, tr } = useApp();
+  const { open, setOpen, tr, onStream } = useApp();
+  // 收藏: local state, kept in sync with the SSE "fav" events (cards / other windows)
+  const [fav, setFavOn] = useState(false);
+  useEffect(() => { setFavOn(!!open?.fav); }, [open?.id, open?.fav]);
+  useEffect(() => onStream((ev, d) => { if (ev === "fav" && d.data?.id === open?.id) setFavOn(!!d.data.on); }), [onStream, open?.id]);
+  const toggleFav = () => {
+    if (!open) return;
+    const on = !fav; setFavOn(on);
+    setFav(open.id, on).then(() => toast.success(on ? "已收藏" : "已取消收藏")).catch((e) => { setFavOn(!on); toast.error((e as Error).message); });
+  };
   const { item: base } = useFullItem(open); // shared cache with the hover preview
   // 翻译 switch: off = original, on = this item translated (same pipeline and cache as the view switches)
   const [trOn, setTrOn] = useState(false);
@@ -56,6 +65,7 @@ export default function ItemSheet() {
               <div className="flex flex-wrap gap-1.5">
                 {it.priority && <Badge variant={it.priority === "P0" ? "brand" : "outline"}>{it.priority}</Badge>}
                 <Badge variant="secondary"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>
+                {!!it.kw?.length && <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300"><BellRing />{it.kw.join(" · ")}</Badge>}
                 {it.tr && <Badge variant="secondary" title="DeepSeek 机器翻译，原文见下方">译</Badge>}
                 {tr?.available && (
                   <Label className="ml-auto gap-1.5 type-caption font-normal text-muted-foreground">
@@ -84,6 +94,9 @@ export default function ItemSheet() {
             <div className="flex gap-2 border-t p-4">
               <Button className="flex-1" render={<a href={it.url} target="_blank" rel="noopener" />}>打开原文<ExternalLink /></Button>
               <Button variant="outline" onClick={() => { navigator.clipboard?.writeText(it.url); toast.success("已复制链接"); }}>复制链接</Button>
+              <Button variant="outline" size="icon" onClick={toggleFav} aria-label={fav ? "取消收藏" : "收藏"} aria-pressed={fav} data-testid="sheet-fav" className={fav ? "text-amber-500" : undefined}>
+                <Star className={fav ? "fill-current" : undefined} />
+              </Button>
             </div>
           </>
         )}

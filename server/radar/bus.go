@@ -8,6 +8,7 @@ type Msg struct {
 	Item  *Row         `json:"item,omitempty"`
 	ID    any          `json:"id,omitempty"`
 	Batch *NotifyBatch `json:"batch,omitempty"`
+	Data  any          `json:"data,omitempty"` // fav {id,on} | watch {} | …
 }
 
 // Bus fans messages out to subscribers (SSE streams, the desktop shell).

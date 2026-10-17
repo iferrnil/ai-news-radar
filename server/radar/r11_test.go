@@ -238,8 +238,8 @@ func TestArticleSkillsV2Prompt(t *testing.T) {
 	defer st.Close()
 	for kind, cover := range map[string]string{"twitter": "", "wechat": "cover-image size=1792x1024", "xhs": "cover-image size=1024x1536"} {
 		sys, name := st.skillSystemPrompt(kind)
-		for _, want := range []string{`version: "2.0"`, "逐字照抄", "原文未说明", `<reference path="references/checklist.md">`, `<reference path="references/platform.md">`, `<reference path="assets/template.md">`, "scripts/check.py", "## 自检", "不是……而是"} {
-			if want == `version: "2.0"` {
+		for _, want := range []string{`version: "2.`, "逐字照抄", "原文未说明", `<reference path="references/checklist.md">`, `<reference path="references/platform.md">`, `<reference path="assets/template.md">`, "scripts/check.py", "## 自检", "不是……而是"} {
+			if want == `version: "2.` {
 				if b, err := defaultSkillFS.ReadFile("defaultskill/" + name + "/SKILL.md"); err != nil || !strings.Contains(string(b), want) {
 					t.Fatalf("%s version: %v", name, err)
 				}

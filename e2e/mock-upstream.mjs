@@ -122,6 +122,9 @@ http.createServer((req, res) => {
           const ns = [...content.matchAll(/<item n="(\d+)"[^>]*title="([^"]*)"/g)];
           return reply(JSON.stringify({ items: ns.map((m) => ({ n: Number(m[1]), summary: "【摘要】" + m[2] })) }));
         }
+        // 0.12: title candidates (fixTitle) and the 写作风格 distillation (t24)
+        if (sys.includes("<stage>title</stage>")) return reply("1. 模拟短标题一号\n2. 模拟短标题二号");
+        if (sys.includes("<stage>style</stage>")) return reply("STYLE-E2E-PROFILE\n- 语气：口语、短句\n- 开头：先抛结论");
         if (sys.includes("<stage>revise</stage>")) return reply((/<draft>\n?([\s\S]*?)\n?<\/draft>/.exec(content)?.[1] ?? "") + "\n\n> 【已自检】");
         if (sys.includes("<stage>verify</stage>")) return reply((/<brief>\n?([\s\S]*?)\n?<\/brief>/.exec(content)?.[1] ?? "") + "\n\n> 【已核对】");
         try {
@@ -132,7 +135,8 @@ http.createServer((req, res) => {
           // brief AI 润色: user content is Markdown, not a translate batch
           // 生成文章: a Skill that asks for a cover gets a cover marker line (t22)
           const cover = content.includes("## 选中的新闻") && /cover-image/.test(sys) ? "\n\n<!-- cover-image: e2e cover prompt -->" : "";
-          send(res, 200, { choices: [{ message: { content: "# 【润色】\n\n> SKILL: " + skill.slice(0, 2000) + "\n\n" + content + cover } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+          const style = sys.includes("<style_profile>") && sys.includes("STYLE-E2E-PROFILE") ? "\n\n> STYLE-IN" : ""; // t24
+          send(res, 200, { choices: [{ message: { content: "# 【润色】\n\n> SKILL: " + skill.slice(0, 2000) + "\n\n" + content + cover + style } }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
         }
       } catch { send(res, 400, { error: "bad request" }); }
     });

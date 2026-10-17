@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileText, FileUp, Loader2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileText, FileUp, Loader2, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,7 +31,7 @@ const fmtSize = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} 
 
 export default function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange: (b: boolean) => void; onDone: () => void }) {
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
-  const [parsed, setParsed] = useState<{ format: "json" | "opml"; rows: ParsedRow[]; translateAll?: boolean } | null>(null);
+  const [parsed, setParsed] = useState<{ format: "json" | "opml"; rows: ParsedRow[]; translateAll?: boolean; favorites?: unknown[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [mode, setMode] = useState<ImportMode>("merge");
@@ -63,14 +63,17 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
     setBusy(true);
     try {
       const r = await api<ImportPlan & { added: number }>("/api/sources/import", { method: "POST", body: JSON.stringify({ entries: entries(), mode, dryRun: false, test, ...(parsed?.translateAll ? { translateAll: true } : {}) }) });
+      // favorites go after the sources so their rows can attach to the just-imported sources
+      const fv = nFav ? await api<{ added: number; existing: number; skipped: number }>("/api/favorites/import", { method: "POST", body: JSON.stringify({ favorites: parsed?.favorites }) }).catch(() => null) : null;
       const c = r.counts;
-      toast.success("导入完成", { description: [`新增 ${c.new + c.restore}`, mode === "update" || mode === "replace" ? `更新 ${c.update}` : `跳过已存在 ${c.dup}`, c.invalid ? `无效 ${c.invalid}` : "", c.remove ? `删除 ${c.remove}` : ""].filter(Boolean).join(" · ") + (test && r.added ? "；正在测试抓取新来源" : "") });
+      toast.success("导入完成", { description: [`新增 ${c.new + c.restore}`, mode === "update" || mode === "replace" ? `更新 ${c.update}` : `跳过已存在 ${c.dup}`, c.invalid ? `无效 ${c.invalid}` : "", c.remove ? `删除 ${c.remove}` : ""].filter(Boolean).concat(fv ? [`收藏 ${fv.added + fv.existing}`] : nFav ? ["收藏导入失败"] : []).join(" · ") + (test && r.added ? "；正在测试抓取新来源" : "") });
       onDone(); onOpenChange(false); reset();
     } catch (e) { toast.error("导入失败", { description: e instanceof Error ? e.message : String(e) }); }
     setBusy(false);
   };
   const c = plan?.counts;
-  const willChange = c ? c.new + c.restore + (mode === "merge" ? 0 : c.update) + c.remove : 0;
+  const nFav = parsed?.favorites?.length ?? 0;
+  const willChange = (nFav ? 1 : 0) + (c ? c.new + c.restore + (mode === "merge" ? 0 : c.update) + c.remove : 0);
 
   return (
     <>
@@ -147,6 +150,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
                 <span className="inline-flex items-center gap-1.5 type-caption text-muted-foreground"><Pill k={mode === "merge" ? "dup" : "update"} />{mode === "merge" ? c.dup : c.update}</span>
                 <span className="inline-flex items-center gap-1.5 type-caption text-muted-foreground"><Pill k="invalid" />{c.invalid}</span>
                 {mode === "replace" && <span className="inline-flex items-center gap-1.5 type-caption text-muted-foreground"><Pill k="remove" />{c.remove}</span>}
+                {nFav > 0 && <span className="inline-flex items-center gap-1 type-caption text-muted-foreground" data-testid="import-fav"><Star className="size-3 text-amber-500" />收藏 {nFav}</span>}
               </div>
               <div className="max-h-[min(16rem,40vh)] overflow-auto rounded-lg border [&_[data-slot=table-container]]:overflow-visible">
                 <Table className="table-fixed type-body">
@@ -181,7 +185,7 @@ export default function ImportDialog({ open, onOpenChange, onDone }: { open: boo
             <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
             <Button variant={mode === "replace" ? "destructive" : "default"} disabled={!plan || busy || willChange === 0}
               onClick={() => (mode === "replace" ? setConfirm(true) : apply())}>
-              {busy && <Loader2 className="animate-spin" />}{busy ? "正在导入…" : willChange === 0 && plan ? "没有需要导入的内容" : mode === "replace" ? `覆盖导入 · ${willChange}` : `导入${willChange ? ` · ${willChange}` : ""}`}
+              {busy && <Loader2 className="animate-spin" />}{busy ? "正在导入…" : willChange === 0 && plan ? "没有需要导入的内容" : mode === "replace" ? `覆盖导入 · ${willChange - (nFav ? 1 : 0) + nFav}` : `导入${willChange ? ` · ${willChange - (nFav ? 1 : 0) + nFav}` : ""}`}
             </Button>
           </DialogFooter>
         </DialogContent>

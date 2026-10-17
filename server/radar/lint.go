@@ -38,7 +38,132 @@ var (
 	reMdLinkURL  = regexp.MustCompile(`\[([^\]]*)\]\((https?://[^)\s]+)\)`)
 	reH1         = regexp.MustCompile(`(?m)^#\s+(.+)$`)
 	reH2         = regexp.MustCompile(`(?m)^##\s+(.+)$`)
+	reRefNum     = regexp.MustCompile(`\[\[(\d{1,2})\]\]`)
 )
+
+func setOf(ms [][]string) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range ms {
+		out[m[1]] = true
+	}
+	return out
+}
+
+// titleLimit: the platforms whose title the pipeline enforces (runes, everything counted).
+var titleLimit = map[string][2]int{"wechat": {15, 30}, "xhs": {6, 20}} // {ideal-from, max}
+
+// articleTitle finds the title line: wechat's first "# " line; xhs's first line. at = -1 when there is none (an
+// xhs note whose first line is really a body sentence).
+func articleTitle(md, platform string) (title string, at int) {
+	lines := strings.Split(md, "\n")
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if t == "" {
+			continue
+		}
+		if platform == "wechat" {
+			if strings.HasPrefix(t, "# ") {
+				return strings.TrimSpace(t[2:]), i
+			}
+			continue
+		}
+		t = strings.TrimSpace(strings.TrimLeft(t, "# "))
+		if utf8.RuneCountInString(t) > 40 || strings.ContainsAny(t, "。！？") || strings.HasPrefix(t, "1️⃣") {
+			return "", -1
+		}
+		return t, i
+	}
+	return "", -1
+}
+
+const titleSystem = `<stage>title</stage>
+你是%s编辑。用户消息是一篇写好的文章。给它写 8 个标题候选。
+硬性要求：每个标题最多 %d 个字符——汉字、每个英文字母、每个数字、空格和标点都各算 1 个，所以「DeepSeek」就占 8 个。目标 %d–%d 个字符。
+技巧：最多保留一个英文名；去掉版本号、日期和单位；只留一个最关键的数字或变化；关键词或产品名放前面。
+只用文章里出现的事实；不用问号、感叹号和夸饰词（重磅、炸裂、杀疯了、天花板）。每行一个标题，不要编号、引号和解释。`
+
+// compactTitle drops the spaces next to CJK characters ("DeepSeek 新模型" → "DeepSeek新模型"), allowed in Chinese
+// typography and worth 2–4 characters against a 20-character limit.
+func compactTitle(t string) string {
+	rs := []rune(t)
+	var b strings.Builder
+	for i, r := range rs {
+		if r == ' ' && i > 0 && i+1 < len(rs) && (hasCJK(string(rs[i-1])) || hasCJK(string(rs[i+1])) || strings.ContainsRune("，：、", rs[i-1])) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+func titleCandidates(v string) []string {
+	var out []string
+	for _, l := range strings.Split(v, "\n") {
+		l = strings.Trim(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(l), "#0123456789.、)-* ")), "「」“”\"'《》")
+		if l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// fixTitle: a title over the platform limit (or a missing xhs title) is replaced by the first fitting candidate
+// from a dedicated short call — models keep missing character limits, counting is done here.
+func (s *Store) fixTitle(md, platform string) (string, bool) {
+	lim, ok := titleLimit[platform]
+	if !ok {
+		return md, false
+	}
+	title, at := articleTitle(md, platform)
+	n := utf8.RuneCountInString(title)
+	if at >= 0 && n <= lim[1] {
+		return md, false
+	}
+	label := map[string]string{"wechat": "公众号", "xhs": "小红书"}[platform]
+	sys := fmt.Sprintf(titleSystem, label, lim[1], lim[1]*3/5, lim[1]-2)
+	user := bodyOnly(md)
+	best := ""
+	for round := 0; round < 2 && best == ""; round++ { // the model can't count; the code does, and asks once more
+		v, err := s.dsChat(sys, user, 0.5, 400, false)
+		if err != nil {
+			return md, false
+		}
+		var long []string
+		for _, l := range titleCandidates(v) {
+			k := utf8.RuneCountInString(l)
+			if k > lim[1] {
+				l = compactTitle(l)
+				k = utf8.RuneCountInString(l)
+			}
+			if k > lim[1] {
+				long = append(long, fmt.Sprintf("- （%d 个字符）%s", k, l))
+				continue
+			}
+			if k < lim[0]/2 || len(slopLint(l, "")) > 0 {
+				continue
+			}
+			if best == "" || (utf8.RuneCountInString(best) < lim[0] && k >= lim[0]) {
+				best = l
+			}
+		}
+		user = bodyOnly(md) + "\n\n上一轮的候选都超过 " + fmt.Sprint(lim[1]) + " 个字符：\n" + strings.Join(long, "\n") + "\n再写 8 个更短的。"
+	}
+	if best == "" {
+		return md, false
+	}
+	lines := strings.Split(md, "\n")
+	switch {
+	case at < 0 && platform == "xhs":
+		return best + "\n\n" + strings.TrimLeft(md, "\n"), true
+	case at < 0:
+		return "# " + best + "\n\n" + strings.TrimLeft(md, "\n"), true
+	case platform == "wechat":
+		lines[at] = "# " + best
+	default:
+		lines[at] = best
+	}
+	return strings.Join(lines, "\n"), true
+}
 
 func isEmoji(r rune) bool {
 	return (r >= 0x1F300 && r <= 0x1FAFF) || (r >= 0x2600 && r <= 0x27BF) || r == 0x2B50 || r == 0x2705
@@ -142,6 +267,21 @@ func slopLint(md, platform string) []string {
 				out = append(out, fmt.Sprintf("第 %d 条推文加权长度 %d（上限 280，汉字算 2，链接算 23）", i+1, w))
 			}
 		}
+		refs := map[string]int{}
+		for i, l := range locs {
+			end := len(body)
+			if i+1 < len(locs) {
+				end = locs[i+1][0]
+			}
+			for n := range setOf(reRefNum.FindAllStringSubmatch(body[l[0]:end], -1)) {
+				refs[n]++
+			}
+		}
+		for _, n := range sortedKeys(refs) {
+			if refs[n] > 1 {
+				out = append(out, fmt.Sprintf("链接 [[%s]] 出现在 %d 条推文里（全串只放一次，放在讲这条新闻的最后一条）", n, refs[n]))
+			}
+		}
 		if len(locs) > 12 {
 			out = append(out, fmt.Sprintf("串推 %d 条（5–9 条为宜）", len(locs)))
 		}
@@ -162,8 +302,8 @@ const reviseSystem = `<stage>revise</stage>
 只输出修改后的完整文章（简体中文 Markdown），不要解释。`
 
 // selfCheck: lint → at most one revision pass → lint again. Returns the text and what is still flagged.
-func (s *Store) selfCheck(md, platform string) (string, []string) {
-	issues := slopLint(md, platform)
+func (s *Store) selfCheck(md, platform string, refs ...string) (string, []string) {
+	issues := articleLint(md, platform, refs...)
 	if len(issues) == 0 {
 		return md, nil
 	}
@@ -178,5 +318,23 @@ func (s *Store) selfCheck(md, platform string) (string, []string) {
 		return md, issues
 	}
 	v, _ = extractCovers(v)
-	return v, slopLint(v, platform)
+	return v, articleLint(v, platform, refs...)
+}
+
+// articleLint = slopLint + every input story's [[n]](url) link present (refs = the selected items' urls).
+func articleLint(md, platform string, refs ...string) []string {
+	out := slopLint(md, platform)
+	if len(refs) > 0 {
+		body := bodyOnly(md)
+		var miss []string
+		for i, u := range refs {
+			if !strings.Contains(body, fmt.Sprintf("[[%d]]", i+1)) {
+				miss = append(miss, fmt.Sprintf("[[%d]](%s)", i+1, u))
+			}
+		}
+		if len(miss) > 0 {
+			out = append(out, "缺少链接 "+strings.Join(miss, "、")+"（每条新闻至少引用一次，放在讲它的段落 / 推文末尾）")
+		}
+	}
+	return out
 }

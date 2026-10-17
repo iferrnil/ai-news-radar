@@ -8,8 +8,9 @@ import (
 )
 
 const itemSQL = `SELECT i.id,i.title,i.url,i.summary,i.published,i.fetched,i.is_x,i.author,i.also_on_x,i.image,i.title_zh,i.summary_zh,
-  s.id AS source_id, s.name AS source, s.category, s.region, s.type AS source_type, s.priority, s.homepage, s.username, s.grp, s.section
-  FROM items i JOIN sources s ON s.id=i.source_id WHERE i.merged_into IS NULL AND i.hidden=0 AND s.enabled=1`
+  s.id AS source_id, s.name AS source, s.category, s.region, s.type AS source_type, s.priority, s.homepage, s.username, s.grp, s.section,
+  i.kw, fv.ts AS fav
+  FROM items i JOIN sources s ON s.id=i.source_id LEFT JOIN favorites fv ON fv.item_id=i.id WHERE i.merged_into IS NULL AND i.hidden=0 AND s.enabled=1`
 
 // PreviewChars: cards clamp to 3 lines; hover card / drawer fetch the full text via ?id=.
 const PreviewChars = 280
@@ -46,6 +47,14 @@ func (s *Store) QueryItems(where string, args []any, limit int, full, zh bool) [
 		}
 		r.Set("also_on_x", also) // in place (spread keeps key order)
 		r.Set("truncated", jsLen(cut) < jsLen(summary))
+		if kw := kwList(r.Str("kw")); kw != nil {
+			r.Set("kw", kw)
+		} else {
+			r.Del("kw")
+		}
+		if r.Has("fav") {
+			r.Set("fav", true)
+		}
 		if t, ok := tzh.(string); zh && ok && t != "" {
 			r.Set("title_zh", t)
 			r.Set("summary_zh", clip(szh))
@@ -186,6 +195,7 @@ func (s *Store) StoreItems(src *Row, items []FetchedItem) (newIDs []int64, merge
 		return nil, 0, nil, err
 	}
 	s.tr.enqueue(newIDs)
+	s.applyWatch(newIDs)
 	for _, id := range removed {
 		s.Bus.Publish(Msg{Event: "removed", ID: id})
 	}
@@ -212,10 +222,11 @@ func (s *Store) Prune() int64 {
 		return 0
 	}
 	defer tx.Rollback()
-	tx.Exec("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE published < ?)", cutoff)
+	// favorited items (选题收藏夹) are kept past the retention window
+	tx.Exec("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE published < ? AND id NOT IN (SELECT item_id FROM favorites))", cutoff)
 	tx.Exec("DELETE FROM tcache WHERE ts < ?", now()-7*86400)
 	tx.Exec("DELETE FROM seen WHERE ts < ?", now()-envNum("SEEN_DAYS", 30)*86400)
-	res, err := tx.Exec("DELETE FROM items WHERE published < ?", cutoff)
+	res, err := tx.Exec("DELETE FROM items WHERE published < ? AND id NOT IN (SELECT item_id FROM favorites)", cutoff)
 	if err != nil {
 		return 0
 	}
@@ -245,6 +256,7 @@ func (s *Store) DeleteSources(ids []int64) (deleted, items int64) {
 		}
 		tx.Exec("DELETE FROM seen WHERE uid IN (SELECT uid FROM items WHERE source_id=?)", id)
 		tx.Exec("DELETE FROM post_links WHERE item_id IN (SELECT id FROM items WHERE source_id=?)", id)
+		tx.Exec("DELETE FROM favorites WHERE item_id IN (SELECT id FROM items WHERE source_id=?)", id)
 		res, _ := tx.Exec("DELETE FROM items WHERE source_id=?", id)
 		if res != nil {
 			n, _ := res.RowsAffected()

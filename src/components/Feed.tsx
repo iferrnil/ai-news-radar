@@ -11,7 +11,7 @@ const HOVER_Q = "(hover: hover) and (pointer: fine)";
 function useCanHover() {
   return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
 }
-import { ArrowUp, ArrowUpRight, Check, CheckCheck, CircleDot, FileText, Inbox, ListChecks, PenLine, RefreshCw, WifiOff, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, BellRing, Check, CheckCheck, CircleDot, FileText, Inbox, ListChecks, PenLine, RefreshCw, Star, WifiOff, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { markOnHover } from "./read-store";
@@ -26,11 +26,12 @@ import { EmptyState } from "./empty-state";
 import dynamic from "next/dynamic";
 const BriefDialog = dynamic(() => import("./brief-dialog"), { ssr: false });
 const ArticleDialog = dynamic(() => import("./article-dialog"), { ssr: false });
+const HotTopics = dynamic(() => import("./hot-topics"), { ssr: false });
 const PICK_MAX = { brief: 10, article: 2 } as const; // 手动简报 / 生成文章
 const isDesktop = () => typeof window !== "undefined" && !!(window as unknown as { __radarDesktop?: boolean }).__radarDesktop;
 import type { ItemOut } from "@/lib/types";
 import { useApp } from "./app-shell";
-import { sectionsReady, ago, api, bj, dekText, handleOf, sectionOf, srcName, xText } from "./common";
+import { sectionsReady, ago, api, bj, dekText, handleOf, sectionOf, setFav, srcName, xText } from "./common";
 import { SectionName } from "./section-icon";
 import { countOf, passes } from "./filters";
 import { SourceAvatar } from "./source-avatar";
@@ -58,19 +59,20 @@ const BLEED = "-mx-4 px-4 sm:-mx-6 sm:px-6 xl:-mx-8 xl:px-8 2xl:-mx-10 2xl:px-10
 const CARD_H = "h-[208px]"; // slightly denser cards without redesign
 
 /** Equal-size card for both articles and X posts; every text block is clamped with an ellipsis. */
-const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover, pick = 0 }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; hover: boolean; pick?: 0 | 1 | 2 | 3 }) {
+const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onFav, hover, pick = 0 }: { it: ItemOut; active: boolean; fresh: boolean; read: boolean; onOpen: (it: ItemOut) => void; onFav: (it: ItemOut) => void; hover: boolean; pick?: 0 | 1 | 2 | 3 }) {
   // pick: 0 not selecting · 1 selectable · 2 selected · 3 selection full
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (active) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [active]);
   const x = !!it.is_x, h = x ? handleOf(it) : null, t = x ? xText(it) : "";
   const linkOnly = x && /^https?:\/\//.test(t);
   const dek = x ? "" : dekText(it.summary);
+  const kw = it.kw?.length ? it.kw : null; // 关键词提醒 match
   const card = (
     <div ref={ref} data-slot="card" data-size="sm" onClickCapture={pick ? (e) => { e.preventDefault(); e.stopPropagation(); onOpen(it); } : undefined} onClick={() => onOpen(it)} data-active={active} data-read={read} data-item={it.id} role="button" tabIndex={-1}
-      data-picked={pick === 2 || undefined} aria-pressed={pick ? pick === 2 : undefined}
+      data-picked={pick === 2 || undefined} aria-pressed={pick ? pick === 2 : undefined} data-kw={kw ? "" : undefined}
       className={cn(CARD_H, "feed-card group/item relative flex flex-col overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 cursor-pointer gap-0 py-0 shadow-feed ring-border outline-none transition-[transform,background-color,box-shadow] duration-200 ease-out",
         "hover:-translate-y-px hover:ring-foreground/[0.14] hover:shadow-raised",
-        "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/55", fresh && "fresh-row",
+        "data-[active=true]:ring-2 data-[active=true]:ring-brand/50 data-[read=true]:bg-card/55", fresh && "fresh-row", kw && "ring-amber-500/45 dark:ring-amber-400/40",
         pick === 2 && "ring-2 ring-brand", pick === 3 && "opacity-50")}>
       {pick > 0 && (
         <span data-testid="pick-mark" role="checkbox" aria-checked={pick === 2} aria-label="选择"
@@ -108,9 +110,17 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
       <div className="flex h-9 shrink-0 items-center gap-1.5 border-t border-border/40 px-3.5 type-meta text-faint">
         <Badge size="sm" variant="outline" className="text-muted-foreground"><SectionName k={sectionOf(it)} iconClassName="size-3" className="gap-1" /></Badge>
         {it.also_on_x.length > 0 && <Badge size="sm" variant="muted" className="min-w-0"><Twitter />也在 X</Badge>}
+        {kw && <Badge size="sm" variant="outline" data-testid="kw-badge" title={`关键词：${kw.join("、")}`} className="min-w-0 border-amber-500/40 text-amber-700 dark:text-amber-300"><BellRing /><span className="truncate">{kw.join(" · ")}</span></Badge>}
+        {!pick && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); onFav(it); }} aria-label={it.fav ? "取消收藏" : "收藏"} aria-pressed={!!it.fav} data-testid="fav-btn"
+            className={cn("ml-auto grid size-6 shrink-0 place-items-center rounded-md transition-[opacity,background-color,color] duration-150 ease-out hover:bg-secondary",
+              it.fav ? "text-amber-500" : "opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100 hover:text-foreground [@media(hover:none)]:opacity-60")}>
+            <Star className={cn("size-3.5", it.fav && "fill-current")} />
+          </button>
+        )}
         {pick ? <span className="-mr-1.5 ml-auto size-6 shrink-0" aria-hidden /> : (
           <a href={it.url} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()} aria-label="打开原文"
-            className="-mr-1.5 ml-auto grid size-6 shrink-0 place-items-center rounded-md opacity-60 transition-[opacity,background-color,color] duration-150 ease-out group-hover/item:opacity-100 hover:bg-secondary hover:text-foreground">
+            className="-mr-1.5 grid size-6 shrink-0 place-items-center rounded-md opacity-60 transition-[opacity,background-color,color] duration-150 ease-out group-hover/item:opacity-100 hover:bg-secondary hover:text-foreground">
             <ArrowUpRight className="size-3.5" />
           </a>
         )}
@@ -121,7 +131,13 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, hover
   return <div className="min-w-0" onPointerEnter={(e) => hoverPreview.enter(it, e.currentTarget)} onPointerMove={(e) => hoverPreview.enter(it, e.currentTarget)} onPointerLeave={() => hoverPreview.leave()} onPointerDown={() => hoverPreview.close()}>{card}</div>;
 });
 
+/** 热点 is its own page; everything else (全部 / sections / sources / 收藏) is the card feed. */
 export default function Feed() {
+  const { f } = useApp();
+  return f.view === "hot" ? <HotTopics /> : <FeedList />;
+}
+
+function FeedList() {
   const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, markRead, markManyRead, markManyUnread, loc, sections } = useApp();
   const [briefOpen, setBriefOpen] = useState(false);
   // 手动简报 / 生成文章: pick up to PICK_MAX cards of this view
@@ -132,12 +148,13 @@ export default function Feed() {
   const [desktop, setDesktop] = useState(false);
   useEffect(() => { setDesktop(isDesktop()); }, []);
   // brief is for a section page or 全部 (not a single-source page)
+  const favMode = f.view === "fav";
   const briefScope = f.source != null ? null : (f.section || "all");
-  const briefLabel = briefScope === "all" ? "全部" : briefScope ? (sections.find((s) => s.key === briefScope)?.zh ?? briefScope) : "";
+  const briefLabel = favMode ? "收藏" : briefScope === "all" ? "全部" : briefScope ? (sections.find((s) => s.key === briefScope)?.zh ?? briefScope) : "";
   const sp = useSearchParams(); const router = useRouter();
   // a brief / article / selection belongs to one view: switching view (sidebar, ⌘K, notification) ends them, so a
   // dialog can never show the previous section's result
-  const viewId = `${briefScope}`;
+  const viewId = `${briefScope}|${f.view ?? ""}`;
   useEffect(() => { setBriefOpen(false); setArticleOpen(false); setPickMode(null); setPicked([]); }, [viewId]);
   const pickMax = PICK_MAX[pickMode ?? "brief"];
   const togglePick = useCallback((it: ItemOut) => {
@@ -154,13 +171,24 @@ export default function Feed() {
     if (pickMode === "brief") { setBriefIds([...picked]); setBriefOpen(true); } else setArticleOpen(true);
   };
   const secReady = sections.length > 0 || sectionsReady(); // 全部 must know which sections are excluded before rendering
-  const [raw, setItems] = useState<ItemOut[]>([]);
+  const [feedRaw, setItems] = useState<ItemOut[]>([]);
+  // 收藏: favorites of any age (the feed itself is the retention window)
+  const [favRaw, setFavRaw] = useState<ItemOut[] | null>(null);
+  const loadFav = useCallback(async () => { try { setFavRaw(await api<ItemOut[]>("/api/items?fav=1&limit=2000&zh=1")); } catch { setFavRaw((c) => c ?? []); } }, []);
+  useEffect(() => { if (favMode) void loadFav(); }, [favMode, loadFav]);
+  const raw = useMemo(() => (favMode ? favRaw ?? [] : feedRaw), [favMode, favRaw, feedRaw]);
+  const onFav = useCallback((it: ItemOut) => {
+    const on = !it.fav;
+    const flip = (c: ItemOut[]) => c.map((x) => (x.id === it.id ? { ...x, fav: on } : x));
+    setItems(flip); setFavRaw((c) => (c ? flip(c) : c));
+    setFav(it.id, on).catch((e) => { toast.error((e as Error).message); setItems((c) => c.map((x) => (x.id === it.id ? { ...x, fav: !on } : x))); });
+  }, []);
   // hide items of sources that were unsubscribed (sidebar / sources page / another tab) without a refetch
   const enabledIds = useMemo(() => (sources.length ? new Set(sources.filter((s) => s.enabled).map((s) => s.id)) : null), [sources]);
   const items = useMemo(() => {
-    const vis = enabledIds ? raw.filter((it) => enabledIds.has(it.source_id)) : raw;
+    const vis = enabledIds && !favMode ? raw.filter((it) => enabledIds.has(it.source_id)) : raw;
     return vis.map(loc); // translation shown where its view scope (全部 / section / source) is switched on
-  }, [raw, loc, enabledIds]);
+  }, [raw, loc, enabledIds, favMode]);
   useEffect(() => { warmFonts(items.flatMap((it) => [it.title, it.summary ?? "", it.source])); }, [items]);
   const [pending, setPending] = useState<ItemOut[]>([]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
@@ -181,7 +209,9 @@ export default function Feed() {
     setLoadErr(null); setItems(rs); setPending([]); setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setFacet(items); }, [items, setFacet]);
+  const favModeRef = useRef(favMode);
+  useEffect(() => { favModeRef.current = favMode; }, [favMode]);
+  useEffect(() => { if (!favMode) setFacet(items); }, [items, setFacet, favMode]);
   // a source was re-enabled (undo / sources page): its items aren't in the list yet -> reload once
   const prevIds = useRef<Set<number> | null>(null);
   useEffect(() => {
@@ -205,12 +235,19 @@ export default function Feed() {
       else if (ev === "update") {
         pendingUpd.set((d.item as ItemOut).id, d.item as ItemOut);
         if (!flushT) flushT = setTimeout(flush, 200);
+      } else if (ev === "fav") { // 收藏 changed (this or another window / import)
+        const { id, on, import: imp } = (d.data ?? {}) as { id?: number; on?: boolean; import?: number };
+        if (id) { const flip = (c: ItemOut[]) => c.map((x) => (x.id === id ? { ...x, fav: !!on } : x)); setItems(flip); setPending(flip); }
+        if (favModeRef.current && (imp || (id && on))) void loadFav();
+        else if (id && !on) setFavRaw((c) => (c ? c.map((x) => (x.id === id ? { ...x, fav: false } : x)) : c));
+      } else if (ev === "watch") { // keyword list changed: highlights re-matched server-side
+        void load(); if (favModeRef.current) void loadFav();
       } else if (ev === "removed") {
         pendingUpd.delete(d.id);
         setItems((c) => c.filter((x) => x.id !== d.id)); setPending((p) => p.filter((x) => x.id !== d.id));
       }
     });
-  }, [onStream]);
+  }, [onStream, load, loadFav]);
   // one passive, rAF-coalesced scroll listener: back-to-top visibility + .feed-list[data-scrolling] (drops hover effects / pointer
   // events on cards while scrolling, so WKWebView doesn't restyle hundreds of cards and open hover cards mid-scroll)
   // The flag sits on the feed list only (one element; pointer-events inherits on Chrome/WebKit's fast path) instead of
@@ -281,7 +318,7 @@ export default function Feed() {
     setFresh(new Set(add.map((x) => x.id))); setTimeout(() => setFresh(new Set()), 3500);
     setPending([]); window.scrollTo({ top: 0, behavior: "smooth" });
   };
-  const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+  const refresh = async () => { setRefreshing(true); await (favMode ? loadFav() : load()); setRefreshing(false); };
 
   // j/k (and ←/→) step through cards in reading order (row by row), which is DOM order.
   useEffect(() => {
@@ -331,12 +368,12 @@ export default function Feed() {
         </Tooltip>
         {briefScope && (
           <div className="flex items-center gap-0.5" data-testid="brief-tools">
-            <Tooltip>
+            {!favMode && <Tooltip>
               <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={autoBrief} aria-label="自动简报" data-testid="brief-btn" className="px-1.5 type-caption font-normal text-faint" />}>
                 <FileText className="size-3.5" /><span className="hidden md:inline">自动简报</span>
               </TooltipTrigger>
               <TooltipContent>自动挑选 {PICK_MAX.brief} 条{briefLabel === "全部" ? "" : `「${briefLabel}」`}内容：多源报道的热点优先，再取最早与最新</TooltipContent>
-            </Tooltip>
+            </Tooltip>}
             <Tooltip>
               <TooltipTrigger render={<Button variant={pickMode === "brief" ? "secondary" : "ghost"} size="sm" onClick={() => startPick("brief")} aria-pressed={pickMode === "brief"} aria-label="手动简报" data-testid="brief-manual-btn" className="px-1.5 type-caption font-normal text-faint aria-pressed:text-foreground" />}>
                 <ListChecks className="size-3.5" /><span className="hidden md:inline">手动简报</span>
@@ -371,8 +408,10 @@ export default function Feed() {
         <EmptyState icon={WifiOff} tone="error" className="mt-6 rounded-xl border border-dashed py-14" title="加载失败" hint={`无法获取内容：${loadErr}`}>
           <Button variant="outline" size="sm" onClick={() => { setLoading(true); load(); }}><RefreshCw />重试</Button>
         </EmptyState>
-      ) : loading || !secReady ? (
+      ) : loading || !secReady || (favMode && favRaw == null) ? (
         <div className={cn(GRID, "mt-4")}>{Array.from({ length: 12 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>
+      ) : view.length === 0 && favMode ? (
+        <EmptyState icon={Star} className="mt-6 rounded-xl border border-dashed py-14" title={f.unread || f.p0 ? "没有符合条件的收藏" : "还没有收藏"} hint="在卡片或详情里点 ☆ 收藏选题；收藏的内容不会被 48 小时清理。" />
       ) : view.length === 0 ? (
         <EmptyState icon={Inbox} className="mt-6 rounded-xl border border-dashed py-14"
           title={f.unread && scope.length ? "全部读完了" : f.p0 ? "这里 48 小时内没有 P0 内容" : f.section || f.source != null ? "这里 48 小时内还没有内容" : "这里暂时很安静"}
@@ -390,7 +429,7 @@ export default function Feed() {
             <div className={GRID}>
               {g.items.map((it) => {
                 const i = idx.get(it.id)!;
-                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={onCard} hover={canHover} pick={pickOf(it.id)} />;
+                return <ItemCard key={it.id} it={it} active={i === cursor} fresh={fresh.has(it.id)} read={isRead(it.id)} onOpen={onCard} onFav={onFav} hover={canHover} pick={pickOf(it.id)} />;
               })}
             </div>
           </section>

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 	"github.com/iferrnil/ai-news-radar/server/radar"
 )
 
@@ -173,5 +174,12 @@ func (n *notifier) install(show func(), dataDir string) {
 		OpenNotifySettings: func() error { return mygo.Shell.OpenExternal(notifySettingsURL) },
 		OpenDataDir:        func() error { return mygo.Shell.OpenPath(dataDir) },
 		OpenPath:           func(p string) error { return mygo.Shell.OpenPath(p) },
+		CopyRich: func(html, text string) error {
+			item := []transfer.Representation{transfer.Bytes(transfer.Text, []byte(text))}
+			if html != "" {
+				item = append([]transfer.Representation{transfer.Bytes(transfer.HTML, []byte(html))}, item...)
+			}
+			return mygo.Clipboard.Write(transfer.New(transfer.NewItem(item...)))
+		},
 	}
 }

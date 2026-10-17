@@ -57,6 +57,8 @@ func TestPrefsWants(t *testing.T) {
 		{notifyPrefs{Enabled: true, Scope: "all"}, "notify", false},
 		{notifyPrefs{Enabled: true, System: &off}, "notify", false},
 		{notifyPrefs{Enabled: false, Scope: "all"}, "digest", false},
+		{notifyPrefs{Enabled: false}, "keyword", true}, // 关键词提醒 works without the P0 switch
+		{notifyPrefs{Enabled: true, System: &off}, "keyword", false},
 	}
 	for i, c := range cases {
 		if got := c.p.wants(c.event); got != c.want {
@@ -74,5 +76,21 @@ func TestDigestText(t *testing.T) {
 	title, _ = batchText(notifyBatch{Count: 1, Items: items[:1], Digest: true})
 	if title != "a" {
 		t.Fatal(title)
+	}
+}
+
+func TestKeywordText(t *testing.T) {
+	sec := "cn"
+	one := notifyBatch{Count: 1, Kw: true, Items: []notifyItem{{Source: "Techmeme", Title: "DeepSeek V5", Section: &sec, Keywords: []string{"DeepSeek"}}}}
+	if title, body := batchText(one); title != "关键词 · DeepSeek" || body != "Techmeme：DeepSeek V5" {
+		t.Fatal(title, body)
+	}
+	if filterBatch(one, []string{"other"}) == nil { // keyword alerts ignore the P0 section filter
+		t.Fatal("keyword batch filtered by section")
+	}
+	many := notifyBatch{Count: 4, Kw: true, Items: []notifyItem{{Source: "a", Title: "1", Keywords: []string{"GPT-6", "Claude"}}, {Source: "b", Title: "2", Keywords: []string{"x"}}, {Source: "c", Title: "3"}, {Source: "d", Title: "4"}}}
+	title, body := batchText(many)
+	if title != "关键词提醒 4 条" || !strings.Contains(body, "· [GPT-6/Claude] a：1") || !strings.Contains(body, "…还有 1 条") {
+		t.Fatal(title, body)
 	}
 }

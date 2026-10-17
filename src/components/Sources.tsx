@@ -148,10 +148,12 @@ export default function Sources() {
     if (!list.length) { toast.error("没有可导出的来源"); return; }
     const d = new Date();
     const { buildJson, buildOpml, exportFileName } = await import("@/lib/portable-export");
-    if (fmt === "json") download(exportFileName("json", d), buildJson(list, d, custom, !!tr?.scopes.all), "application/json");
+    // a full JSON export also carries the 收藏 (favorites)
+    const favs = fmt === "json" && scope === "all" ? await api<unknown[]>("/api/favorites/export").catch(() => []) : [];
+    if (fmt === "json") download(exportFileName("json", d), buildJson(list, d, custom, !!tr?.scopes.all, favs), "application/json");
     else download(exportFileName("opml", d), buildOpml(list, d, custom, !!tr?.scopes.all), "text/x-opml");
     const nx = list.filter((r) => r.type.startsWith("x")).length;
-    toast.success(`已导出 ${list.length} 个来源`, { description: fmt === "opml" && nx ? `${nx} 个 X 来源以自定义 type="x" 写入，其他阅读器会忽略它们` : undefined });
+    toast.success(`已导出 ${list.length} 个来源${favs.length ? ` · ${favs.length} 条收藏` : ""}`, { description: fmt === "opml" && nx ? `${nx} 个 X 来源以自定义 type="x" 写入，其他阅读器会忽略它们` : undefined });
   };
   const stats = [["在线来源", nAct], ["报错", nErr], ["48h 条目", nItems], ["目录总数", rows.length]] as const;
 

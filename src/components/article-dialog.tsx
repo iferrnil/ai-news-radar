@@ -2,7 +2,7 @@
 // 生成文章 (desktop): the picked items → 推特 / 公众号 / 小红书 article, each written by its own Skill (设置 › Skill).
 // A Skill may ask for a cover; it is made with the 多模态模型 when configured, else skipped with a note.
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Download, Eye, ImageOff, Loader2, PenLine, Pencil, Sparkles, Undo2 } from "lucide-react";
+import { Check, ClipboardCopy, Copy, Download, Eye, Hash, Heading, ImageOff, Loader2, PenLine, Pencil, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { api, exportMarkdown, revealExported } from "./common";
 import { Markdown } from "./md-view";
+import { copyRich, tweetParts, wechatHtml, wechatText, wechatTitle, xWeight, xhsParts } from "@/lib/platform-copy";
 
 type Cover = { kind: "image" | "video"; prompt: string; status: "ok" | "skipped" | "error"; note?: string; path?: string; size?: string };
 type Article = {
@@ -46,7 +47,11 @@ export default function ArticleDialog({ open, onOpenChange, section, ids }: { op
     } catch (e) { if (live.current) toast.error((e as Error).message); }
     finally { if (live.current) setBusy((b) => (b === p ? null : b)); }
   };
-  const copy = async () => { try { await navigator.clipboard.writeText(t); setCopied(true); toast.success("已复制 Markdown"); setTimeout(() => setCopied(false), 1500); } catch { toast.error("复制失败"); } };
+  const copy = async () => { if (await copyRich(t)) { setCopied(true); toast.success("已复制 Markdown"); setTimeout(() => setCopied(false), 1500); } else toast.error("复制失败"); };
+  // 一键复制成平台格式
+  const put = async (what: string, text: string, html?: string) => { if (!text.trim()) { toast(`没有${what}`); return; } if (await copyRich(text, html)) toast.success(`已复制${what}`); else toast.error("复制失败"); };
+  const xhs = pf === "xhs" && a ? xhsParts(t) : null;
+  const tweets = pf === "twitter" && a ? tweetParts(t) : null;
   const doExport = async () => {
     if (!a) return;
     try {
@@ -101,7 +106,20 @@ export default function ArticleDialog({ open, onOpenChange, section, ids }: { op
               {editing
                 ? <textarea value={t} onChange={(e) => setText((m) => ({ ...m, [pf]: e.target.value }))} spellCheck={false} aria-label="编辑文章" data-testid="article-editor"
                     className="block min-h-[50dvh] w-full resize-none rounded-md border border-border bg-background p-3 font-mono text-[13px] leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring/40" />
-                : <div data-testid="article-body" className={busy === pf ? "opacity-60" : undefined}><Markdown md={t} /></div>}
+                : tweets ? (
+                  <ol className={cn("space-y-2", busy === pf && "opacity-60")} data-testid="article-body">
+                    {tweets.map((p, i) => {
+                      const w = xWeight(p);
+                      return (
+                        <li key={i} className="group/tw relative rounded-lg bg-muted/50 px-3 py-2.5 pr-10 ring-1 ring-border/50" data-testid="tweet">
+                          <p className="whitespace-pre-wrap break-words type-body leading-[1.7]">{p}</p>
+                          <span className={cn("mt-1 block font-mono type-meta tabular-nums", w > 280 ? "text-red-500" : "text-faint")}>{w}/280</span>
+                          <Button variant="ghost" size="icon-xs" aria-label={`复制第 ${i + 1} 条`} onClick={() => void put(`第 ${i + 1} 条`, p)} className="absolute right-2 top-2 text-faint opacity-70 group-hover/tw:opacity-100" data-testid="tweet-copy"><Copy /></Button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : <div data-testid="article-body" className={busy === pf ? "opacity-60" : undefined}><Markdown md={t} /></div>}
             </>
           )}
         </div>
@@ -110,7 +128,17 @@ export default function ArticleDialog({ open, onOpenChange, section, ids }: { op
           <div className="flex flex-wrap gap-2">
             <Button variant={editing ? "secondary" : "outline"} size="sm" disabled={!a} onClick={() => setEditing(!editing)} aria-pressed={editing}>{editing ? <Eye className="size-3.5" /> : <Pencil className="size-3.5" />}{editing ? "预览" : "编辑"}</Button>
             {edited && <Button variant="ghost" size="sm" onClick={() => a && setText((m) => ({ ...m, [pf]: a.markdown }))}><Undo2 className="size-3.5" />还原</Button>}
-            <Button variant="outline" size="sm" disabled={!a} onClick={copy}>{copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}</Button>
+            {pf === "wechat" && a && <>
+              <Button variant="outline" size="sm" onClick={() => void put("公众号格式", wechatText(t), wechatHtml(t))} data-testid="copy-wechat"><ClipboardCopy className="size-3.5" />复制到公众号</Button>
+              <Button variant="ghost" size="sm" onClick={() => void put("标题", wechatTitle(t))} data-testid="copy-title"><Heading className="size-3.5" />标题</Button>
+            </>}
+            {xhs && <>
+              <Button variant="outline" size="sm" onClick={() => void put("标题", xhs.title)} data-testid="copy-xhs-title"><Heading className="size-3.5" />标题</Button>
+              <Button variant="outline" size="sm" onClick={() => void put("正文", xhs.body)} data-testid="copy-xhs-body"><ClipboardCopy className="size-3.5" />正文</Button>
+              <Button variant="outline" size="sm" onClick={() => void put("话题", xhs.tags)} data-testid="copy-xhs-tags"><Hash className="size-3.5" />话题</Button>
+            </>}
+            {tweets && <Button variant="outline" size="sm" onClick={() => void put("全部推文", tweets.join("\n\n"))} data-testid="copy-thread"><ClipboardCopy className="size-3.5" />复制全部</Button>}
+            <Button variant="ghost" size="sm" disabled={!a} onClick={copy} title="复制 Markdown">{copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "Markdown"}</Button>
             <Button variant="outline" size="sm" disabled={!a} onClick={doExport} data-testid="article-export"><Download className="size-3.5" />导出</Button>
           </div>
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>关闭</Button>

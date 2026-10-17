@@ -69,7 +69,16 @@ func (s *Store) Handler() http.Handler {
 	m.HandleFunc("GET /api/desktop/notify", s.hDesktopNotifyStatus)
 	m.HandleFunc("POST /api/desktop/notify-open-settings", s.hDesktopNotifyOpen)
 	m.HandleFunc("POST /api/desktop/open-data", s.hDesktopOpenData)
+	m.HandleFunc("POST /api/desktop/clipboard", s.hDesktopClipboard)
 	m.HandleFunc("GET /api/stats", s.hStats)
+	m.HandleFunc("POST /api/favorites", s.hFavoritePost)
+	m.HandleFunc("GET /api/favorites/export", s.hFavoritesExport)
+	m.HandleFunc("POST /api/favorites/import", s.hFavoritesImport)
+	m.HandleFunc("GET /api/hot", s.hHot)
+	m.HandleFunc("GET /api/style", s.hStyleGet)
+	m.HandleFunc("PATCH /api/style", s.hStylePatch)
+	m.HandleFunc("POST /api/style/fetch", s.hStyleFetch)
+	m.HandleFunc("POST /api/style/profile", s.hStyleProfile)
 	m.HandleFunc("GET /api/stream", s.hStream)
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		if s.notFound != nil {
@@ -251,6 +260,11 @@ func (s *Store) hItems(w http.ResponseWriter, r *http.Request) {
 		n, _ := jsNumber(id)
 		wh, a = append(wh, "i.id=?"), append(a, n)
 	}
+	if p.Get("fav") == "1" {
+		wh = append(wh, "fv.item_id IS NOT NULL") // 收藏: any age
+	} else if id == "" {
+		wh, a = append(wh, "i.published >= ?"), append(a, now()-retentionHours()*3600) // the 48 h window (favorites outlive it)
+	}
 	limit := 50
 	if v, has := p["limit"]; has {
 		if n, ok := jsNumber(v[0]); ok {
@@ -408,6 +422,7 @@ func (s *Store) settingsOut(w http.ResponseWriter) {
 	out.Set("translate", s.translateStatus())
 	out.Set("deepseek", s.deepseekPublic())
 	out.Set("notify", s.NotifyPrefs())
+	out.Set("watch", s.WatchPrefs())
 	out.Set("desktop", s.Cfg.Desktop)
 	if s.Cfg.Desktop {
 		out.Set("dataDir", filepath.Dir(s.Cfg.DBPath))
@@ -477,6 +492,12 @@ func (s *Store) hSettingsPatch(w http.ResponseWriter, r *http.Request) {
 		}
 		scope, _ := n["scope"].(string)
 		s.SetNotifyPrefs(en, secs, sys, scope)
+	}
+	if wv, ok := b["watch"].(map[string]any); ok {
+		// 关键词 are the user's own view / alert control like the translation switches (allowed under SETTINGS_LOCKED)
+		if _, changed := s.SetWatchPrefs(wv); changed {
+			s.rematchAll()
+		}
 	}
 	if v, has := b["translate"]; has {
 		// boolean = 「全部」; otherwise { scope: all|section|source, key, on }

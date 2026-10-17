@@ -58,6 +58,8 @@ export async function exportMarkdown(kind: "brief" | "article", title: string, m
   document.body.append(a); a.click(); a.remove();
   return null;
 }
+/** 选题收藏夹: star / unstar an item (server-side, so favorites survive the 48 h cleanup). */
+export const setFav = (id: number, on: boolean) => api("/api/favorites", { method: "POST", body: JSON.stringify({ id, on }) });
 export const revealExported = (path: string) => api("/api/artifacts/open", { method: "POST", body: JSON.stringify({ path }) }).catch((e) => toast.error((e as Error).message));
 export type SourceRow = {
   id: number; name: string; type: string; username: string | null; category: string | null; region: string | null; url: string; homepage: string | null;

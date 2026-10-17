@@ -17,12 +17,14 @@ import { GeneralCard, NotifyCard, UpdateRow, type NotifyPrefs } from "./settings
 const SkillCard = dynamic(() => import("./settings-skill"), { ssr: false });
 const MultimodalCard = dynamic(() => import("./settings-media").then((m) => m.MultimodalCard), { ssr: false });
 const ArtifactsCard = dynamic(() => import("./settings-media").then((m) => m.ArtifactsCard), { ssr: false });
+const WatchCard = dynamic(() => import("./settings-watch"), { ssr: false });
+const StyleCard = dynamic(() => import("./settings-style"), { ssr: false });
 const FetchApiCard = dynamic(() => import("./settings-fetch").then((m) => m.FetchApiCard), { ssr: false });
 
 type DS = { configured: boolean; source: "app" | "env" | null; baseUrl: string; model: string; baseUrlCustom: boolean; modelCustom: boolean; locked: boolean };
 type TR = { available: boolean; reason: string | null; scopes: TrScopes; done: number; queued: number; failed: number; lastError: string | null };
 const trScopeText = (sc: TrScopes) => [sc.all && "全部", ...sc.sections.map((k) => `分区「${secZh(k)}」`), sc.sources.length && `${sc.sources.length} 个来源`].filter(Boolean).join("、") || "无";
-type S = { deepseek: DS; translate: TR; notify: NotifyPrefs; desktop: boolean; version?: string | null; dataDir?: string };
+type S = { deepseek: DS; translate: TR; notify: NotifyPrefs; desktop: boolean; version?: string | null; dataDir?: string; watch?: import("./settings-watch").WatchPrefs };
 type Test = { ok: boolean; error?: string } | null;
 
 export default function Settings() {
@@ -54,6 +56,7 @@ export default function Settings() {
 
       <GeneralCard />
       <NotifyCard desktop={!!s?.desktop} server={s?.notify ?? null} locked={locked} onSaved={(n) => setS((cur) => (cur ? { ...cur, notify: n } : cur))} />
+      {s && <WatchCard initial={s.watch ?? null} desktop={!!s.desktop} />}
 
       <Card className="mt-4" data-testid="ai-card">
         <CardHeader>
@@ -102,7 +105,7 @@ export default function Settings() {
         </CardFooter>
       </Card>
 
-      {s?.desktop && <><SkillCard /><SkillCard kind="twitter" /><SkillCard kind="wechat" /><SkillCard kind="xhs" /><MultimodalCard /><FetchApiCard /><ArtifactsCard /></>}
+      {s?.desktop && <><SkillCard /><SkillCard kind="twitter" /><SkillCard kind="wechat" /><SkillCard kind="xhs" /><StyleCard /><MultimodalCard /><FetchApiCard /><ArtifactsCard /></>}
       {(s?.dataDir || s?.desktop) && <DataCard dataDir={s?.dataDir} version={s?.desktop ? s.version ?? null : undefined} />}
       <AboutCard version={s?.version ?? null} desktop={!!s?.desktop} />
     </div>

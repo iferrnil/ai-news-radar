@@ -34,9 +34,10 @@ export function toEntry(s: ExportSource) {
   };
 }
 
-export function buildJson(list: ExportSource[], d = new Date(), custom: ExportSection[] = [], translateAll = false): string {
+/** favorites travel as opaque rows from GET /api/favorites/export (the server validates them on import) */
+export function buildJson(list: ExportSource[], d = new Date(), custom: ExportSection[] = [], translateAll = false, favorites: unknown[] = []): string {
   const used = custom.filter((c) => list.some((s) => s.section === c.key)).map(({ translate, ...c }) => (translate ? { ...c, translate } : c));
-  return JSON.stringify({ app: APP, version: SCHEMA_VERSION, exportedAt: bjStamp(d).iso, count: list.length, ...(translateAll ? { translateAll } : {}), ...(used.length ? { sections: used } : {}), sources: list.map(toEntry) }, null, 2) + "\n";
+  return JSON.stringify({ app: APP, version: SCHEMA_VERSION, exportedAt: bjStamp(d).iso, count: list.length, ...(translateAll ? { translateAll } : {}), ...(used.length ? { sections: used } : {}), sources: list.map(toEntry), ...(favorites.length ? { favorites } : {}) }, null, 2) + "\n";
 }
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

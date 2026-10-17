@@ -25,7 +25,7 @@ import type { ItemOut } from "@/lib/types";
 import { secIcon } from "./section-icon";
 import { HealthDot, healthOf, healthText } from "./source-health";
 import { type SectionApiRow, type Section, type SourceRow, type TrInfo, allSections, api, inAll, localize, secZh, sectionOf, setSections, trOnFor } from "./common";
-import { Languages, MinusCircle } from "lucide-react";
+import { Flame, Languages, MinusCircle, Star } from "lucide-react";
 import dynamic from "next/dynamic";
 // ⌘K palette (cmdk) is code-split and only mounted after first open
 const Palette = dynamic(() => import("./palette"), { ssr: false });
@@ -233,8 +233,8 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
     : active.filter((s) => { const k = sectionOf({ ...s, is_x: s.type.startsWith("x") }); return section ? k === section : inAll(k); }).reduce((a, s) => a + s.item_count, 0);
   // unread per view (same filter as the feed, incl. that view's 仅 P0); null until items are loaded
   const unread = (section: Filters["section"]) => facet.length ? countOf(facet, { section, source: null, p0: p0For(section || "all"), unread: true }, isRead) : undefined;
-  const go = (p: Partial<Filters>) => { navigate({ section: "", source: null, ...p }); onNavigate?.(); };
-  const on = (section: Filters["section"]) => feed && f.source == null && f.section === section;
+  const go = (p: Partial<Filters>) => { navigate({ section: "", source: null, view: "", ...p }); onNavigate?.(); };
+  const on = (section: Filters["section"]) => feed && !f.view && f.source == null && f.section === section;
   const errs = active.filter((s) => s.last_error).length;
   const weak = active.filter((s) => { const l = healthOf(s).level; return l === "degraded" || l === "open"; }).length;
   const manage = () => { router.push("/sources?sections=1"); onNavigate?.(); };
@@ -261,6 +261,9 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
           {/* sections outside 全部 (e.g. 娱乐) sit below a divider */}
           {outside.length > 0 && <div className="mx-2 my-2 h-px bg-border" role="separator" title="不计入「全部」" />}
           {outside.map(sec)}
+          <SectionLabel>选题</SectionLabel>
+          <NavItem active={feed && f.view === "hot"} icon={Flame} label="热点" onClick={() => go({ view: "hot" })} />
+          <NavItem active={feed && f.view === "fav"} icon={Star} label="收藏" onClick={() => go({ view: "fav" })} />
           <SectionLabel>管理</SectionLabel>
           <NavGroup icon={Database} label="数据源" count={active.length} storageKey={SOURCES_KEY} defaultOpen={false} inside={path === "/sources"}>
             {sections.map((sec) => {
@@ -335,9 +338,9 @@ function Shell({ children }: { children: React.ReactNode }) {
     const es = new EventSource("/api/stream");
     es.onopen = () => setLive(true);
     es.onerror = () => setLive(false);
-    for (const ev of ["item", "update", "removed", "sources", "notify", "translate"]) es.addEventListener(ev, (e) => {
+    for (const ev of ["item", "update", "removed", "sources", "notify", "translate", "fav", "watch", "keyword"]) es.addEventListener(ev, (e) => {
       const d = JSON.parse((e as MessageEvent).data); listeners.current.forEach((fn) => fn(ev, d));
-      if (ev === "notify" && d.batch) handleBatch(d.batch, (id) => openByIdRef.current(id));
+      if ((ev === "notify" || ev === "keyword") && d.batch) handleBatch(d.batch, (id) => openByIdRef.current(id), ev === "keyword");
       if (ev === "item") reloadSourcesRef.current?.();
       if (ev === "sources") reloadNowRef.current?.();
       if (ev === "translate") reloadTrRef.current();
@@ -357,6 +360,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   // switching view restores that view's own 仅 P0; toggling P0 stores it for the current view only
   const navigate = useCallback((p: Partial<Filters>) => {
     const next = { ...fRef.current, ...p };
+    if (("section" in p || "source" in p) && !("view" in p)) next.view = ""; // picking a section / source leaves 热点 / 收藏
     if ("p0" in p) setP0For(viewKey(next), !!p.p0); else next.p0 = p0For(viewKey(next));
     if ("unread" in p) setUnreadPref(!!p.unread);
     router.push(toQuery(next), { scroll: false });
@@ -419,7 +423,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, tr, settingsLocked, reloadTr, trView, loc }),
     [f, setF, navigate, facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, open, setOpen, addOpen, onStream, tr, settingsLocked, reloadTr, trView, loc]);
   const title = path === "/sources" ? "数据源" : path === "/settings" ? "设置" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
-    : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
+    : f.view === "hot" ? "热点" : f.view === "fav" ? "收藏" : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
 
   return (
     <AppCtx.Provider value={ctx}>

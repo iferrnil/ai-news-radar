@@ -1,16 +1,18 @@
-// npm run screenshots  (server must be running; BASE_URL defaults to http://localhost:3000)
+// npm run screenshots  (server must be running; BASE_URL defaults to http://localhost:3000; ONLY=a.png,b.png for a subset)
 import { chromium } from "playwright";
 import fs from "node:fs";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const OUT = new URL("../docs/screenshots/", import.meta.url).pathname;
 fs.mkdirSync(OUT, { recursive: true });
 const b = await chromium.launch();
-async function shot(name, path, { theme = "dark", mobile = false, act, w = 1280, h = 800 } = {}) {
+const ONLY = process.env.ONLY ? new Set(process.env.ONLY.split(",")) : null;
+async function shot(name, path, { theme = "dark", mobile = false, act, w = 1280, h = 800, wait } = {}) {
+  if (ONLY && !ONLY.has(name)) return;
   const ctx = await b.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: w, height: h }, deviceScaleFactor: mobile ? 2 : 1, locale: "zh-CN" });
   await ctx.addInitScript((t) => localStorage.setItem("theme", t), theme);
   const pg = await ctx.newPage();
   await pg.goto(BASE + path, { waitUntil: "networkidle", timeout: 15000 }).catch(() => {}); // image-heavy views (娱乐) may never go idle
-  await pg.waitForSelector(path.startsWith("/?") || path === "/" ? "[data-slot=card]" : path === "/docs" ? "section" : "tbody tr td");
+  await pg.waitForSelector(wait ?? (path.startsWith("/?") || path === "/" ? "[data-slot=card]" : path === "/docs" ? "section" : "tbody tr td"));
   await pg.waitForTimeout(1200);
   if (act) await act(pg);
   await pg.waitForTimeout(900);
@@ -21,6 +23,7 @@ async function shot(name, path, { theme = "dark", mobile = false, act, w = 1280,
 await shot("feed_dark.png", "/");
 await shot("feed_light.png", "/", { theme: "light" });
 await shot("feed_1920.png", "/", { w: 1920, h: 1080 });
+await shot("hot.png", "/?view=hot", { wait: "[data-testid=hot-topic]" });
 await shot("section_cn.png", "/?section=cn");
 await shot("section_x.png", "/?section=x");
 await shot("section_ent.png", "/?section=ent");

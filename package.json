@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "server/bin/radar-server -ui out",
     "lint": "eslint",
     "screenshots": "node scripts/screenshots.mjs",
     "docs:rate-limits": "node --no-warnings scripts/gen-rate-limits-md.mts",

@@ -51,7 +51,7 @@ for (const desktop of [false, true]) {
   const p = await br.newPage({ viewport: { width: 1280, height: 1000 } }); p.on("pageerror", (e) => errors.push(String(e)));
   await p.goto(B + "/settings"); await p.getByTestId("ai-card").waitFor(); await sleep(600);
   const titles = await p.locator("[data-slot=card-title]").allInnerTexts();
-  rec("web settings: cards 常规 / 通知 / 翻译 / AI / 关于 (no 数据 on web) (in order)", titles.join(",") === "常规,通知,翻译 / AI,关于", titles.join(","));
+  rec("web settings: cards 常规 / 通知 / 关键词提醒 / 翻译 / AI / 关于 (no 数据 on web) (in order)", titles.join(",") === "常规,通知,关键词提醒,翻译 / AI,关于", titles.join(","));
   rec("web: no 简报 Skill / 更新 cards", await p.getByTestId("skill-card").count() === 0 && await p.getByTestId("update-card").count() === 0);
   rec("web: skills API is desktop-only", (await fetch(B + "/api/skills")).status === 404);
   await p.screenshot({ path: SHOT("r5_settings_web.png"), fullPage: true });
@@ -66,7 +66,7 @@ await ctx.addInitScript(() => { window.__radarDesktop = true; });
 const p = await ctx.newPage(); p.on("pageerror", (e) => errors.push(String(e)));
 await p.goto(B + "/settings"); await p.getByTestId("skill-card").waitFor({ timeout: 15000 }); await sleep(800);
 const titles = await p.locator("[data-slot=card-title]").allInnerTexts();
-rec("desktop settings: 常规 / 通知 / 翻译 / AI / 简报·推特·公众号·小红书 Skill / 多模态模型 / 抓取 API / 工作目录 / 数据 / 关于", titles.join(",") === "常规,通知,翻译 / AI,简报 Skill,推特 Skill,公众号 Skill,小红书 Skill,多模态模型,抓取 API,工作目录,数据,关于", titles.join(","));
+rec("desktop settings: 常规 / 通知 / 关键词提醒 / 翻译 / AI / 简报·推特·公众号·小红书 Skill / 写作风格 / 多模态模型 / 抓取 API / 工作目录 / 数据 / 关于", titles.join(",") === "常规,通知,关键词提醒,翻译 / AI,简报 Skill,推特 Skill,公众号 Skill,小红书 Skill,写作风格,多模态模型,抓取 API,工作目录,数据,关于", titles.join(","));
 rec("desktop: 更新 is a section of the 数据 card (version + menu hint)", await p.getByTestId("update-card").count() === 0 && /更新\s*v0\.5\.0 · 自动检查/.test(await p.getByTestId("data-card").getByTestId("update-section").innerText()), await p.getByTestId("data-card").innerText());
 { const sh = process.env.R11_SHOTS ?? "/tmp/shots-r11"; fs.mkdirSync(sh, { recursive: true }); await p.getByTestId("data-card").scrollIntoViewIfNeeded(); await p.getByTestId("data-card").screenshot({ path: path.join(sh, "settings-data-update.png") }); }
 rec("desktop: no 发送方式 / AppleScript option (native only)", await p.getByTestId("notify-method").count() === 0 && !/AppleScript/.test(await p.getByTestId("notify-card").innerText()));

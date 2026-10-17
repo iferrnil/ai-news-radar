@@ -38,6 +38,7 @@ export const ExportSchema = z.object({
   sources: z.array(z.unknown()).max(MAX_ENTRIES),
   sections: z.array(z.object({ key: z.string(), name: z.string(), icon: z.string().nullish(), inAll: z.boolean().optional(), translate: z.boolean().optional() })).max(200).optional().catch(undefined),
   translateAll: z.boolean().optional().catch(undefined),
+  favorites: z.array(z.unknown()).max(MAX_ENTRIES).optional().catch(undefined),
 });
 
 export interface ParsedRow { raw: unknown; entry?: Entry; error?: string }
@@ -75,18 +76,18 @@ function opmlRows(xml: string, fallback: Entry["section"]): unknown[] {
 }
 
 /** Parse a user-chosen file (JSON from this app, or OPML from any reader) into validated rows. */
-export function parseImport(text: string, fileName: string, opmlSection: Entry["section"] = "media", known: KnownSection[] = []): { format: "json" | "opml"; rows: ParsedRow[]; translateAll?: boolean } {
+export function parseImport(text: string, fileName: string, opmlSection: Entry["section"] = "media", known: KnownSection[] = []): { format: "json" | "opml"; rows: ParsedRow[]; translateAll?: boolean; favorites?: unknown[] } {
   if (text.length > MAX_BYTES) throw new Error("文件超过 1 MB");
   KNOWN = known;
   const t = text.replace(/^\uFEFF/, "").trim();
   const isJson = /\.json$/i.test(fileName) || t.startsWith("{");
-  let raws: unknown[]; let translateAll: boolean | undefined;
+  let raws: unknown[]; let translateAll: boolean | undefined; let favorites: unknown[] | undefined;
   if (isJson) {
     let j: unknown; try { j = JSON.parse(t); } catch { throw new Error("JSON 解析失败"); }
     const e = ExportSchema.safeParse(j);
     if (!e.success) throw new Error(`不是本应用导出的 JSON（需要 app="${APP}" 且 version≤${SCHEMA_VERSION}）`);
     // v2: attach custom section metadata (by key) to each entry so the server can match/create sections by name
-    translateAll = e.data.translateAll;
+    translateAll = e.data.translateAll; favorites = e.data.favorites?.length ? e.data.favorites : undefined;
     const meta = new Map((e.data.sections ?? []).map((x) => [x.key, x]));
     raws = e.data.sources.map((r) => {
       const m = r && typeof r === "object" ? meta.get(String((r as { section?: unknown }).section)) : undefined;
@@ -94,7 +95,7 @@ export function parseImport(text: string, fileName: string, opmlSection: Entry["
     });
   } else { raws = opmlRows(t, opmlSection); translateAll = /<head>[\s\S]*<radarTranslateAll>true<\/radarTranslateAll>[\s\S]*<\/head>/.test(t) || undefined; }
   if (raws.length > MAX_ENTRIES) throw new Error(`条目过多（>${MAX_ENTRIES}）`);
-  return { format: isJson ? "json" : "opml", ...(translateAll ? { translateAll } : {}), rows: raws.map((raw) => {
+  return { format: isJson ? "json" : "opml", ...(translateAll ? { translateAll } : {}), ...(favorites ? { favorites } : {}), rows: raws.map((raw) => {
     const r = EntrySchema.safeParse(raw);
     return r.success ? { raw, entry: r.data } : { raw, error: r.error.issues.map((i) => i.message).join("；") };
   }) };

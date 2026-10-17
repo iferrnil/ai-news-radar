@@ -40,7 +40,7 @@ func IntervalFor(typ, priority string) int {
 	return t.Feed
 }
 
-// Schema is identical to src/lib/db.ts (+ health.ts): the same news.db opens in both builds.
+// Schema kept identical to the one the former TypeScript build created, so older news.db files open unchanged.
 const schema = `
 CREATE TABLE IF NOT EXISTS sources(
   id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, region TEXT, category TEXT, type TEXT NOT NULL, url TEXT NOT NULL,
@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS deleted_seeds(name TEXT PRIMARY KEY, ts REAL NOT NULL
 CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS read_items(item_id INTEGER PRIMARY KEY, ts REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS sections(key TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, icon TEXT, in_all INTEGER NOT NULL DEFAULT 1, pos INTEGER NOT NULL DEFAULT 0, created REAL) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS favorites(item_id INTEGER PRIMARY KEY, ts REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS source_health(source_id INTEGER PRIMARY KEY, runs TEXT NOT NULL DEFAULT '', last_ok REAL, last_err TEXT,
   last_err_at REAL, last_kind TEXT, consec INTEGER NOT NULL DEFAULT 0, lat_ms INTEGER, last_ms INTEGER, open_until REAL);
 `
@@ -116,6 +117,7 @@ func Open(cfg Config) (*Store, error) {
 		log.Printf("[db] seed: %v", err)
 	}
 	s.repairEntities()
+	s.applyWatch(nil) // items not matched yet (new column, or stored while the list was being changed)
 	s.sched = newScheduler(s)
 	s.notif = newNotifier(s)
 	s.tr = newTranslator(s)
@@ -157,6 +159,7 @@ func (s *Store) migrate() error {
 	add(ic["hidden"], "ALTER TABLE items ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
 	add(ic["title_zh"], "ALTER TABLE items ADD COLUMN title_zh TEXT", "ALTER TABLE items ADD COLUMN summary_zh TEXT")
 	add(ic["content"], "ALTER TABLE items ADD COLUMN content TEXT") // full feed / post text when longer than summary (briefs)
+	add(ic["kw"], "ALTER TABLE items ADD COLUMN kw TEXT")           // matched watch keywords ("\n"-joined; '' = none; NULL = not checked), watch.go
 	// translation scope flags (see translate.go): sources.tr / sections.tr = 1 when the user switched translation on for that view,
 	// settings tr_all = 「全部」. Replaces the per-source inherit/on/off `translate` column (only explicit "on" carries over).
 	add(sc["tr"], "ALTER TABLE sources ADD COLUMN tr INTEGER NOT NULL DEFAULT 0")

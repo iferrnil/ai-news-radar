@@ -5,12 +5,15 @@ import type { ItemOut } from "@/lib/types";
 import { type SectionKey, inAll, isSectionKeyLike, sectionOf } from "./common";
 
 export type View = "" | SectionKey;
-export type Filters = { section: View; source: number | null; p0: boolean; unread?: boolean };
-export const EMPTY: Filters = { section: "", source: null, p0: false, unread: false };
+/** 选题 views: 热点 (hot topics) · 收藏 (favorites, any age) — they replace the section / source view */
+export type TopicView = "" | "hot" | "fav";
+export type Filters = { section: View; source: number | null; p0: boolean; unread?: boolean; view?: TopicView };
+export const EMPTY: Filters = { section: "", source: null, p0: false, unread: false, view: "" };
 
 /** `hide(id)` = treat as read for 只看未读 (the Feed passes a snapshot, so items read while looking stay visible). */
 export function passes(it: ItemOut, f: Filters, hide?: (id: number) => boolean) {
-  if (f.source != null) { if (it.source_id !== f.source) return false; }
+  if (f.view === "fav") { if (!it.fav) return false; }
+  else if (f.source != null) { if (it.source_id !== f.source) return false; }
   else if (f.section ? sectionOf(it) !== f.section : !inAll(sectionOf(it))) return false; // 全部 skips includeInAll:false sections
   if (f.p0 && it.priority !== "P0") return false;
   if (f.unread && hide?.(it.id)) return false;
@@ -25,11 +28,13 @@ export function parseFilters(sp: URLSearchParams): Filters {
     source: Number.isFinite(src) && src > 0 ? src : null,
     p0: sp.get("p0") === "1",
     unread: sp.get("unread") === "1",
+    view: sp.get("view") === "hot" ? "hot" : sp.get("view") === "fav" ? "fav" : "",
   };
 }
 export function toQuery(f: Filters) {
   const p = new URLSearchParams();
-  if (f.source != null) p.set("source", String(f.source)); else if (f.section) p.set("section", f.section);
+  if (f.view) p.set("view", f.view);
+  else if (f.source != null) p.set("source", String(f.source)); else if (f.section) p.set("section", f.section);
   if (f.p0) p.set("p0", "1");
   if (f.unread) p.set("unread", "1");
   const s = p.toString();
@@ -37,7 +42,7 @@ export function toQuery(f: Filters) {
 }
 
 // 仅 P0 is remembered PER VIEW (全部 / each section / each source) in localStorage; the URL carries the current view's value.
-export const viewKey = (f: Pick<Filters, "section" | "source">) => (f.source != null ? `src:${f.source}` : f.section || "all");
+export const viewKey = (f: Pick<Filters, "section" | "source" | "view">) => (f.view ? `view:${f.view}` : f.source != null ? `src:${f.source}` : f.section || "all");
 const P0_KEY = "p0ByView";
 const readP0 = (): Record<string, boolean> => { try { return JSON.parse(localStorage.getItem(P0_KEY) || "{}"); } catch { return {}; } };
 export const p0For = (key: string) => typeof window !== "undefined" && readP0()[key] === true;

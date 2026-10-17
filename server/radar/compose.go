@@ -42,6 +42,7 @@ type articleOut struct {
 	Covers      []coverReq  `json:"covers,omitempty"`
 	VisionNote  string      `json:"visionNote,omitempty"`
 	SelfCheck   []string    `json:"selfCheck,omitempty"` // what the self-check still flags after its revision pass
+	Style       bool        `json:"style,omitempty"`     // the user's 写作风格 was applied
 	GeneratedAt float64     `json:"generatedAt"`
 }
 
@@ -90,6 +91,8 @@ func (s *Store) composeArticle(section, platform string, ids []int64) (*articleO
 	}
 	sys, skill := s.skillSystemPrompt(platform)
 	sys += articleOutputRules
+	stylePrompt, style := s.stylePrompt(platform)
+	sys += stylePrompt
 	var ub strings.Builder
 	ub.WriteString("## 选中的新闻\n\n")
 	for i, it := range f.items {
@@ -135,7 +138,6 @@ func (s *Store) composeArticle(section, platform string, ids []int64) (*articleO
 		}
 	}
 	md, covers := extractCovers(md)
-	md, out.SelfCheck = s.selfCheck(md, platform)
 	if os.Getenv("BRIEF_VERIFY") != "0" {
 		var vb strings.Builder
 		fmt.Fprintf(&vb, "<brief>\n%s\n</brief>\n\n", md)
@@ -147,9 +149,28 @@ func (s *Store) composeArticle(section, platform string, ids []int64) (*articleO
 			md, _ = extractCovers(md) // a marker the checker copied back
 		}
 	}
+	var refs []string
+	for _, it := range f.items {
+		refs = append(refs, it.URL)
+	}
+	md, _ = s.selfCheck(md, platform, refs...) // after verify: the checker can bring back a limit the revision fixed
+	md, _ = s.fixTitle(md, platform)
 	out.Title = label
-	if m := regexp.MustCompile(`(?m)^#\s+(.+)$`).FindStringSubmatch(md); m != nil {
+	if m := regexp.MustCompile(`(?m)^#\s+(.+)$`).FindStringSubmatch(md); m != nil && platform != "xhs" {
 		out.Title = strings.TrimSpace(m[1])
+	} else if t, at := articleTitle(md, platform); at >= 0 && platform == "xhs" {
+		out.Title = t
+	}
+	out.SelfCheck = articleLint(md, platform, refs...) // what the final text (after verify / revision / title) still breaks
+	if stylePrompt != "" {
+		out.Style = true
+		srcs := append(append([]string{}, f.sums...), f.content...)
+		for _, it := range f.items {
+			srcs = append(srcs, it.Title)
+		}
+		for _, l := range styleLeaks(md, style.Samples, srcs) {
+			out.SelfCheck = append(out.SelfCheck, "与风格样本雷同："+jsSlice(l, 40))
+		}
 	}
 	out.Covers = s.makeCovers(covers, platform, mm)
 	out.Markdown = md

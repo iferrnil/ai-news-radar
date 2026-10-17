@@ -443,6 +443,7 @@ func (t *translator) runIDsCap(ids []int64, capN int) error {
 		t.mu.Unlock()
 	}
 	if len(doneIDs) > 0 {
+		t.s.applyWatch(doneIDs) // a Chinese keyword may match the translation
 		w, a := idsWhere(doneIDs)
 		for _, it := range t.s.QueryItems(w, a, len(doneIDs), false, true) {
 			t.s.Bus.Publish(Msg{Event: "update", Item: it})
