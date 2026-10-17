@@ -10,7 +10,7 @@ await page.goto(B + "/settings"); await page.waitForTimeout(1200);
 rec("settings page renders, unconfigured", (await page.getByTestId("key-status").textContent()) === "未配置");
 const inp = page.locator("#ds-key"); await inp.fill(KEY);
 rec("key input masked (type=password)", (await inp.getAttribute("type")) === "password");
-await page.getByRole("button", { name: "保存" }).click(); await page.waitForTimeout(1000);
+await page.getByTestId("ai-card").getByRole("button", { name: "保存" }).click(); await page.waitForTimeout(1000);
 rec("saved → 已配置, input cleared", (await page.getByTestId("key-status").textContent()) === "已配置" && (await inp.inputValue()) === "");
 const html = await page.content(); rec("key not in DOM after save", !leak(html));
 const s = JSON.parse(await get("/api/settings"));
@@ -41,7 +41,7 @@ const rt = await fetch(B + "/api/settings/test", { method: "POST", headers: { "c
 rec("locked: test with typed key refused", rt.status === 403, `${rt.status}`);
 ({ br, page, errors } = await launch(false));
 await page.goto(B + "/settings"); await page.waitForTimeout(1200);
-rec("locked: UI shows notice, inputs/save disabled", await page.getByText("密钥由部署方配置").count() === 1 && await page.locator("#ds-key").isDisabled() && await page.getByRole("button", { name: "保存" }).isDisabled());
+rec("locked: UI shows notice, inputs/save disabled", await page.getByText("密钥由部署方配置").count() === 1 && await page.locator("#ds-key").isDisabled() && await page.getByTestId("ai-card").getByRole("button", { name: "保存" }).isDisabled());
 await page.screenshot({ path: SHOT("settings_locked.png") });
 rec("no console errors (t12)", errors.filter((e) => !/status of (400|401|403)/.test(e)).length === 0, errors.join("|").slice(0, 200));
 await br.close(); execSync("bash " + RESTART + "");
