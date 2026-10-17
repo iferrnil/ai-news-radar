@@ -18,6 +18,7 @@ type scheduler struct {
 	lastPrune float64
 	cancel    context.CancelFunc
 	ctx       context.Context
+	wg        sync.WaitGroup // in-flight polls + ticks, so Close never races a write
 }
 
 func newScheduler(s *Store) *scheduler {
@@ -34,6 +35,12 @@ func (s *Store) PollOne(src *Row) PollResult {
 	sc := s.sched
 	id := int64(src.Num("id"))
 	sc.mu.Lock()
+	if sc.ctx.Err() != nil {
+		sc.mu.Unlock()
+		return obj("skipped", true)
+	}
+	sc.wg.Add(1)
+	defer sc.wg.Done()
 	if sc.running[id] {
 		sc.mu.Unlock()
 		return obj("skipped", true)
@@ -49,6 +56,9 @@ func (s *Store) PollOne(src *Row) PollResult {
 	defer func() { <-lim }()
 	t0 := time.Now()
 	items, err := FetchSource(sc.ctx, src)
+	if sc.ctx.Err() != nil { // shutting down: the abort is not a source failure, and the DB is about to close
+		return obj("skipped", true)
+	}
 	if err != nil {
 		msg := strings.TrimPrefix(errMsg(err), "FetchError: ")
 		s.recordRun(src, false, time.Since(t0), msg, kindOf(err))
@@ -73,6 +83,14 @@ func (s *Store) PollOne(src *Row) PollResult {
 }
 
 func (sc *scheduler) tick() {
+	sc.mu.Lock()
+	if sc.ctx.Err() != nil {
+		sc.mu.Unlock()
+		return
+	}
+	sc.wg.Add(1)
+	sc.mu.Unlock()
+	defer sc.wg.Done()
 	t := now()
 	due, err := all(sc.s.DB, `SELECT s.* FROM sources s LEFT JOIN source_health h ON h.source_id=s.id WHERE s.enabled=1 AND s.supported=1
 		AND (s.last_fetched IS NULL OR s.last_fetched + s.poll_interval <= ?) AND (h.open_until IS NULL OR h.open_until <= ?)`, t, t)
@@ -126,7 +144,20 @@ func (s *Store) StartScheduler() {
 }
 
 // StopScheduler cancels the poller and in-flight fetches.
-func (s *Store) StopScheduler() { s.sched.cancel() }
+// It waits (up to 3s) for in-flight polls so Store.Close can checkpoint the WAL cleanly.
+func (s *Store) StopScheduler() {
+	sc := s.sched
+	sc.mu.Lock()
+	sc.cancel()
+	sc.mu.Unlock()
+	done := make(chan struct{})
+	go func() { sc.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		log.Println("[poller] stop: polls still running after 3s")
+	}
+}
 
 func (s *Store) schedulerState() *Row {
 	sc := s.sched
