@@ -110,6 +110,11 @@ type staticZ struct {
 
 var staticZCache sync.Map // "file\x00size\x00mtime" -> *staticZ
 
+// staticZMu: one file is compressed at a time; a brotli encoder holds several MB, and a cold page load asks for
+// dozens of chunks at once (unbounded at quality 9 that peaked at ~650 MB RSS; serialized at quality 6 / 256 KB
+// window it stays ~35 MB for 0.5 % more bytes than quality 7).
+var staticZMu sync.Mutex
+
 func acceptEnc(r *http.Request) string {
 	ae := r.Header.Get("Accept-Encoding")
 	switch {
@@ -139,8 +144,10 @@ func serveCompressed(w http.ResponseWriter, r *http.Request, root fs.FS, file st
 		if err != nil {
 			return
 		}
+		staticZMu.Lock()
+		defer staticZMu.Unlock()
 		var b bytes.Buffer
-		bw := brotli.NewWriterLevel(&b, 9)
+		bw := brotli.NewWriterOptions(&b, brotli.WriterOptions{Quality: 6, LGWin: 18})
 		bw.Write(raw)
 		bw.Close()
 		z.br = bytes.Clone(b.Bytes())
