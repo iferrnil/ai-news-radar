@@ -88,6 +88,8 @@ type hotLex struct {
 	user    map[string]bool // ids from the user's lexicon (always distinctive when rare)
 	family  *regexp.Regexp
 	lexText string // the user lexicon this was built from
+	memoMu  sync.Mutex
+	memo    map[string]hotScan // scan() results
 }
 
 // parseUserLexicon: one name per line, aliases joined by "=" (also ，, / 、 / tab): 「元宝=Yuanbao=腾讯元宝」.

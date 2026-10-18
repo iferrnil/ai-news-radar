@@ -92,7 +92,7 @@ func CleanSectionName(s string) string {
 	return jsSlice(strings.TrimSpace(wsRe.ReplaceAllString(ctrlRe.ReplaceAllString(s, ""), " ")), 24)
 }
 
-var lucideRe = regexp.MustCompile(`^lucide:[a-z]+$`)
+var lucideRe = regexp.MustCompile(`^lucide:[a-z]{1,32}$`)
 
 func cleanIcon(s string) any {
 	t := strings.TrimSpace(s)

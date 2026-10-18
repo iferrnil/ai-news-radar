@@ -14,19 +14,19 @@
 
 </div>
 
-为 AI 内容创作者打造：只收最快的源（官方博客与发布说明、爆料 X 账号、国内 AI 媒体、Techmeme），外加少量娱乐源；只保留 48 小时，单个 Go 进程 + SQLite。
+为 AI 内容创作者打造：只收最快的源（官方博客与发布说明、爆料 X 账号、国内 AI 媒体、Techmeme、GitHub 热门仓库榜），外加少量娱乐源；只保留 48 小时，单个 Go 进程 + SQLite。
 
 ## 功能
 
 网页版与桌面版共有：
 
-- **信息流**：22 个内置源（RSS/Atom、JSON API、X 账号经 FxEmbed，无需 X API），P0 每 2–5 分钟轮询，条件请求；新内容经 SSE 实时出现
+- **信息流**：24 个内置源（RSS/Atom、JSON API、X 账号经 FxEmbed，无需 X API；含 Trendshift GitHub 日榜 / 周榜），P0 每 2–5 分钟轮询，条件请求；新内容经 SSE 实时出现
 - **热点**：多个来源报道的同一事件合并为一个热点，显示来源数、首发来源与时间、24 小时报道量走势，按热度排序；可展开查看每条报道。纯规则计算，不调用模型（规则见下文「热点规则」）
 - **关键词**：在设置里添加关注词（如 GPT-6、DeepSeek），可选只匹配标题、区分大小写；命中的条目带关键词标签，点标签或工具栏的「关键词」只看命中的内容
 - **收藏**：卡片或详情里加星，侧栏「收藏」集中查看；收藏的条目不受 48 小时清理，随订阅 JSON 一起导出 / 导入
 - **通知**：P0 新动态按批合并推送；桌面版为系统通知，网页版可选浏览器通知
 - **阅读**：已读 / 未读、只看未读、悬停预览、⌘K 命令面板、J/K 键盘导航、深浅色、移动端
-- **数据源管理**：添加（网站 URL 自动发现 RSS、@用户名、X 列表）、自定义分区、正则过滤规则、健康度与熔断；JSON / OPML 导入导出
+- **数据源管理**：添加（网站 URL 自动发现 RSS、@用户名、X 列表、trendshift.io）、自定义分区（300 多个图标，含 GitHub 等品牌标志）、正则过滤规则、健康度与熔断；JSON / OPML 导入导出
 - **翻译（可选）**：配置 DeepSeek key 后翻译外文标题与摘要
 
 仅桌面版（AI 功能）：
@@ -115,7 +115,7 @@ server/bin/radar-server -ui out                           # http://localhost:300
 - **热点词表**：补充热点用的产品 / 公司名，每行一个，别名用 `=` 连接（如 `元宝=Yuanbao=腾讯元宝`）；设置锁定时不显示。
 - **DeepSeek**：key、Base URL、模型，带测试连接；任何接口和日志都只显示“已配置”。
 - **抓取 API**（桌面版）：Jina Reader（Base URL 可改，国内可用 `https://r.jinaai.cn`）、Firecrawl、crawl4ai 三个 key，掩码保存；按 Jina → Firecrawl → crawl4ai 顺序补抓，额度用尽或限流时自动换下一个。
-- **图片模型**（桌面版，可选）：为公众号 / 小红书文章生成封面。
+- **多模态模型**（桌面版，可选）：OpenAI 兼容接口，图片模型为公众号 / 小红书文章生成封面，看图模型读取原文配图。0.14.0 起不再支持视频任务接口，旧设置里的视频字段会被忽略。
 
 ### 工作目录（桌面版）
 
@@ -173,10 +173,11 @@ flowchart LR
 
 ## 数据源
 
-默认 22 个源：实验室 4、国内媒体 2、国外媒体 1、X 快讯 11、娱乐 4。目录与核验见 [docs/sources.md](docs/sources.md)，各源限额与本项目请求量见 [docs/rate-limits.md](docs/rate-limits.md)。
+默认 24 个源：实验室 4、国内媒体 2、国外媒体 3（Techmeme、Trendshift 日榜 / 周榜）、X 快讯 11、娱乐 4。目录与核验见 [docs/sources.md](docs/sources.md)，各源限额与本项目请求量见 [docs/rate-limits.md](docs/rate-limits.md)。
 
 - 在「数据源」页添加、停用、删除、改分区和过滤规则；改动记为用户覆盖，更新代码不会还原。
-- 只接入有 RSS/Atom 或 JSON API 的源，不做 HTML 爬取；新增源类型见 [AGENTS.md](AGENTS.md)。
+- 只接入有 RSS/Atom 或 JSON API 的源，不做 HTML 爬取；新增源类型见 [AGENTS.md](AGENTS.md)。唯一例外是 Trendshift：它没有免费 API，数据优先取第三方项目 [quantavil/trendshift](https://github.com/quantavil/trendshift) 每天同步到 GitHub Pages 的静态 JSON，失败时才读 trendshift.io 页面里的排行榜结构化数据；两者都失败则保留已有条目。榜单不参与热点。
+- 来源图标由服务端代取并缓存（`/api/icon`，只代取已配置来源的站点），页面不直接访问外部图标服务。
 - X 内容经第三方 FxEmbed，X 列表用未公开的 syndication 接口，均非官方 API，可能变更或失效。请遵守各来源条款；本项目只聚合标题、摘要与链接，版权归原作者。
 
 ## 字体

@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 var tinyPNG, _ = base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
@@ -27,7 +26,6 @@ type mmMock struct {
 	sumIn     []string // user messages of the summarize stage
 	revised   int
 	images    []map[string]any
-	polls     int
 	vision    []any
 	titles    int
 	styleIn   string
@@ -51,18 +49,6 @@ func (m *mmMock) handler(w http.ResponseWriter, r *http.Request) {
 	case u.Host == "mm.test" && u.Path == "/v1/images/generations":
 		m.images = append(m.images, j)
 		reply(map[string]any{"data": []any{map[string]any{"b64_json": base64.StdEncoding.EncodeToString(tinyPNG)}}})
-	case u.Host == "mm.test" && u.Path == "/v1/videos/generations" && r.Method == "POST":
-		reply(map[string]any{"id": "task-9"})
-	case u.Host == "mm.test" && u.Path == "/v1/videos/generations/task-9":
-		m.polls++
-		if m.polls < 2 {
-			reply(map[string]any{"status": "running"})
-		} else {
-			reply(map[string]any{"status": "succeeded", "video_url": "https://cdn.mm.test/v.mp4"})
-		}
-	case u.Host == "cdn.mm.test":
-		w.Header().Set("Content-Type", "video/mp4")
-		w.Write([]byte("MP4DATA"))
 	case u.Host == "mm.test" && u.Path == "/v1/chat/completions":
 		msgs := j["messages"].([]any)
 		m.vision = msgs[1].(map[string]any)["content"].([]any)
@@ -212,7 +198,7 @@ func TestComposeCoverWithMultimodal(t *testing.T) {
 	st, srv, m, outDir := composeStore(t, true)
 	var pub map[string]any
 	key := "sk-" + "mm" + "unittestkey0000"
-	if c := postJSON(t, srv.URL+"/api/multimodal", "PATCH", map[string]any{"baseUrl": "https://mm.test/v1", "key": key, "imageModel": "img-1"}, &pub); c != 200 || pub["image"] != true || pub["video"] != false {
+	if c := postJSON(t, srv.URL+"/api/multimodal", "PATCH", map[string]any{"baseUrl": "https://mm.test/v1", "key": key, "imageModel": "img-1"}, &pub); c != 200 || pub["image"] != true || pub["video"] != nil {
 		t.Fatalf("mm patch %d %v", c, pub)
 	}
 	r, _ := http.Get(srv.URL + "/api/multimodal")
@@ -263,17 +249,9 @@ func TestComposeCoverWithMultimodal(t *testing.T) {
 	}
 }
 
-func TestMMVideoAndVision(t *testing.T) {
-	_, _, m, outDir := composeStore(t, true)
-	mmPollEvery = 10 * time.Millisecond
-	c := MMConfig{BaseURL: "https://mm.test/v1", Key: "sk-" + "x0000000000000000", VideoModel: "vid-1", VisionModel: "vl-1"}
-	p, err := c.mmVideo("waves", "", filepath.Join(outDir, "v"))
-	if err != nil || !strings.HasSuffix(p, ".mp4") || m.polls < 2 {
-		t.Fatalf("video: %v %q polls=%d", err, p, m.polls)
-	}
-	if b, _ := os.ReadFile(p); string(b) != "MP4DATA" {
-		t.Fatal("video not downloaded")
-	}
+func TestMMVision(t *testing.T) {
+	_, _, m, _ := composeStore(t, true)
+	c := MMConfig{BaseURL: "https://mm.test/v1", Key: "sk-" + "x0000000000000000", VisionModel: "vl-1"}
 	out, err := c.mmVisionChat("sys", "user", []string{"https://img.test/1.jpg"}, 0, 100)
 	if err != nil || !strings.Contains(out, "VISION") || len(m.vision) != 2 || m.vision[1].(map[string]any)["type"] != "image_url" {
 		t.Fatalf("vision: %v %v", err, m.vision)
@@ -282,7 +260,8 @@ func TestMMVideoAndVision(t *testing.T) {
 
 func TestExtractCovers(t *testing.T) {
 	md, cs := extractCovers("# T\n\nbody\n<!-- cover-image size=1792x1024: sunrise city -->\n`<!-- cover-video: waves -->`\n<!-- cover-image: second -->\n")
-	if strings.Contains(md, "cover") || len(cs) != 2 || cs[0].Size != "1792x1024" || cs[0].Prompt != "sunrise city" || cs[1].Kind != "video" {
+	// one image cover; the video marker (old Skills) is removed and ignored
+	if strings.Contains(md, "cover") || len(cs) != 1 || cs[0].Size != "1792x1024" || cs[0].Prompt != "sunrise city" || cs[0].Kind != "image" {
 		t.Fatalf("%q %+v", md, cs)
 	}
 }
@@ -311,5 +290,40 @@ func TestManualBriefAndWebGating(t *testing.T) {
 		if c := postJSON(t, srv.URL+p, meth, map[string]any{}, nil); c != 404 {
 			t.Fatalf("%s on web: %d", p, c)
 		}
+	}
+}
+
+// 0.14 removed the video-task settings: a secrets.json written by 0.9–0.13 (videoModel / videoSubmit / videoPoll)
+// still loads, keeps its image / vision config, and loses the video fields on the next save.
+func TestMMOldVideoSettingsMigrate(t *testing.T) {
+	d := t.TempDir()
+	sec := filepath.Join(d, "secrets.json")
+	key := "sk-" + "old0000000000000000"
+	os.WriteFile(sec, []byte(`{"multimodal":{"baseUrl":"https://mm.test/v1","key":"`+key+`","imageModel":"img-1","videoModel":"vid-1","visionModel":"vl-1","videoSubmit":"/v/submit","videoPoll":"/v/{id}"}}`), 0o600)
+	st, err := Open(Config{DBPath: filepath.Join(d, "news.db"), SeedPath: "../../sources/sources.json", SecretsPath: sec, Desktop: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	srv := httptest.NewServer(st.Server(nil))
+	defer srv.Close()
+	var pub map[string]any
+	r, _ := http.Get(srv.URL + "/api/multimodal")
+	json.NewDecoder(r.Body).Decode(&pub)
+	r.Body.Close()
+	if pub["image"] != true || pub["vision"] != true || pub["imageModel"] != "img-1" {
+		t.Fatalf("old settings lost: %v", pub)
+	}
+	for _, k := range []string{"video", "videoModel", "videoSubmit", "videoPoll"} {
+		if _, ok := pub[k]; ok {
+			t.Errorf("%s still exposed", k)
+		}
+	}
+	// an old client still sending the video fields: accepted, ignored
+	if c := postJSON(t, srv.URL+"/api/multimodal", "PATCH", map[string]any{"imageModel": "img-2", "videoModel": "v", "videoSubmit": "/x"}, &pub); c != 200 || pub["imageModel"] != "img-2" {
+		t.Fatalf("patch %d %v", c, pub)
+	}
+	if b, _ := os.ReadFile(sec); strings.Contains(string(b), "video") || !strings.Contains(string(b), "img-2") {
+		t.Errorf("saved secrets: %s", strings.ReplaceAll(string(b), key, "***"))
 	}
 }

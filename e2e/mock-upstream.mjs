@@ -42,6 +42,12 @@ function api(u) {
   if (s.includes("bilibili.com")) return { data: { list: Array.from({ length: 4 }, (_, i) => ({ bvid: `BVmock${i}`, title: `B站热门 模拟 ${i + 1}`, owner: { name: "UP" }, desc: "简介", pubdate: T0 - i * 3600, pic: "" })) } };
   if (s.includes("hotsearch/billboard")) return { word_list: Array.from({ length: 5 }, (_, i) => ({ word: `热搜词${i + 1}`, hot_value: 1000 - i })) };
   if (s.includes("jandan.net")) return { data: Array.from({ length: 4 }, (_, i) => ({ id: 900 + i, content: `煎蛋 模拟 ${i + 1}`, author: "蛋友", date: new Date((T0 - i * 3600) * 1000).toISOString(), vote_positive: 10, vote_negative: 1, images: [] })) };
+  if (s.includes("quantavil.github.io/trendshift")) { // Trendshift snapshots (latest period + an older one)
+    const weekly = s.includes("/weekly/"), day = new Date(T0 * 1000).toISOString().slice(0, 10);
+    const per = (o) => weekly ? `2026-W${String(40 + o).padStart(2, "0")}` : new Date((T0 - (1 - o) * 86400) * 1000).toISOString().slice(0, 10);
+    return [1, 0].flatMap((o) => Array.from({ length: 4 }, (_, i) => ({ period_key: o ? per(1) : per(0), rank: i + 1, full_name: `mock-${weekly ? "w" : "d"}${o}/repo-${i + 1}`,
+      github_url: `https://github.com/mock-${weekly ? "w" : "d"}${o}/repo-${i + 1}`, description: `模拟仓库 ${i + 1}（${day}）`, language: "Go", stars_total: 1000 * (i + 1), stars_gained: 100 - i, forks_total: 10, tags: [], social_mention_platforms: [] })));
+  }
   if (s.includes("hn.algolia.com")) return { hits: [] };
   if (s.includes("huggingface.co")) return [];
   if (s.includes("openrouter.ai")) return { data: [] };

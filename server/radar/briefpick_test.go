@@ -2,6 +2,7 @@ package radar
 
 import (
 	"fmt"
+	"math"
 	"testing"
 )
 
@@ -109,5 +110,18 @@ func TestBriefAutoPickHot(t *testing.T) {
 	// ≤10 items: all of them (one per story)
 	if g := autoPick(rs[:9], 10); len(g) != 9 {
 		t.Fatalf("≤10 keeps all: %d", len(g))
+	}
+}
+
+func TestDiceVecMatchesDice(t *testing.T) {
+	ts := []string{"OpenAI 发布 GPT-6 Astra", "openai 发布 gpt-6 astra 模型", "aaaa", "abab abab", "Meta open-sources Llama 5", "a", ""}
+	for _, a := range ts {
+		for _, b := range ts {
+			va, na := gramVec(normTitle(a))
+			vb, nb := gramVec(normTitle(b))
+			if d1, d2 := dice(bigrams(normTitle(a)), bigrams(normTitle(b))), diceVec(va, vb, na, nb); math.Abs(d1-d2) > 1e-12 {
+				t.Fatalf("%q %q: %v vs %v", a, b, d1, d2)
+			}
+		}
 	}
 }

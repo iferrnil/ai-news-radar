@@ -13,7 +13,7 @@ import (
 )
 
 // golden input: a 48 h window of the prod instance (testdata/hot_prod.json, summaries cut to 300 chars)
-func hotGolden(t *testing.T) ([]*Row, float64) {
+func hotGolden(t testing.TB) ([]*Row, float64) {
 	b, err := os.ReadFile("testdata/hot_prod.json")
 	if err != nil {
 		t.Fatal(err)
@@ -450,5 +450,24 @@ func TestHotTopicsClustering(t *testing.T) {
 	r.Body.Close()
 	if len(out.Topics) != 1 || len(out.Topics[0].Sources) != 3 {
 		t.Fatalf("api: %+v", out)
+	}
+}
+
+// BenchmarkHotCompute: the pure 热点 pass on the 48 h prod snapshot (go test ./radar -run x -bench HotCompute -benchmem);
+// warm = the scan memo filled by an earlier recompute (the usual case), cold = an empty memo.
+func BenchmarkHotCompute(b *testing.B) {
+	rs, at := hotGolden(b)
+	for _, warm := range []bool{true, false} {
+		b.Run(map[bool]string{true: "warm", false: "cold"}[warm], func(b *testing.B) {
+			x := newHotLex("")
+			hotCompute(x, rs, at, nil)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if !warm {
+					x.memo = nil
+				}
+				hotCompute(x, rs, at, nil)
+			}
+		})
 	}
 }

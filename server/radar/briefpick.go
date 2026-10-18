@@ -1,6 +1,7 @@
 package radar
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -61,7 +62,56 @@ func dice(a, b map[string]int) float64 {
 type briefKey struct {
 	url    string
 	titles []string
-	grams  []map[string]int
+	grams  [][]gramC // bigram multisets, sorted by gram
+	sums   []int     // bigram totals of grams
+}
+
+// gramC: one character bigram (two runes packed) and its count.
+type gramC struct {
+	g uint64
+	n int
+}
+
+func gramVec(s string) ([]gramC, int) {
+	r := []rune(s)
+	if len(r) < 2 {
+		return nil, 0
+	}
+	gs := make([]uint64, 0, len(r)-1)
+	for i := 0; i+1 < len(r); i++ {
+		gs = append(gs, uint64(uint32(r[i]))<<32|uint64(uint32(r[i+1])))
+	}
+	slices.Sort(gs)
+	var out []gramC
+	for _, g := range gs {
+		if n := len(out); n > 0 && out[n-1].g == g {
+			out[n-1].n++
+		} else {
+			out = append(out, gramC{g, 1})
+		}
+	}
+	return out, len(gs)
+}
+
+// diceVec: dice of two sorted bigram vectors with their totals (same result as dice on the maps).
+func diceVec(a, b []gramC, na, nb int) float64 {
+	if na+nb == 0 {
+		return 0
+	}
+	inter := 0
+	for i, j := 0, 0; i < len(a) && j < len(b); {
+		switch {
+		case a[i].g == b[j].g:
+			inter += min(a[i].n, b[j].n)
+			i++
+			j++
+		case a[i].g < b[j].g:
+			i++
+		default:
+			j++
+		}
+	}
+	return 2 * float64(inter) / float64(na+nb)
 }
 
 func keyOf(r *Row) briefKey {
@@ -69,7 +119,9 @@ func keyOf(r *Row) briefKey {
 	for _, t := range []string{r.Str("title"), r.Str("title_zh")} {
 		if n := normTitle(t); len([]rune(n)) >= 6 {
 			k.titles = append(k.titles, n)
-			k.grams = append(k.grams, bigrams(n))
+			g, sum := gramVec(n)
+			k.grams = append(k.grams, g)
+			k.sums = append(k.sums, sum)
 		}
 	}
 	return k
@@ -81,7 +133,8 @@ func sameStory(a, b briefKey) bool {
 	}
 	for i, ta := range a.titles {
 		for j, tb := range b.titles {
-			if ta == tb || dice(a.grams[i], b.grams[j]) >= briefSimilar {
+			na, nb := a.sums[i], b.sums[j]
+			if ta == tb || (2*float64(min(na, nb)) >= briefSimilar*float64(na+nb) && diceVec(a.grams[i], b.grams[j], na, nb) >= briefSimilar) {
 				return true
 			}
 		}

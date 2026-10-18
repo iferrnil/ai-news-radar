@@ -18,11 +18,12 @@ const composeMax = 2
 
 var platformSkill = map[string]string{"twitter": "推特文章", "wechat": "公众号文章", "xhs": "小红书文章"}
 
-// <!-- cover-image: prompt -->, <!-- cover-video size=1280x720: prompt -->
+// <!-- cover-image: prompt --> / <!-- cover-image size=1792x1024: prompt -->. A cover-video line (Skills written for
+// 0.9–0.13) is removed from the article and ignored.
 var coverRe = regexp.MustCompile(`(?m)^[ \t>]*` + "`?" + `<!--\s*cover-(image|video)(?:\s+size=(\d{2,5}x\d{2,5}))?\s*[:：]\s*([\s\S]+?)\s*-->` + "`?" + `[ \t]*$\n?`)
 
 type coverReq struct {
-	Kind   string `json:"kind"` // image | video
+	Kind   string `json:"kind"` // image
 	Size   string `json:"size,omitempty"`
 	Prompt string `json:"prompt"`
 	Status string `json:"status"` // ok | skipped | error
@@ -46,13 +47,13 @@ type articleOut struct {
 	GeneratedAt float64     `json:"generatedAt"`
 }
 
-// extractCovers removes the cover markers from md and returns them (at most one image and one video).
+// extractCovers removes the cover markers from md and returns the image one (at most one).
 func extractCovers(md string) (string, []coverReq) {
 	var out []coverReq
 	seen := map[string]bool{}
 	md = coverRe.ReplaceAllStringFunc(md, func(m string) string {
 		g := coverRe.FindStringSubmatch(m)
-		if !seen[g[1]] && strings.TrimSpace(g[3]) != "" {
+		if g[1] == "image" && !seen[g[1]] && strings.TrimSpace(g[3]) != "" {
 			seen[g[1]] = true
 			out = append(out, coverReq{Kind: g[1], Size: g[2], Prompt: strings.Join(strings.Fields(g[3]), " ")})
 		}
@@ -62,7 +63,7 @@ func extractCovers(md string) (string, []coverReq) {
 }
 
 const articleOutputRules = "\n输出要求：用简体中文写（英文资料译成中文，专有名词保留原文）；只输出文章本身（Markdown），不要解释，不要输出自检过程；按 Skill 的规定放置 [[n]](url) 链接（Skill 没有规定时放在每条新闻引用处），编号与输入一致，不要改动 url。" +
-	"若 Skill 要求封面，按 Skill 写明的格式单独一行输出 <!-- cover-image: 画面描述 --> 或 <!-- cover-video: 画面描述 -->；Skill 没有要求就不要输出。" + factRules
+	"若 Skill 要求封面，按 Skill 写明的格式单独一行输出 <!-- cover-image: 画面描述 -->；Skill 没有要求就不要输出。" + factRules
 
 const articleVerify = `<stage>verify</stage>
 你是事实核查编辑。用户消息给出一篇文章草稿 <brief> 和每条新闻的资料 <source n>。
@@ -182,7 +183,7 @@ func (s *Store) makeCovers(reqs []coverReq, platform string, mm MMConfig) []cove
 		c := &reqs[i]
 		if !mm.can(c.Kind) {
 			c.Status = "skipped"
-			c.Note = map[string]string{"image": "未配置图片模型，已跳过封面", "video": "未配置视频模型，已跳过封面视频"}[c.Kind]
+			c.Note = "未配置图片模型，已跳过封面"
 			continue
 		}
 		if !s.Cfg.Desktop {
@@ -190,14 +191,8 @@ func (s *Store) makeCovers(reqs []coverReq, platform string, mm MMConfig) []cove
 			continue
 		}
 		// generated into 缓存/ (cleaned after a day); 导出 copies it next to the article
-		dst := s.cachePath(map[string]string{"image": "封面", "video": "视频"}[c.Kind], platformSkill[platform])
-		var p string
-		var err error
-		if c.Kind == "image" {
-			p, err = mm.mmImage(c.Prompt, c.Size, dst)
-		} else {
-			p, err = mm.mmVideo(c.Prompt, c.Size, dst)
-		}
+		dst := s.cachePath("封面", platformSkill[platform])
+		p, err := mm.mmImage(c.Prompt, c.Size, dst)
 		if err != nil {
 			c.Status, c.Note = "error", err.Error()
 			continue

@@ -100,6 +100,9 @@ func fetchRSS(ctx context.Context, u string) ([]FetchedItem, error) {
 }
 
 func fetchAPI(ctx context.Context, u string) ([]FetchedItem, error) {
+	if kind, ok := trendshiftKind(u); ok {
+		return fetchTrendshift(ctx, kind, true)
+	}
 	r, err := condGet(ctx, u, map[string]string{"Accept": "application/json"})
 	if err != nil {
 		return nil, err
@@ -681,6 +684,14 @@ func Detect(ctx context.Context, input string) (*Detected, error) {
 		}
 		return &Detected{Type: "x", Name: fmt.Sprintf("X @%s (%s)", h, jsString(prof["name"])), URL: "https://api.fxtwitter.com/2/profile/" + h + "/statuses",
 			Homepage: "https://x.com/" + h, Username: &h, Sample: head5(items), Count: len(items)}, nil
+	}
+	if kind, ok := trendshiftKind(s); ok {
+		items, err := fetchTrendshift(ctx, kind, false)
+		if err != nil {
+			return nil, err
+		}
+		p := trendshiftPage(kind)
+		return &Detected{Type: "api", Name: trendshiftName[kind], URL: p, Homepage: p, Sample: head5(items), Count: len(items)}, nil
 	}
 	u := s
 	if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {

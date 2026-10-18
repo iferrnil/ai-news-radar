@@ -197,7 +197,7 @@ execSync(`bash ${RESTART} DISABLE_POLLER=1 AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_K
   const req = p.waitForRequest((r) => r.url().includes("/api/compose") || r.url().includes("/api/article"), { timeout: 5000 }).catch(() => null);
   await gen("wechat"); const rq = await req;
   const ids = rq ? JSON.parse(rq.postData() ?? "{}").ids ?? [] : [];
-  rec("hot → 生成文章 uses ≤2 of the topic's items", ids.length >= 1 && ids.length <= 2, JSON.stringify(ids));
+  rec("hot → 生成文章 auto-picks 2 of the topic's items", ids.length === 2, JSON.stringify(ids));
   rec("wechat article: the style profile reached the prompt", (await p.getByTestId("article-body").innerText()).includes("STYLE-IN"));
   // copy / export as in 0.11: one 复制 (the Markdown as plain text) and 导出; no platform-specific copy
   rec("article dialog: no platform copy buttons", await p.locator("[data-testid^=copy-], [data-testid=tweet-copy]").count() === 0);

@@ -3,7 +3,7 @@ import fs from "fs";
 const { br, page, errors } = await launch(true);
 const fits = async (loc) => { const b = await loc.boundingBox(); return b && b.x >= 0 && b.y >= 0 && b.x + b.width <= 390.5 && b.y + b.height <= 844.5 ? "ok" : JSON.stringify(b); };
 const f = await exportFile(page, "全部来源", "json");
-rec("mobile: export JSON works", JSON.parse(f.text).sources.length === 22, f.name);
+rec("mobile: export JSON works", JSON.parse(f.text).sources.length === 24, f.name);
 await page.getByRole("button", { name: "导出" }).click(); const m = page.getByRole("menu"); await m.waitFor();
 let r = await fits(m); rec("mobile: export menu fits", r === "ok", r); await page.keyboard.press("Escape");
 let dlg = await openImport(page, "/tmp/ext.opml"); await waitPlan(dlg);

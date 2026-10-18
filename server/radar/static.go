@@ -1,11 +1,17 @@
 package radar
 
 import (
+	"bytes"
+	"compress/gzip"
+	"fmt"
 	"io/fs"
 	"mime"
 	"net/http"
 	"path"
 	"strings"
+	"sync"
+
+	"github.com/andybalholm/brotli"
 )
 
 func init() {
@@ -51,6 +57,11 @@ func StaticHandler(root fs.FS) http.Handler {
 		}
 		if strings.HasSuffix(file, ".html") {
 			w.Header().Set("Cache-Control", "no-cache")
+		}
+		if serveCompressed(w, r, root, file) {
+			return
+		}
+		if strings.HasSuffix(file, ".html") {
 			b, err := fs.ReadFile(root, file)
 			if err != nil {
 				http.Error(w, "not found", 404)
@@ -81,4 +92,88 @@ func (s *Store) Server(ui fs.FS) http.Handler {
 		}
 		st.ServeHTTP(w, r)
 	})
+}
+
+// ---- compressed static files: JS / CSS / HTML / text of the export are sent brotli (or gzip) encoded. Each file
+// is compressed once on first request and kept in memory (keyed by name + size + mtime, so a rebuilt out/ is
+// picked up); the whole export is ~1 MB compressed.
+
+var staticTypes = map[string]string{".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+	".html": "text/html; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".json": "application/json",
+	".svg": "image/svg+xml", ".webmanifest": "application/manifest+json"}
+
+type staticZ struct {
+	once sync.Once
+	br   []byte
+	gz   []byte
+}
+
+var staticZCache sync.Map // "file\x00size\x00mtime" -> *staticZ
+
+func acceptEnc(r *http.Request) string {
+	ae := r.Header.Get("Accept-Encoding")
+	switch {
+	case strings.Contains(ae, "br"):
+		return "br"
+	case gzRe.MatchString(ae):
+		return "gzip"
+	}
+	return ""
+}
+
+func serveCompressed(w http.ResponseWriter, r *http.Request, root fs.FS, file string) bool {
+	ct, ok := staticTypes[path.Ext(file)]
+	enc := acceptEnc(r)
+	if !ok || enc == "" || r.Header.Get("Range") != "" {
+		return false
+	}
+	st, err := fs.Stat(root, file)
+	if err != nil || st.Size() < 1024 {
+		return false
+	}
+	key := fmt.Sprintf("%s\x00%d\x00%d", file, st.Size(), st.ModTime().UnixNano())
+	v, _ := staticZCache.LoadOrStore(key, &staticZ{})
+	z := v.(*staticZ)
+	z.once.Do(func() {
+		raw, err := fs.ReadFile(root, file)
+		if err != nil {
+			return
+		}
+		var b bytes.Buffer
+		bw := brotli.NewWriterLevel(&b, 9)
+		bw.Write(raw)
+		bw.Close()
+		z.br = bytes.Clone(b.Bytes())
+		b.Reset()
+		gw, _ := gzip.NewWriterLevel(&b, 9)
+		gw.Write(raw)
+		gw.Close()
+		z.gz = bytes.Clone(b.Bytes())
+	})
+	body := z.br
+	if enc == "gzip" {
+		body = z.gz
+	}
+	if body == nil {
+		return false
+	}
+	h := w.Header()
+	etag := fmt.Sprintf(`"%x-%x-%s"`, st.ModTime().UnixNano(), st.Size(), enc)
+	h.Set("Content-Type", ct)
+	h.Set("Vary", "Accept-Encoding")
+	h.Set("ETag", etag)
+	if !st.ModTime().IsZero() {
+		h.Set("Last-Modified", st.ModTime().UTC().Format(http.TimeFormat))
+	}
+	if inm := r.Header.Get("If-None-Match"); inm != "" && strings.Contains(inm, etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return true
+	}
+	h.Set("Content-Encoding", enc)
+	h.Set("Content-Length", fmt.Sprint(len(body)))
+	if r.Method == http.MethodHead {
+		return true
+	}
+	w.Write(body)
+	return true
 }

@@ -37,10 +37,15 @@ export const handleOf = (it: ItemOut) => it.author || it.username || "";
 export const srcName = (it: ItemOut) => it.source.replace(/^X @(\S+) \((.*)\)$/, "$2").replace(/^X @/, "@");
 export const xText = (it: ItemOut) => (it.summary || it.title).replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim() || it.title;
 export const dekText = (s: string) => (/^Article URL:/.test(s) ? "" : s.replace(/^\s*(编辑|作者|来源|文|撰文|编译)\s*[｜|丨:：]\s*(\S{1,12}\s+)?/, "").trim());
+/** Source avatar through our server (`/api/icon`, cached), so the page never loads a foreign icon service. */
 export function avatarUrl(o: { username?: string | null; homepage?: string | null; url?: string }) {
-  if (o.username) return `https://unavatar.io/x/${o.username}?fallback=false`;
-  try { return `https://www.google.com/s2/favicons?domain=${new URL(o.homepage || o.url || "").hostname}&sz=64`; } catch { return undefined; }
+  if (o.username) return `/api/icon?x=${encodeURIComponent(o.username)}`;
+  try { return `/api/icon?host=${new URL(o.homepage || o.url || "").hostname}`; } catch { return undefined; }
 }
+/** Sources drawn with a built-in brand mark instead of a fetched icon (GitHub rankings). */
+export const brandOf = (o: { homepage?: string | null; url?: string }) => {
+  try { return /(^|\.)(github\.com|trendshift\.io)$/.test(new URL(o.homepage || o.url || "").hostname) ? "github" : null; } catch { return null; }
+};
 export const initial = (name: string) => name.replace(/^X @/, "").replace(/[^\p{L}\p{N}]/gu, "").slice(0, 1).toUpperCase() || "?";
 export async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });

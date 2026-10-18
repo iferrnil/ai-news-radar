@@ -17,6 +17,7 @@
 | 机器之心 文章 JSON | 未找到官方文档（站点前端使用的内部 JSON 接口，非公开 API）。 | 未找到官方文档 | 1 个源 · 0.2 次/分钟（12 次/小时） | 中 |
 | Substack 通讯 feed（Latent Space 等） | 未找到官方限额文档。 | 未找到官方文档 | 0 个源 · 0 次/分钟（0 次/小时） | 低 |
 | Techmeme RSS | 未找到官方限额文档。 | 未找到官方文档 | 1 个源 · 0.2 次/分钟（12 次/小时） | 低 |
+| Trendshift 日榜 / 周榜（quantavil/trendshift 静态 JSON，trendshift.io 页面兜底） | Trendshift 没有公开的免费 API（官方 Signal API 收费）；GitHub Pages 静态文件没有单独的限额，响应 cache-control: max-age=600。trendshift.io 的 robots.txt 允许抓取 /（禁止 /api/ 等）。 | [quantavil/trendshift（每日同步的数据仓库）](https://github.com/quantavil/trendshift)<br>[GitHub Pages 使用限制](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)<br>[trendshift.io robots.txt](https://trendshift.io/robots.txt) | 2 个源 · 0.01 次/分钟（0.5 次/小时） | 低 |
 | 网易娱乐 newsdata（JSONP） | 未找到官方文档：这是网易娱乐首页前端使用的 JSONP 数据文件，并非公开 API。 | 未找到官方文档 | 1 个源 · 0.1 次/分钟（6 次/小时） | 中 |
 | B 站热门 popular（web 接口） | 未找到官方文档：bilibili 未公开 web-interface 接口文档及限额（社区记录过高频请求会返回 -412 风控）。 | 未找到官方文档 | 1 个源 · 0.1 次/分钟（6 次/小时） | 中 |
 | 抖音热搜 billboard（web 接口） | 未找到官方文档：抖音分享页使用的非公开接口。 | 未找到官方文档 | 1 个源 · 0.1 次/分钟（6 次/小时） | 高 |
@@ -24,7 +25,7 @@
 | 煎蛋 comment API（无聊图） | 未找到官方文档：煎蛋 app 使用的非公开接口（jandan.net 网页与 RSS 对机房 IP 返回 403）。 | 未找到官方文档 | 1 个源 · 0.1 次/分钟（6 次/小时） | 中 |
 | 其他通用 RSS / Atom（官方博客与媒体） | 各站点均未公布 feed 限额。RSS 2.0 规范仅提供可选的 &lt;ttl>（建议缓存分钟数）作为礼仪约定。 | [RSS 2.0 Specification · <ttl>](https://www.rssboard.org/rss-specification#ltttlgtSubelementOfLtchannelgt) | 5 个源 · 1 次/分钟（60 次/小时） | 低 |
 
-合计约 **7.3 次/分钟**（22 个启用来源）。
+合计约 **7.3 次/分钟**（24 个启用来源）。
 
 ## 分类型详情
 
@@ -108,6 +109,15 @@
 - 实测（2026-10-10）：Cloudflare（cf-cache-status: DYNAMIC），有 Last-Modified 与 ETag，可做条件请求。
 - 我们的用量：1 个源，约 0.2 次/分钟（12 次/小时）：Techmeme
 - 风险：**低** — 每 5 分钟 1 次。
+
+### Trendshift 日榜 / 周榜（quantavil/trendshift 静态 JSON，trendshift.io 页面兜底）
+
+- 端点：`https://quantavil.github.io/trendshift/data/{daily|weekly}/{daily|weekly}-all.json（兜底：https://trendshift.io/ 、https://trendshift.io/weekly）`
+- 文档限额：Trendshift 没有公开的免费 API（官方 Signal API 收费）；GitHub Pages 静态文件没有单独的限额，响应 cache-control: max-age=600。trendshift.io 的 robots.txt 允许抓取 /（禁止 /api/ 等）。（**未找到官方限额文档**）
+- 来源：[quantavil/trendshift（每日同步的数据仓库）](https://github.com/quantavil/trendshift)；[GitHub Pages 使用限制](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)；[trendshift.io robots.txt](https://trendshift.io/robots.txt)
+- 实测（2026-10-10）：2026-10-18 实测：daily-all.json 约 0.9 MB、weekly-all.json 约 1.8 MB（gzip 传输），带 ETag / Last-Modified，未变时 304；每天约 09:30（北京时间）同步一次。页面为服务端渲染，JSON-LD ItemList 即排行榜（25 个仓库）。
+- 我们的用量：2 个源，约 0.01 次/分钟（0.5 次/小时）：Trendshift 日榜、Trendshift 周榜
+- 风险：**低** — 日榜每 3 小时、周榜每 6 小时一次条件请求（多数为 304）；第三方数据仓库停更时改读页面，两者都失败时保留已有条目。
 
 ### 网易娱乐 newsdata（JSONP）
 

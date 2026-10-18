@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { api, exportMarkdown, revealExported } from "./common";
 import { Markdown } from "./md-view";
 
-type Cover = { kind: "image" | "video"; prompt: string; status: "ok" | "skipped" | "error"; note?: string; path?: string; size?: string };
+type Cover = { kind: "image"; prompt: string; status: "ok" | "skipped" | "error"; note?: string; path?: string; size?: string };
 type Article = {
   markdown: string; title: string; platform: string; label: string; skill: string; count: number; verified?: boolean;
   noFullText?: { n: number; title: string; source: string; url: string; reason: string }[]; covers?: Cover[]; visionNote?: string; selfCheck?: string[];
@@ -92,9 +92,7 @@ export default function ArticleDialog({ open, onOpenChange, section, ids }: { op
               {(a.selfCheck?.length ?? 0) > 0 && <p className="mb-3 type-caption text-faint" data-testid="article-selfcheck">自检待改：{a.selfCheck!.join("；")}</p>}
               {a.visionNote && <p className="mb-3 type-caption text-faint">{a.visionNote}</p>}
               {a.covers?.map((c, i) => c.status === "ok" && c.path ? (
-                c.kind === "image"
-                  ? <img key={i} src={fileUrl(c.path)} alt="封面" className="mb-4 max-h-64 rounded-lg ring-1 ring-border" data-testid="article-cover" />
-                  : <video key={i} src={fileUrl(c.path)} controls className="mb-4 max-h-64 rounded-lg ring-1 ring-border" data-testid="article-cover" />
+                <img key={i} src={fileUrl(c.path)} alt="封面" className="mb-4 max-h-64 rounded-lg ring-1 ring-border" data-testid="article-cover" />
               ) : (
                 <p key={i} className="mb-3 flex items-center gap-1.5 type-caption text-faint" data-testid="article-cover-note" title={c.prompt}><ImageOff className="size-3.5" />{c.note}</p>
               ))}

@@ -23,7 +23,7 @@ type Stored struct {
 	DeepseekKey     string `json:"deepseekKey,omitempty"`
 	DeepseekBaseURL string `json:"deepseekBaseUrl,omitempty"`
 	DeepseekModel   string `json:"deepseekModel,omitempty"`
-	// 多模态模型 (desktop: covers / videos / vision); see multimodal.go
+	// 多模态模型 (desktop: cover images / vision); see multimodal.go
 	MM MMConfig `json:"multimodal,omitempty"`
 	// 抓取 API (desktop: 生成文章); see fetchapi.go
 	Fetch FetchKeys `json:"fetchApis,omitempty"`

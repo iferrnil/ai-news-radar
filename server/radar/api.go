@@ -24,6 +24,7 @@ import (
 func (s *Store) Handler() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("GET /api/health", s.hHealth)
+	m.HandleFunc("GET /api/icon", s.hIcon)
 	m.HandleFunc("GET /api/items", s.hItems)
 	m.HandleFunc("GET /api/read", s.hReadGet)
 	m.HandleFunc("POST /api/read", s.hReadPost)
@@ -722,7 +723,7 @@ func (s *Store) hSourcesPost(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.DB.Exec(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,section,f_include,f_exclude,f_scope,f_cs)
     VALUES(?,?,?,?,?,?,?,1,1,?,?,'user',?,?,?,?,?,?)`, name, region, category, d.Type, d.URL, d.Homepage, uname,
-		priority, IntervalFor(d.Type, priority), now(), sec, rule.Include, rule.Exclude, rule.Scope, b2i(rule.CS))
+		priority, sourceInterval(d, priority), now(), sec, rule.Include, rule.Exclude, rule.Scope, b2i(rule.CS))
 	if err != nil {
 		detail(w, 409, "已存在相同 URL 或名称的来源")
 		return

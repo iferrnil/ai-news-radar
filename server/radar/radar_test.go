@@ -1,6 +1,7 @@
 package radar
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/andybalholm/brotli"
 )
 
 func TestNormURL(t *testing.T) {
@@ -223,5 +226,48 @@ func TestSecretsFileMode(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0o600 {
 		t.Fatalf("secrets.json mode %o", fi.Mode().Perm())
+	}
+}
+
+func TestStaticCompressed(t *testing.T) {
+	big := strings.Repeat("console.log('radar');\n", 200)
+	ui := fstest.MapFS{"index.html": {Data: []byte("<html>" + big + "</html>")}, "404.html": {Data: []byte("nf")},
+		"_next/static/chunks/b.js": {Data: []byte(big)}, "_next/static/media/f.woff2": {Data: []byte(big)}}
+	h := StaticHandler(ui)
+	get := func(p, ae, inm string) *httptest.ResponseRecorder {
+		rq := httptest.NewRequest("GET", p, nil)
+		if ae != "" {
+			rq.Header.Set("Accept-Encoding", ae)
+		}
+		if inm != "" {
+			rq.Header.Set("If-None-Match", inm)
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, rq)
+		return rr
+	}
+	rr := get("/_next/static/chunks/b.js", "gzip, deflate, br", "")
+	if rr.Header().Get("Content-Encoding") != "br" || rr.Body.Len() >= len(big)/4 || rr.Header().Get("Vary") != "Accept-Encoding" {
+		t.Fatalf("br: %q %d", rr.Header().Get("Content-Encoding"), rr.Body.Len())
+	}
+	if out, err := io.ReadAll(brotli.NewReader(rr.Body)); err != nil || string(out) != big {
+		t.Fatal("br body does not round-trip")
+	}
+	if r2 := get("/_next/static/chunks/b.js", "br", rr.Header().Get("ETag")); r2.Code != 304 {
+		t.Fatalf("etag: %d", r2.Code)
+	}
+	rr = get("/", "gzip", "")
+	zr, err := gzip.NewReader(rr.Body)
+	if err != nil || rr.Header().Get("Content-Encoding") != "gzip" || rr.Header().Get("Cache-Control") != "no-cache" {
+		t.Fatalf("html gzip: %v %v", err, rr.Header())
+	}
+	if out, _ := io.ReadAll(zr); !strings.HasPrefix(string(out), "<html>") {
+		t.Fatal("gzip body")
+	}
+	if rr := get("/_next/static/chunks/b.js", "", ""); rr.Header().Get("Content-Encoding") != "" || rr.Body.String() != big {
+		t.Fatal("identity")
+	}
+	if rr := get("/_next/static/media/f.woff2", "br", ""); rr.Header().Get("Content-Encoding") != "" {
+		t.Fatal("fonts are already compressed")
 	}
 }

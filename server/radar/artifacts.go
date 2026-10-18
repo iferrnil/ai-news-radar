@@ -183,11 +183,7 @@ func (s *Store) hArtifactsExport(w http.ResponseWriter, r *http.Request) {
 			if os.WriteFile(filepath.Join(filepath.Dir(p), name), data, 0o644) != nil {
 				continue
 			}
-			if strings.EqualFold(filepath.Ext(src), ".mp4") {
-				tail += fmt.Sprintf("\n[封面视频](%s)\n", name)
-			} else {
-				head += fmt.Sprintf("![封面](%s)\n\n", name)
-			}
+			head += fmt.Sprintf("![封面](%s)\n\n", name)
 		}
 	}
 	if err := os.WriteFile(p, []byte(head+strings.TrimRight(md, "\n")+"\n"+tail), 0o644); err != nil {

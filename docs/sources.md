@@ -3,7 +3,7 @@
 > 生成时间：2026-10-10 18:26（北京时间）。数据：`sources.yaml`；表格版：`docs/sources.xlsx`。
 > 流程：`scripts/verify_sources.py`（实测）→ `scripts/verify_x_fxembed.py`（X 账号经 FxEmbed 实测）→ `scripts/dedupe_sources.py`（去重）→ `scripts/x_vs_blog.py` + `scripts/apply_x_vs_blog.py`（同一组织 X 与官网二选一，见 `docs/x_vs_blog.md`）→ `scripts/render_sources_md.py`（本文档与 xlsx）。均用 `uv run python` 运行。
 
-## 当前默认列表（22 个，2026-10-10 精简）
+## 当前默认列表（24 个；2026-10-10 精简，0.14.0 加入 Trendshift 两个榜单）
 
 只保留 AI 各分区的 **P0** 来源，加上少量国内娱乐/搞笑来源（「娱乐」不计入「全部」）。其余来源已从 `sources/sources.json` 删除；下方「历史」部分保留当时的完整核验记录，仅作参考。
 
@@ -16,6 +16,8 @@
 | 国内媒体 | P0 | 机器之心 | api | <https://www.jiqizhixin.com/api/article_library/articles.json?sort=time&page=1> | 官网前端使用的JSON接口（非公开文档API）；/rss 不是feed |
 | 国内媒体 | P0 | 量子位 | rss | <https://www.qbitai.com/feed> |  |
 | 国外媒体 | P0 | Techmeme | rss | <https://www.techmeme.com/feed.xml> |  |
+| 国外媒体 | P1 | Trendshift 日榜 | api | <https://trendshift.io/> | GitHub 热门仓库日榜；取第三方 quantavil/trendshift 的 GitHub Pages JSON，失败时解析页面；每 3 小时，不参与热点（0.14.0） |
+| 国外媒体 | P1 | Trendshift 周榜 | api | <https://trendshift.io/weekly> | 同上，周榜；每 6 小时（0.14.0） |
 | X 快讯 | P0 | X @AiBreakfast | x | <https://api.fxtwitter.com/2/profile/AiBreakfast/statuses> | ；经 FxEmbed 抓取（第三方） |
 | X 快讯 | P0 | X @Alibaba_Qwen (Qwen) | x | <https://api.fxtwitter.com/2/profile/Alibaba_Qwen/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |
 | X 快讯 | P0 | X @AnthropicAI (Anthropic) | x | <https://api.fxtwitter.com/2/profile/AnthropicAI/statuses> | 无需 token：经 FxEmbed 公共API api.fxtwitter.com/2/profile/{u}/statuses 抓取（第三方服务，404偶发需重试，限1000次/分/IP）；Nitter/RSS 桥接不可靠 |

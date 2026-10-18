@@ -1,0 +1,205 @@
+[
+ {
+  "period_key": "2026-W42",
+  "rank": 6,
+  "score": 82111,
+  "full_name": "storytold/artcraft",
+  "github_url": "https://github.com/storytold/artcraft",
+  "description": "ArtCraft is an intentional crafting engine for artists, designers, and filmmakers",
+  "language": "Rust",
+  "stars_total": 31785,
+  "stars_gained": 14025,
+  "forks_total": 4717,
+  "forks_gained": 1787,
+  "created_at": "2022-03-31T23:19:12Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "weekly",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-W42",
+  "rank": 5,
+  "score": 84736,
+  "full_name": "storytold/photocraft",
+  "github_url": "https://github.com/storytold/photocraft",
+  "description": "PhotoCraft: An open-source, photo editor written by scratch in pure Rust",
+  "language": "Rust",
+  "stars_total": 66380,
+  "stars_gained": 18938,
+  "forks_total": 11643,
+  "forks_gained": 4020,
+  "created_at": "2026-09-30T13:37:48Z",
+  "tags": [
+   "image-editing"
+  ],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "weekly",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-W42",
+  "rank": 4,
+  "score": 104880,
+  "full_name": "Ebony-Vinyl/dsh-our-free-model",
+  "github_url": "https://github.com/Ebony-Vinyl/dsh-our-free-model",
+  "description": "在 dsh 里装上这个插件即可，无需登录、注册或填 API Key，就能使用包括 DeepSeek V4.1 Flash、Kimi K3 在内的前沿模型——完全免费，不限量。 All you do is install this plugin in dsh: no login, no sign-up, no API key — the frontier models are just there, DeepSeek V4.1 Flash and Kimi K3 among them. Completely free, with no usage cap.",
+  "language": "JavaScript",
+  "stars_total": 21860,
+  "stars_gained": 12960,
+  "forks_total": 456,
+  "forks_gained": 274,
+  "created_at": "2026-09-24T16:17:19Z",
+  "tags": [
+   "llm-gateway"
+  ],
+  "social_mention_platforms": [
+   "x"
+  ],
+  "timeframe": "weekly",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-W42",
+  "rank": 3,
+  "score": 145465,
+  "full_name": "wheresryan22/anatomy",
+  "github_url": "https://github.com/wheresryan22/anatomy",
+  "description": "A Claude Code skill that turns a technical idea into a detailed, interactive isometric figure of a real machine. It makes SVG with optional WebGL shaders and 3D, for docs, articles and landing pages.",
+  "language": "JavaScript",
+  "stars_total": 15090,
+  "stars_gained": 11896,
+  "forks_total": 1139,
+  "forks_gained": 897,
+  "created_at": "2026-10-08T10:12:49Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "reddit",
+   "x"
+  ],
+  "timeframe": "weekly",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-W42",
+  "rank": 2,
+  "score": 164022,
+  "full_name": "debpalash/VoiceStudio",
+  "github_url": "https://github.com/debpalash/VoiceStudio",
+  "description": "VoiceStudio is the open-source, fully-local ElevenLabs alternative — voice cloning, voice design, video dubbing, dictation, transcription & audiobook creation in 646 languages.",
+  "language": "Python",
+  "stars_total": 73391,
+  "stars_gained": 14721,
+  "forks_total": 7989,
+  "forks_gained": 1254,
+  "created_at": "2026-04-09T21:40:26Z",
+  "tags": [
+   "text-to-speech"
+  ],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "weekly",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-W42",
+  "rank": 1,
+  "score": 1994452,
+  "full_name": "morluto/rea",
+  "github_url": "https://github.com/morluto/rea",
+  "description": "Reverse engineer anything with agents, from app behavior down to native binaries.",
+  "language": "TypeScript",
+  "stars_total": 307919,
+  "stars_gained": 205098,
+  "forks_total": 74681,
+  "forks_gained": 52118,
+  "created_at": "2026-04-14T00:51:32Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "weekly",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-W41",
+  "rank": 3,
+  "score": 321346,
+  "full_name": "boykopovar/AnyPS5",
+  "github_url": "https://github.com/boykopovar/AnyPS5",
+  "description": "Tool for automatic PS5 executables porting to Linux and Windows",
+  "language": "C++",
+  "stars_total": 29834,
+  "stars_gained": 26155,
+  "forks_total": 2455,
+  "forks_gained": 2139,
+  "created_at": "2026-08-03T21:30:25Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "weekly",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-W41",
+  "rank": 2,
+  "score": 582738,
+  "full_name": "storytold/photocraft",
+  "github_url": "https://github.com/storytold/photocraft",
+  "description": "PhotoCraft: An open-source, photo editor written by scratch in pure Rust",
+  "language": "Rust",
+  "stars_total": 47241,
+  "stars_gained": 46692,
+  "forks_total": 7138,
+  "forks_gained": 7054,
+  "created_at": "2026-09-30T13:37:48Z",
+  "tags": [
+   "image-editing"
+  ],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "weekly",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-W41",
+  "rank": 1,
+  "score": 1255350,
+  "full_name": "morluto/rea",
+  "github_url": "https://github.com/morluto/rea",
+  "description": "Reverse engineer anything with agents, from app behavior down to native binaries.",
+  "language": "TypeScript",
+  "stars_total": 102267,
+  "stars_gained": 100386,
+  "forks_total": 16908,
+  "forks_gained": 16706,
+  "created_at": "2026-04-14T00:51:32Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "weekly",
+  "language_filter": "all"
+ }
+]

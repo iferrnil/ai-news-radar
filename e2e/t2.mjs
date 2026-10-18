@@ -11,19 +11,19 @@ await page.getByRole("checkbox", { name: "全选当前列表" }).click();
 await page.getByRole("button", { name: /删除所选/ }).click();
 await page.getByRole("alertdialog").getByRole("button", { name: "删除" }).click(); await sleep(1500);
 const afterDel = await srcs(); const tomb = await deleted();
-rec("delete all via UI", afterDel.length === 0 && tomb.length === 22, `left=${afterDel.length} tomb=${tomb.length}`);
+rec("delete all via UI", afterDel.length === 0 && tomb.length === 24, `left=${afterDel.length} tomb=${tomb.length}`);
 // --- JSON round trip
 let dlg = await openImport(page, "/tmp/export-all.json"); await waitPlan(dlg);
-let c = await counts(dlg); rec("round-trip plan: 22 恢复", c["恢复"] === 22, JSON.stringify(c));
+let c = await counts(dlg); rec("round-trip plan: 24 恢复", c["恢复"] === 24, JSON.stringify(c));
 await applyImport(dlg); await sleep(2500);
 const after = snap(await srcs());
 const diff = Object.keys({ ...before, ...after }).filter((k) => before[k] !== after[k]);
-rec("JSON round-trip identical settings", diff.length === 0 && Object.keys(after).length === 22, diff.map((k) => `${k}: ${before[k]} -> ${after[k]}`).join("; "));
+rec("JSON round-trip identical settings", diff.length === 0 && Object.keys(after).length === 24, diff.map((k) => `${k}: ${before[k]} -> ${after[k]}`).join("; "));
 rec("deleted built-in list empty after round-trip", (await deleted()).length === 0);
 // --- re-import same file
 dlg = await openImport(page, "/tmp/export-all.json"); await waitPlan(dlg); c = await counts(dlg);
 const btn = dlg.getByRole("button", { name: /没有需要导入的内容/ });
-rec("re-import: all existing, nothing to import", c["已存在"] === 22 && await btn.isDisabled(), JSON.stringify(c)); await closeDlg();
+rec("re-import: all existing, nothing to import", c["已存在"] === 24 && await btn.isDisabled(), JSON.stringify(c)); await closeDlg();
 // --- OPML external
 dlg = await openImport(page, "/tmp/ext.opml"); await waitPlan(dlg); c = await counts(dlg);
 const okC = c["新增"] === 4 && c["已存在"] === 1 && c["无效"] === 1;
@@ -52,9 +52,9 @@ const ls = await srcs();
 rec("overwrite: only file sources remain after confirm", ls.length === 3, `${n0} -> ${ls.length}`);
 // restore everything via import of export-all (built-ins restore)
 dlg = await openImport(page, "/tmp/export-all.json"); await waitPlan(dlg); c = await counts(dlg);
-rec("import of deleted built-ins shows 恢复", c["恢复"] === 19, JSON.stringify(c));
+rec("import of deleted built-ins shows 恢复", c["恢复"] === 21, JSON.stringify(c));
 await applyImport(dlg); await sleep(2500);
-rec("deleted built-ins restored", (await srcs()).length === 22 && (await deleted()).length === 0, `n=${(await srcs()).length}`);
+rec("deleted built-ins restored", (await srcs()).length === 24 && (await deleted()).length === 0, `n=${(await srcs()).length}`);
 // single delete + restore by import
 await page.reload(); await page.getByRole("heading", { name: "数据源" }).waitFor();
 await page.getByRole("group", { name: "按状态筛选" }).getByRole("button", { name: /^全部/ }).click();

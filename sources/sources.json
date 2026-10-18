@@ -298,6 +298,36 @@
    "note": ""
   },
   {
+   "name": "Trendshift 日榜",
+   "region": "global",
+   "category": "community",
+   "type": "api",
+   "url": "https://trendshift.io/",
+   "homepage": "https://trendshift.io/",
+   "enabled": true,
+   "priority": "P1",
+   "pollInterval": 10800,
+   "group": "媒体与聚合",
+   "status": "works",
+   "thirdParty": true,
+   "note": "GitHub 热门仓库排行（trendshift.io）。数据取自第三方项目 quantavil/trendshift 每日同步到 GitHub Pages 的静态 JSON，失败时解析 trendshift.io 页面；不参与热点"
+  },
+  {
+   "name": "Trendshift 周榜",
+   "region": "global",
+   "category": "community",
+   "type": "api",
+   "url": "https://trendshift.io/weekly",
+   "homepage": "https://trendshift.io/weekly",
+   "enabled": true,
+   "priority": "P1",
+   "pollInterval": 21600,
+   "group": "媒体与聚合",
+   "status": "works",
+   "thirdParty": true,
+   "note": "GitHub 热门仓库排行（trendshift.io）。数据取自第三方项目 quantavil/trendshift 每日同步到 GitHub Pages 的静态 JSON，失败时解析 trendshift.io 页面；不参与热点"
+  },
+  {
    "name": "网易娱乐",
    "region": "cn",
    "category": "media",

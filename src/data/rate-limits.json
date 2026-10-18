@@ -170,6 +170,33 @@
    "riskNote": "每 5 分钟 1 次。"
   },
   {
+   "id": "trendshift",
+   "name": "Trendshift 日榜 / 周榜（quantavil/trendshift 静态 JSON，trendshift.io 页面兜底）",
+   "match": {
+    "host": "trendshift.io"
+   },
+   "endpoint": "https://quantavil.github.io/trendshift/data/{daily|weekly}/{daily|weekly}-all.json（兜底：https://trendshift.io/ 、https://trendshift.io/weekly）",
+   "documented": "Trendshift 没有公开的免费 API（官方 Signal API 收费）；GitHub Pages 静态文件没有单独的限额，响应 cache-control: max-age=600。trendshift.io 的 robots.txt 允许抓取 /（禁止 /api/ 等）。",
+   "official": false,
+   "sources": [
+    {
+     "label": "quantavil/trendshift（每日同步的数据仓库）",
+     "url": "https://github.com/quantavil/trendshift"
+    },
+    {
+     "label": "GitHub Pages 使用限制",
+     "url": "https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits"
+    },
+    {
+     "label": "trendshift.io robots.txt",
+     "url": "https://trendshift.io/robots.txt"
+    }
+   ],
+   "observed": "2026-10-18 实测：daily-all.json 约 0.9 MB、weekly-all.json 约 1.8 MB（gzip 传输），带 ETag / Last-Modified，未变时 304；每天约 09:30（北京时间）同步一次。页面为服务端渲染，JSON-LD ItemList 即排行榜（25 个仓库）。",
+   "risk": "low",
+   "riskNote": "日榜每 3 小时、周榜每 6 小时一次条件请求（多数为 304）；第三方数据仓库停更时改读页面，两者都失败时保留已有条目。"
+  },
+  {
    "id": "netease",
    "name": "网易娱乐 newsdata（JSONP）",
    "match": {

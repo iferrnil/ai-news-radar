@@ -140,18 +140,47 @@ type hotScan struct {
 	phrase map[string]bool   // two adjacent names ("muse spark")
 }
 
+// prep: the regexps only run when the text can match them (a URL / handle needs '/' or '@', a family or dash
+// version needs a digit).
 func (x *hotLex) prep(text string) (string, []string) {
-	t := hotURL.ReplaceAllString(hotNorm(text), " ")
+	t := hotNorm(text)
+	if strings.ContainsAny(t, "/@") {
+		t = hotURL.ReplaceAllString(t, " ")
+	}
 	t, hits := x.hanReplace(t)
-	t = x.family.ReplaceAllString(t, "$1$2")
-	return hotDashNum.ReplaceAllString(t, "$1$2$3"), hits
+	if strings.ContainsAny(t, "0123456789") {
+		t = x.family.ReplaceAllString(t, "$1$2")
+		t = hotDashNum.ReplaceAllString(t, "$1$2$3")
+	}
+	return t, hits
+}
+
+const hotMemoMax = 8192
+
+// scan is memoized per lexicon: every recompute scans the same leads / headlines again. The result is shared, so
+// callers only read it.
+func (x *hotLex) scan(text string) hotScan {
+	x.memoMu.Lock()
+	sc, ok := x.memo[text]
+	x.memoMu.Unlock()
+	if ok {
+		return sc
+	}
+	sc = x.scanText(text)
+	x.memoMu.Lock()
+	if x.memo == nil || len(x.memo) >= hotMemoMax {
+		x.memo = map[string]hotScan{}
+	}
+	x.memo[text] = sc
+	x.memoMu.Unlock()
+	return sc
 }
 
 // scan: lowercase name-like tokens of a text ("DeepSeek-V4.1-Flash-1017" → deepseek, v4.1, flash, 1017 and the
 // phrases "deepseek v4.1", "v4.1 flash", …; 「字节跳动」/"ByteDance" → bytedance). Plain words of 1–2 letters,
 // stopwords and lone years are dropped. A token is name-like when written with a capital letter or a digit, or
 // next to Chinese text ("Meta杀回开源"), or found by the lexicon.
-func (x *hotLex) scan(text string) hotScan {
+func (x *hotLex) scanText(text string) hotScan {
 	sc := hotScan{toks: map[string]bool{}, count: map[string]int{}, base: map[string]string{}, phrase: map[string]bool{}}
 	t, hits := x.prep(text)
 	lexHit := map[string]bool{}
@@ -925,7 +954,7 @@ func hotCompute(x *hotLex, rs []*Row, t float64, hist map[string]hotHist) ([]Hot
 const hotRowsSQL = `SELECT i.id, i.title, i.title_zh, i.summary, i.url, i.published, i.is_x, i.merged_into, i.uid,
 	s.id AS source_id, s.name AS source, s.priority, s.section, s.username
 	FROM items i JOIN sources s ON s.id=i.source_id LEFT JOIN sections sc ON sc.key=s.section
-	WHERE i.hidden=0 AND s.enabled=1 AND i.published >= ? AND COALESCE(sc.in_all, 1)=1
+	WHERE i.hidden=0 AND s.enabled=1 AND i.published >= ? AND COALESCE(sc.in_all, 1)=1 AND i.uid NOT LIKE 'trendshift:%'
 	ORDER BY i.published ASC, i.id ASC`
 
 // hotTopics computes the topics (≥ 2 sources) sorted by heat, and keeps hot_history (first reports, 7 days).

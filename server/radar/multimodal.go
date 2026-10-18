@@ -10,34 +10,26 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 )
 
-// 多模态模型 (desktop only): one OpenAI-compatible provider for cover images, cover videos and vision input.
+// 多模态模型 (desktop only): one OpenAI-compatible provider for cover images and vision input.
 //   image:  POST {base}/images/generations {model, prompt, n, size} → data[0].b64_json | data[0].url
-//   video:  POST {base}{videoSubmit} {model, prompt[, size]} → a URL right away, or a task id that is polled with
-//           GET {base}{videoPoll with {id}} until a URL appears (or a failed status / the timeout)
 //   vision: chat/completions on the same provider with image_url content parts (VisionModel)
 // The key lives in secrets.json (0600) like the DeepSeek key and is never sent to the UI.
+// (0.9–0.13 also generated cover videos through an async video-task API; removed in 0.14. Old secrets.json files
+// with videoModel / videoSubmit / videoPoll still load — the fields are ignored and dropped on the next save.)
 
 type MMConfig struct {
 	Provider    string `json:"provider,omitempty"` // label only ("openai-compatible")
 	BaseURL     string `json:"baseUrl,omitempty"`
 	Key         string `json:"key,omitempty"`
 	ImageModel  string `json:"imageModel,omitempty"`
-	VideoModel  string `json:"videoModel,omitempty"`
 	VisionModel string `json:"visionModel,omitempty"`
-	VideoSubmit string `json:"videoSubmit,omitempty"` // path, default /videos/generations
-	VideoPoll   string `json:"videoPoll,omitempty"`   // path with {id}, default /videos/generations/{id}
 }
 
-const (
-	mmVideoSubmit = "/videos/generations"
-	mmVideoPoll   = "/videos/generations/{id}"
-	mmMediaMax    = 512 << 20
-)
+const mmMediaMax = 64 << 20
 
 func (c MMConfig) can(kind string) bool {
 	if c.BaseURL == "" || c.Key == "" {
@@ -46,8 +38,6 @@ func (c MMConfig) can(kind string) bool {
 	switch kind {
 	case "image":
 		return c.ImageModel != ""
-	case "video":
-		return c.VideoModel != ""
 	case "vision":
 		return c.VisionModel != ""
 	}
@@ -59,12 +49,9 @@ func (s *Store) mmConfig() MMConfig { return s.loadSecrets().MM }
 func (s *Store) mmPublic() *Row {
 	c := s.mmConfig()
 	return obj("provider", firstNonEmpty(c.Provider, "openai-compatible"), "baseUrl", c.BaseURL, "configured", c.Key != "",
-		"imageModel", c.ImageModel, "videoModel", c.VideoModel, "visionModel", c.VisionModel,
-		"videoSubmit", firstNonEmpty(c.VideoSubmit, mmVideoSubmit), "videoPoll", firstNonEmpty(c.VideoPoll, mmVideoPoll),
-		"image", c.can("image"), "video", c.can("video"), "vision", c.can("vision"), "locked", SettingsLocked())
+		"imageModel", c.ImageModel, "visionModel", c.VisionModel,
+		"image", c.can("image"), "vision", c.can("vision"), "locked", SettingsLocked())
 }
-
-var mmPathRe = regexp.MustCompile(`^/[\w./{}\-]{0,120}$`)
 
 // GET/PATCH /api/multimodal (desktop only)
 func (s *Store) hMMGet(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +84,7 @@ func (s *Store) hMMPatch(w http.ResponseWriter, r *http.Request) {
 	for _, f := range []struct {
 		k string
 		p *string
-	}{{"imageModel", &c.ImageModel}, {"videoModel", &c.VideoModel}, {"visionModel", &c.VisionModel}, {"provider", &c.Provider}} {
+	}{{"imageModel", &c.ImageModel}, {"visionModel", &c.VisionModel}, {"provider", &c.Provider}} {
 		if v, ok := b[f.k]; ok {
 			m, ok := cleanModel(v)
 			if !ok {
@@ -105,19 +92,6 @@ func (s *Store) hMMPatch(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			*f.p = m
-		}
-	}
-	for _, f := range []struct {
-		k string
-		p *string
-	}{{"videoSubmit", &c.VideoSubmit}, {"videoPoll", &c.VideoPoll}} {
-		if v, ok := b[f.k]; ok {
-			x := strings.TrimSpace(jsString(v))
-			if x != "" && !mmPathRe.MatchString(x) {
-				detail(w, 400, f.k+" 应是以 / 开头的路径")
-				return
-			}
-			*f.p = x
 		}
 	}
 	if b["clearKey"] == true {
@@ -151,11 +125,6 @@ func (c MMConfig) post(path string, body any, timeout time.Duration) (map[string
 	b, _ := json.Marshal(body)
 	r, err := netFetch(context.Background(), "POST", strings.TrimRight(c.BaseURL, "/")+path,
 		map[string]string{"Content-Type": "application/json", "Authorization": "Bearer " + c.Key}, strings.NewReader(string(b)), timeout)
-	return c.decode(r, err)
-}
-
-func (c MMConfig) get(path string) (map[string]any, error) {
-	r, err := netFetch(context.Background(), "GET", strings.TrimRight(c.BaseURL, "/")+path, map[string]string{"Authorization": "Bearer " + c.Key}, nil, 30*time.Second)
 	return c.decode(r, err)
 }
 
@@ -222,48 +191,6 @@ func (c MMConfig) mmImage(prompt, size, dst string) (string, error) {
 	return "", fmt.Errorf("返回里没有图片")
 }
 
-var (
-	mmPollEvery   = 5 * time.Second
-	mmPollTimeout = 10 * time.Minute
-)
-
-// mmVideo: submit a job, poll its task id until a video URL appears, download it to dst.
-func (c MMConfig) mmVideo(prompt, size, dst string) (string, error) {
-	body := map[string]any{"model": c.VideoModel, "prompt": prompt}
-	if size != "" {
-		body["size"] = size
-	}
-	j, err := c.post(firstNonEmpty(c.VideoSubmit, mmVideoSubmit), body, 120*time.Second)
-	if err != nil {
-		return "", err
-	}
-	urlKeys := []string{"video_url", "url", "data.0.url", "output.video_url", "output.url", "result.video_url", "result.url", "content.video_url"}
-	if u := dig(j, urlKeys...); u != "" {
-		return mediaDownload(u, dst, ".mp4")
-	}
-	id := dig(j, "id", "task_id", "data.task_id", "output.task_id", "data.0.id")
-	if id == "" {
-		return "", fmt.Errorf("返回里没有视频地址或任务 id")
-	}
-	poll := strings.ReplaceAll(firstNonEmpty(c.VideoPoll, mmVideoPoll), "{id}", url.PathEscape(id))
-	deadline := time.Now().Add(mmPollTimeout)
-	for time.Now().Before(deadline) {
-		time.Sleep(mmPollEvery)
-		j, err := c.get(poll)
-		if err != nil {
-			return "", err
-		}
-		st := strings.ToLower(dig(j, "status", "task_status", "data.status", "output.task_status", "state"))
-		if u := dig(j, urlKeys...); u != "" && (st == "" || strings.Contains("succeeded success completed done finished", st)) {
-			return mediaDownload(u, dst, ".mp4")
-		}
-		if strings.Contains("failed failure error cancelled canceled expired", st) && st != "" {
-			return "", fmt.Errorf("视频任务失败（%s）", st)
-		}
-	}
-	return "", fmt.Errorf("视频任务超时")
-}
-
 func mediaExt(ct, def string) string {
 	switch {
 	case strings.Contains(ct, "png"):
@@ -274,17 +201,11 @@ func mediaExt(ct, def string) string {
 		return ".webp"
 	case strings.Contains(ct, "gif"):
 		return ".gif"
-	case strings.Contains(ct, "mp4"):
-		return ".mp4"
-	case strings.Contains(ct, "webm"):
-		return ".webm"
-	case strings.Contains(ct, "quicktime"):
-		return ".mov"
 	}
 	return def
 }
 
-// mediaDownload streams a generated file to dst+ext (no 8 MB cap; UPSTREAM_MOCK is honoured like netFetch).
+// mediaDownload streams a generated image to dst+ext (up to 64 MB; UPSTREAM_MOCK is honoured like netFetch).
 func mediaDownload(u, dst, def string) (string, error) {
 	target := u
 	if mock := os.Getenv("UPSTREAM_MOCK"); mock != "" {

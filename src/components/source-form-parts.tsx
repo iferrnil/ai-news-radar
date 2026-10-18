@@ -19,7 +19,7 @@ export const NEW_SECTION = "__new";
 export type NewSection = { name: string; icon: string; inAll: boolean };
 export const EMPTY_NEW: NewSection = { name: "", icon: "", inAll: true };
 
-const IconPickerPanel = dynamic(() => import("./icon-picker"), { ssr: false, loading: () => <div className="grid h-[280px] w-[300px] place-items-center"><Loader2 className="size-4 animate-spin text-faint" /></div> });
+const IconPickerPanel = dynamic(() => import("./icon-picker"), { ssr: false, loading: () => <div className="grid h-[330px] w-[320px] place-items-center"><Loader2 className="size-4 animate-spin text-faint" /></div> });
 
 /** Section icon button: shows the current emoji (or a placeholder) and opens the lazy picker panel. */
 export function IconPicker({ value, onChange, label = "选择图标", className }: { value: string; onChange: (v: string) => void; label?: string; className?: string }) {

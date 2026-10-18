@@ -1,0 +1,207 @@
+[
+ {
+  "period_key": "2026-10-18",
+  "rank": 6,
+  "score": 131,
+  "full_name": "KnifeLemon/Filee",
+  "github_url": "https://github.com/KnifeLemon/Filee",
+  "description": "Free, open-source file converter. Convert 180+ formats offline by drag & drop — images, PDF, Word, Excel, PowerPoint, HWP/HWPX, video, audio, e-books and archives. No upload, no Office needed.",
+  "language": "C#",
+  "stars_total": 2217,
+  "stars_gained": 55,
+  "forks_total": 105,
+  "forks_gained": 0,
+  "created_at": "2026-09-29T20:05:15Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "reddit",
+   "x"
+  ],
+  "timeframe": "daily",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-10-18",
+  "rank": 5,
+  "score": 140,
+  "full_name": "soumatheusgomes/vibe-coding-toolkit",
+  "github_url": "https://github.com/soumatheusgomes/vibe-coding-toolkit",
+  "description": "A curated, battle-tested AI-coding toolkit: Claude Code plugins, subagent orchestration, quality gates, and ready-to-copy prompts, extracted from real production use.",
+  "language": "JavaScript",
+  "stars_total": 1445,
+  "stars_gained": 45,
+  "forks_total": 224,
+  "forks_gained": 0,
+  "created_at": "2026-08-14T23:41:31Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "x"
+  ],
+  "timeframe": "daily",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-10-18",
+  "rank": 4,
+  "score": 168,
+  "full_name": "MadsLorentzen/ai-job-search",
+  "github_url": "https://github.com/MadsLorentzen/ai-job-search",
+  "description": "The job search that runs on your machine. AI job application framework built on Claude Code: evaluate postings, tailor CVs, write cover letters, prep interviews. Fork it and own it.",
+  "language": "Python",
+  "stars_total": 50413,
+  "stars_gained": 86,
+  "forks_total": 18607,
+  "forks_gained": 0,
+  "created_at": "2026-03-18T14:33:04Z",
+  "tags": [
+   "ai-agent",
+   "job-search"
+  ],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "daily",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-10-18",
+  "rank": 3,
+  "score": 190,
+  "full_name": "anomalyco/opencode",
+  "github_url": "https://github.com/anomalyco/opencode",
+  "description": "The open source coding agent.",
+  "language": "TypeScript",
+  "stars_total": 215334,
+  "stars_gained": 79,
+  "forks_total": 31107,
+  "forks_gained": 0,
+  "created_at": "2025-04-30T20:08:00Z",
+  "tags": [
+   "ai-agent",
+   "ai-coding"
+  ],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "daily",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-10-18",
+  "rank": 2,
+  "score": 204,
+  "full_name": "google-research/harness2",
+  "github_url": "https://github.com/google-research/harness2",
+  "description": "",
+  "language": "Python",
+  "stars_total": 1445,
+  "stars_gained": 73,
+  "forks_total": 83,
+  "forks_gained": 0,
+  "created_at": "2026-10-06T21:48:11Z",
+  "tags": [
+   "ai-agent",
+   "llm-evaluation"
+  ],
+  "social_mention_platforms": [
+   "x"
+  ],
+  "timeframe": "daily",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-10-18",
+  "rank": 1,
+  "score": 559,
+  "full_name": "morluto/rea",
+  "github_url": "https://github.com/morluto/rea",
+  "description": "Reverse engineer anything with agents, from app behavior down to native binaries.",
+  "language": "TypeScript",
+  "stars_total": 307919,
+  "stars_gained": 634,
+  "forks_total": 74681,
+  "forks_gained": 0,
+  "created_at": "2026-04-14T00:51:32Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "daily",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-10-17",
+  "rank": 3,
+  "score": 7764,
+  "full_name": "tangency-labs/solidcraft",
+  "github_url": "https://github.com/tangency-labs/solidcraft",
+  "description": "An open-source, clean-room reimplementation of Autodesk Fusion 360 in pure Rust. Parametric 3D CAD for desktop, browser, and AI agents via MCP.",
+  "language": "Rust",
+  "stars_total": 4108,
+  "stars_gained": 1077,
+  "forks_total": 444,
+  "forks_gained": 97,
+  "created_at": "2026-10-07T18:57:48Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "daily",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-10-17",
+  "rank": 2,
+  "score": 13982,
+  "full_name": "MadsLorentzen/ai-job-search",
+  "github_url": "https://github.com/MadsLorentzen/ai-job-search",
+  "description": "The job search that runs on your machine. AI job application framework built on Claude Code: evaluate postings, tailor CVs, write cover letters, prep interviews. Fork it and own it.",
+  "language": "Python",
+  "stars_total": 50158,
+  "stars_gained": 1733,
+  "forks_total": 18607,
+  "forks_gained": 59,
+  "created_at": "2026-03-18T14:33:04Z",
+  "tags": [
+   "ai-agent",
+   "job-search"
+  ],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "daily",
+  "language_filter": "all"
+ },
+ {
+  "period_key": "2026-10-17",
+  "rank": 1,
+  "score": 20895,
+  "full_name": "morluto/rea",
+  "github_url": "https://github.com/morluto/rea",
+  "description": "Reverse engineer anything with agents, from app behavior down to native binaries.",
+  "language": "TypeScript",
+  "stars_total": 306135,
+  "stars_gained": 15780,
+  "forks_total": 74681,
+  "forks_gained": 1338,
+  "created_at": "2026-04-14T00:51:32Z",
+  "tags": [],
+  "social_mention_platforms": [
+   "hackernews",
+   "reddit",
+   "x"
+  ],
+  "timeframe": "daily",
+  "language_filter": "all"
+ }
+]

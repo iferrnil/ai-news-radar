@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the baseline DB for the suite from scratch: seed sources (sources/sources.json) + one poll of every
-# source against the mock upstream, then 3 sources switched off (22 sources / 19 active, like a lived-in install).
+# source against the mock upstream, then 3 sources switched off (24 sources / 21 active, like a lived-in install).
 #   bash e2e/make-fixture.sh out.db      (needs the Go server + static UI built and the mock running, see runall.sh)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"; OUT="$1"; PORT="${PORT:-3000}"; DATA="${E2E_DATA:-$ROOT/data}"

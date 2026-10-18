@@ -68,7 +68,7 @@ const STATUS: { v: StatusKey; label: string; badge: "success" | "destructive" | 
 ];
 const statusOk = (s: SourceRow, k: StatusKey) => k === "all" ? true : k === "active" ? !!(s.enabled && s.supported) : k === "err" ? !!(s.enabled && s.supported && s.last_error) : k === "off" ? !s.enabled : !!(s.enabled && !s.supported);
 
-const IV = [60, 120, 180, 300, 600, 1800, 3600];
+const IV = [60, 120, 180, 300, 600, 1800, 3600, 10800, 21600];
 const ivLabel = (v: number) => (v < 3600 ? `${v / 60} 分钟` : `${v / 3600} 小时`);
 
 function StatusBadge({ s }: { s: SourceRow }) {
