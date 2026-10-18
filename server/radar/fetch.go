@@ -68,7 +68,7 @@ type artFetcher struct {
 }
 
 func newArtFetcher(conc, perHost int) *artFetcher {
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr := guardedTransport()     // item links come from feeds: public addresses only (ssrf.go)
 	tr.DisableCompression = true // Accept-Encoding is ours (br too), so is decoding
 	tr.MaxIdleConnsPerHost = 4
 	tr.ResponseHeaderTimeout = 15 * time.Second
@@ -196,7 +196,7 @@ func (f *artFetcher) get(ctx context.Context, u string, timeout time.Duration) (
 }
 
 func transientErr(err error) bool {
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, errPrivateAddr) {
 		return false
 	}
 	var ne net.Error
@@ -215,6 +215,9 @@ func (f *artFetcher) once(ctx context.Context, u string, timeout time.Duration) 
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	if err := checkTarget(ctx, u); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", target, nil)
 	if err != nil {
 		return nil, err

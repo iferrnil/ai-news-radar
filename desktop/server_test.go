@@ -59,7 +59,7 @@ func TestServerLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	var srcs []map[string]any
-	r, err := http.Get(s.URL + "/api/sources")
+	r, err := localClient.Get(s.URL + "/api/sources")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestServerLifecycle(t *testing.T) {
 			Configured bool `json:"configured"`
 		} `json:"deepseek"`
 	}
-	r, _ = http.Get(s.URL + "/api/settings")
+	r, _ = localClient.Get(s.URL + "/api/settings")
 	json.NewDecoder(r.Body).Decode(&set)
 	r.Body.Close()
 	if set.Deepseek.Configured {

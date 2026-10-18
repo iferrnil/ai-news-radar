@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strconv"
+	"unicode/utf8"
 )
 
 // Row is one result row with column order preserved (JSON output matches better-sqlite3 `.all()` objects).
@@ -34,8 +35,12 @@ func (r *Row) Set(k string, v any) {
 func (r *Row) Del(k string) {
 	for i, x := range r.Keys {
 		if x == k {
-			r.Keys = append(r.Keys[:i:i], r.Keys[i+1:]...)
-			r.Vals = append(r.Vals[:i:i], r.Vals[i+1:]...)
+			// in place: every Row owns its slices (all() copies the column names per row)
+			n := len(r.Keys) - 1
+			copy(r.Keys[i:], r.Keys[i+1:])
+			copy(r.Vals[i:], r.Vals[i+1:])
+			r.Vals[n] = nil
+			r.Keys, r.Vals = r.Keys[:n], r.Vals[:n]
 			return
 		}
 	}
@@ -80,8 +85,7 @@ func (r *Row) encode(b *bytes.Buffer, dropNulls bool) {
 			b.WriteByte(',')
 		}
 		first = false
-		kb, _ := json.Marshal(k)
-		b.Write(kb)
+		writeStr(b, k)
 		b.WriteByte(':')
 		writeVal(b, v, dropNulls)
 	}
@@ -92,9 +96,14 @@ func writeVal(b *bytes.Buffer, v any, dropNulls bool) {
 	switch x := v.(type) {
 	case nil:
 		b.WriteString("null")
+	case string:
+		writeStr(b, x)
 	case []byte:
-		vb, _ := json.Marshal(string(x))
-		b.Write(vb)
+		writeStr(b, string(x))
+	case int64:
+		b.WriteString(strconv.FormatInt(x, 10))
+	case bool:
+		b.WriteString(strconv.FormatBool(x))
 	case float64:
 		b.WriteString(jsNum(x))
 	case *Row:
@@ -114,6 +123,53 @@ func writeVal(b *bytes.Buffer, v any, dropNulls bool) {
 		vb, _ := marshalNoEscape(x)
 		b.Write(vb)
 	}
+}
+
+// writeStr writes s as a JSON string exactly like marshalNoEscape, without its per-call encoder:
+// the common characters are escaped inline; anything rarer (other control characters,
+// invalid UTF-8, U+2028/U+2029) falls back to the encoder for the whole string.
+func writeStr(b *bytes.Buffer, s string) {
+	start := b.Len()
+	b.WriteByte('"')
+	last := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		var esc string
+		switch {
+		case c == '"':
+			esc = `\"`
+		case c == '\\':
+			esc = `\\`
+		case c == '\n':
+			esc = `\n`
+		case c == '\r':
+			esc = `\r`
+		case c == '\t':
+			esc = `\t`
+		case c >= 0x80:
+			r, n := utf8.DecodeRuneInString(s[i:])
+			if (r == utf8.RuneError && n == 1) || r == '\u2028' || r == '\u2029' {
+				b.Truncate(start)
+				vb, _ := marshalNoEscape(s)
+				b.Write(vb)
+				return
+			}
+			i += n - 1
+			continue
+		case c < 0x20:
+			b.Truncate(start)
+			vb, _ := marshalNoEscape(s)
+			b.Write(vb)
+			return
+		default:
+			continue
+		}
+		b.WriteString(s[last:i])
+		b.WriteString(esc)
+		last = i + 1
+	}
+	b.WriteString(s[last:])
+	b.WriteByte('"')
 }
 
 // jsNum formats like JavaScript's Number#toString for the ranges we use.
@@ -163,9 +219,9 @@ func all(db querier, q string, args ...any) ([]*Row, error) {
 	defer rs.Close()
 	cols, _ := rs.Columns()
 	out := []*Row{}
+	ptrs := make([]any, len(cols))
 	for rs.Next() {
 		vals := make([]any, len(cols))
-		ptrs := make([]any, len(cols))
 		for i := range vals {
 			ptrs[i] = &vals[i]
 		}

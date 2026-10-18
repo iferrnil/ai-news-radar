@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/andybalholm/brotli"
@@ -133,25 +134,62 @@ func jsonResponse(w http.ResponseWriter, r *http.Request, body []byte) {
 		return
 	}
 	ae := r.Header.Get("Accept-Encoding")
+	enc := ""
 	if len(body) > 1024 && brRe.MatchString(ae) {
-		var b bytes.Buffer
-		bw := brotli.NewWriterOptions(&b, brotli.WriterOptions{Quality: 5})
-		bw.Write(body)
-		bw.Close()
-		hd.Set("Content-Encoding", "br")
-		w.Write(b.Bytes())
-		return
+		enc = "br"
+	} else if len(body) > 1024 && gzRe.MatchString(ae) {
+		enc = "gzip"
 	}
-	if len(body) > 1024 && gzRe.MatchString(ae) {
-		var b bytes.Buffer
-		gw, _ := gzip.NewWriterLevel(&b, 6)
-		gw.Write(body)
-		gw.Close()
-		hd.Set("Content-Encoding", "gzip")
-		w.Write(b.Bytes())
+	if enc != "" {
+		hd.Set("Content-Encoding", enc)
+		w.Write(zCache.get(etag, enc, body))
 		return
 	}
 	w.Write(body)
+}
+
+// zCache keeps the last few compressed JSON bodies by ETag: the UI refetches the same list after
+// every event and on each tab, and compressing a 400 KB list costs ~10 ms and a few MB of garbage.
+var zCache = &zcache{m: map[string][]byte{}}
+
+type zcache struct {
+	mu    sync.Mutex
+	m     map[string][]byte
+	order []string
+}
+
+const zCacheMax = 16
+
+func (c *zcache) get(etag, enc string, body []byte) []byte {
+	k := enc + etag
+	c.mu.Lock()
+	z, ok := c.m[k]
+	c.mu.Unlock()
+	if ok {
+		return z
+	}
+	var b bytes.Buffer
+	if enc == "br" {
+		bw := brotli.NewWriterOptions(&b, brotli.WriterOptions{Quality: 5, LGWin: 19})
+		bw.Write(body)
+		bw.Close()
+	} else {
+		gw, _ := gzip.NewWriterLevel(&b, 6)
+		gw.Write(body)
+		gw.Close()
+	}
+	z = b.Bytes()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.m[k]; !ok {
+		c.m[k] = z
+		c.order = append(c.order, k)
+		if len(c.order) > zCacheMax {
+			delete(c.m, c.order[0])
+			c.order = c.order[1:]
+		}
+	}
+	return z
 }
 
 // jsNumber is JavaScript Number(v) for query/path strings (NaN -> ok=false).
@@ -270,7 +308,9 @@ func (s *Store) hItems(w http.ResponseWriter, r *http.Request) {
 	if p.Get("fav") == "1" {
 		wh = append(wh, "fv.item_id IS NOT NULL") // 收藏: any age
 	} else if id == "" {
-		wh, a = append(wh, "i.published >= ?"), append(a, now()-retentionHours()*3600) // the 48 h window (favorites outlive it)
+		cut := now() - retentionHours()*3600
+		wh, a = append(wh, "i.published >= ?"), append(a, cut) // the 48 h window (favorites outlive it)
+		wh, a = append(wh, trendshiftDedupSQL), append(a, cut)
 	}
 	limit := 50
 	if v, has := p["limit"]; has {
@@ -585,6 +625,12 @@ func (s *Store) hSettingsTest(w http.ResponseWriter, r *http.Request) {
 		}
 		base = u
 	}
+	// never send the stored key to a Base URL other than the saved one (that would hand the key to whoever runs
+	// it): testing a new Base URL needs the key typed along with it
+	if key == "" && base != "" && strings.TrimRight(base, "/") != strings.TrimRight(s.deepseekBase(), "/") {
+		writeJSON(w, 200, obj("ok", false, "error", "测试新的 Base URL 时请同时填写 API key"))
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, 200, s.testDeepseek(key, base))
 }
@@ -650,7 +696,7 @@ func detectErr(err error) string {
 
 func (s *Store) hSourcesPost(w http.ResponseWriter, r *http.Request) {
 	b := readBody(r)
-	d, err := Detect(r.Context(), jsString(b["input"]))
+	d, err := Detect(s.fetchCtx(r.Context()), jsString(b["input"]))
 	if err != nil {
 		detail(w, 400, detectErr(err))
 		return
@@ -959,7 +1005,7 @@ func (s *Store) hRuleCheck(w http.ResponseWriter, r *http.Request) {
 
 func (s *Store) hSourceTest(w http.ResponseWriter, r *http.Request) {
 	b := readBody(r)
-	d, err := Detect(r.Context(), jsString(b["input"]))
+	d, err := Detect(s.fetchCtx(r.Context()), jsString(b["input"]))
 	if err != nil {
 		detail(w, 400, detectErr(err))
 		return

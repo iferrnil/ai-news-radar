@@ -23,14 +23,16 @@ const br = await chromium.launch();
   const items = await api("/api/items?limit=1000");
   const d = items.filter((it) => it.source === "Trendshift 日榜").sort((a, b) => b.published - a.published);
   const w = items.filter((it) => it.source === "Trendshift 周榜");
-  rec("Trendshift: latest period only, by rank (4 + 4 of the mock)", d.length === 4 && w.length === 4 && d.every((it, i) => it.summary.startsWith(`#${i + 1} · Go · 今日 +`)) && w.every((it) => /本周 \+/.test(it.summary)),
+  rec("Trendshift: latest period only, by rank (4 + 4 of the mock; weekly #4 = daily #2 is shown once)", d.length === 4 && w.length === 3 && !w.some((it) => /repo-2$/i.test(it.title) && /mock-d1/i.test(it.title)) && d.every((it, i) => it.summary.startsWith(`#${i + 1} · Go · 今日 +`)) && w.every((it) => /本周 \+/.test(it.summary)),
     JSON.stringify(d.map((it) => it.title + " | " + it.summary)).slice(0, 400));
   rec("Trendshift: title owner/repo, link to GitHub", d.every((it) => /^mock-d1\/repo-\d$/.test(it.title) && it.url === "https://github.com/" + it.title), d.map((it) => it.url).join(" "));
   // re-poll: no duplicates
   for (const s of ts) await fetch(`${B}/api/sources/${s.id}/fetch`, { method: "POST", headers: J });
   await sleep(500);
   const again = (await api("/api/items?limit=1000")).filter((it) => it.source.startsWith("Trendshift"));
-  rec("Trendshift: re-poll adds nothing", again.length === 8, String(again.length));
+  rec("Trendshift: re-poll adds nothing, the twin stays hidden (stable)", again.length === 7, String(again.length));
+  const wsrc = (await srcs()).find((s) => s.name === "Trendshift 周榜");
+  rec("Trendshift: the hidden twin is stored (dedup is per section at listing time)", wsrc.item_count === 4, String(wsrc.item_count));
   const hot = await api("/api/hot");
   rec("Trendshift: rankings stay out of 热点", !hot.topics.some((t) => t.rows.some((r) => r.source.startsWith("Trendshift"))));
   // feed card + GitHub mark, add dialog preview of a pasted URL
@@ -76,6 +78,13 @@ const br = await chromium.launch();
   const row = side.getByRole("button", { name: /^开源/ }).first();
   rec("sidebar: library icon rendered as SVG, no token text", await row.locator("svg path").count() > 0 && !/lucide:/.test(await p.locator("body").innerText()), await row.innerHTML().catch(() => ""));
   await p.screenshot({ path: shot("section-github.png") });
+  rec("dedup: 开源 holds 日榜 + 周榜 → 7 cards", await p.locator("[data-item]").count() === 7, String(await p.locator("[data-item]").count()));
+  const wk = ts.find((s) => s.name === "Trendshift 周榜");
+  await fetch(`${B}/api/sources/${wk.id}`, { method: "PATCH", headers: J, body: JSON.stringify({ section: "lab" }) });
+  const after = await api("/api/items?limit=1000");
+  const inSec = (k, src) => after.filter((it) => it.section === k && it.source === src).length;
+  rec("dedup: 周榜 moved to 实验室 → both lists complete again (4 + 4)", inSec(sec.key, "Trendshift 日榜") === 4 && inSec("lab", "Trendshift 周榜") === 4, `${inSec(sec.key, "Trendshift 日榜")} ${inSec("lab", "Trendshift 周榜")}`);
+  await fetch(`${B}/api/sources/${wk.id}`, { method: "PATCH", headers: J, body: JSON.stringify({ section: sec.key }) });
   // avatars come from /api/icon (same origin) — never a foreign icon service
   const srcsInDom = await p.evaluate(() => [...document.querySelectorAll("img")].map((i) => i.getAttribute("src") ?? ""));
   rec("page: no Google favicon / unavatar URLs", !srcsInDom.some((u) => /google\.com|unavatar\.io/.test(u)), srcsInDom.slice(0, 5).join(" "));

@@ -45,8 +45,8 @@ function api(u) {
   if (s.includes("quantavil.github.io/trendshift")) { // Trendshift snapshots (latest period + an older one)
     const weekly = s.includes("/weekly/"), day = new Date(T0 * 1000).toISOString().slice(0, 10);
     const per = (o) => weekly ? `2026-W${String(40 + o).padStart(2, "0")}` : new Date((T0 - (1 - o) * 86400) * 1000).toISOString().slice(0, 10);
-    return [1, 0].flatMap((o) => Array.from({ length: 4 }, (_, i) => ({ period_key: o ? per(1) : per(0), rank: i + 1, full_name: `mock-${weekly ? "w" : "d"}${o}/repo-${i + 1}`,
-      github_url: `https://github.com/mock-${weekly ? "w" : "d"}${o}/repo-${i + 1}`, description: `模拟仓库 ${i + 1}（${day}）`, language: "Go", stars_total: 1000 * (i + 1), stars_gained: 100 - i, forks_total: 10, tags: [], social_mention_platforms: [] })));
+    return [1, 0].flatMap((o) => Array.from({ length: 4 }, (_, i) => ({ period_key: o ? per(1) : per(0), rank: i + 1, full_name: weekly && o && i === 3 ? "Mock-D1/Repo-2" : `mock-${weekly ? "w" : "d"}${o}/repo-${i + 1}`, // weekly #4 = daily #2 (dedup)
+      github_url: weekly && o && i === 3 ? "https://github.com/Mock-D1/Repo-2" : `https://github.com/mock-${weekly ? "w" : "d"}${o}/repo-${i + 1}`, description: `模拟仓库 ${i + 1}（${day}）`, language: "Go", stars_total: 1000 * (i + 1), stars_gained: 100 - i, forks_total: 10, tags: [], social_mention_platforms: [] })));
   }
   if (s.includes("hn.algolia.com")) return { hits: [] };
   if (s.includes("huggingface.co")) return [];

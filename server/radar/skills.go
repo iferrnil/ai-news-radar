@@ -720,7 +720,7 @@ func (s *Store) hSkillInstall(w http.ResponseWriter, r *http.Request) {
 	if tb, pre, ok := githubSource(pu); ok {
 		get, prefix, gh = tb, pre, true
 	}
-	resp, err := netFetch(context.Background(), "GET", get, map[string]string{"Accept": "*/*"}, nil, 60*time.Second)
+	resp, err := netFetch(PublicOnly(context.Background()), "GET", get, map[string]string{"Accept": "*/*"}, nil, 60*time.Second)
 	if err != nil {
 		detail(w, 502, "下载失败："+err.Error())
 		return

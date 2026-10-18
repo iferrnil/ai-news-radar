@@ -146,8 +146,18 @@ func netFetch(ctx context.Context, method, u string, hdr map[string]string, body
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	r, err := httpClient.Do(req)
+	c := httpClient
+	if isPublicOnly(ctx) {
+		if err := checkTarget(ctx, u); err != nil {
+			return nil, &JSError{Name: "TypeError", Msg: "fetch failed (" + err.Error() + ")"}
+		}
+		c = publicClient
+	}
+	r, err := c.Do(req)
 	if err != nil {
+		if errors.Is(err, errPrivateAddr) {
+			return nil, &JSError{Name: "TypeError", Msg: "fetch failed (" + errPrivateAddr.Error() + ")"}
+		}
 		return nil, wrapNetErr(err)
 	}
 	defer r.Body.Close()

@@ -132,7 +132,7 @@ func fetchPrefs(ctx context.Context, base string) (notifyPrefs, error) {
 		Notify notifyPrefs `json:"notify"`
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/settings", nil)
-	res, err := http.DefaultClient.Do(req)
+	res, err := localClient.Do(req)
 	if err != nil {
 		return out.Notify, err
 	}
@@ -149,7 +149,7 @@ func watchNotifications(ctx context.Context, base string, show func(notifyBatch)
 	for ctx.Err() == nil {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/stream", nil)
 		req.Header.Set("Accept", "text/event-stream")
-		res, err := (&http.Client{}).Do(req)
+		res, err := localClient.Do(req)
 		if err == nil {
 			wait = time.Second
 			_ = readSSE(res.Body, func(event, data string) {

@@ -380,6 +380,8 @@ func (d *hotDoc) subject(t string) bool { return d.head[t] > 0 || d.all.count[t]
 
 type hotIdx struct {
 	df      map[string]int
+	w       map[string]float64 // idf per name, computed once (score() asks for it per name and item pair)
+	w0      float64            // idf of a name no source uses
 	n       int
 	product map[string]bool // bases of versioned names seen in the window ("beam" of "beam1.0"), lexicon products
 	lex     *hotLex
@@ -413,12 +415,23 @@ func newHotIdx(x *hotLex, docs []*hotDoc) hotIdx {
 		}
 	}
 	ix.n = len(srcs)
+	ix.w = make(map[string]float64, len(ix.df))
+	for t, n := range ix.df {
+		ix.w[t] = math.Log(float64(ix.n+1) / float64(max(1, n)))
+	}
+	ix.w0 = math.Log(float64(ix.n + 1))
 	return ix
 }
 
 func (ix hotIdx) org(t string) bool { return hotOrgs[t] || ix.lex.org[t] }
 func (ix hotIdx) idf(t string) float64 {
-	return math.Log(float64(ix.n+1) / float64(max(1, ix.df[t])))
+	if w, ok := ix.w[t]; ok {
+		return w
+	}
+	if ix.w == nil { // a literal hotIdx (tests)
+		return math.Log(float64(ix.n+1) / float64(max(1, ix.df[t])))
+	}
+	return ix.w0
 }
 
 // rare: at most a third of the window's sources (≥ 5) use the name — a story five outlets cover keeps its names
@@ -672,10 +685,28 @@ func clusterHot(x *hotLex, docs []*hotDoc) ([][]*hotDoc, [][]string) {
 		l    hotLink
 	}
 	var links []link
+	// a link needs a shared distinctive name (hotLink.ok wants a subject): only score the pairs that have one
+	// (scoring all n² pairs was most of a warm 热点 pass)
+	cand := make([]bool, len(docs)*len(docs))
+	byName := map[string][]int{}
+	for i, d := range docs {
+		for t, name := range d.all.toks {
+			if name && ix.distinctive(t) {
+				byName[t] = append(byName[t], i)
+			}
+		}
+	}
+	for _, is := range byName {
+		for x, i := range is {
+			for _, j := range is[x+1:] {
+				cand[min(i, j)*len(docs)+max(i, j)] = true
+			}
+		}
+	}
 	for i := range docs {
 		for j := i + 1; j < len(docs); j++ {
 			a, b := docs[i], docs[j]
-			if unitOf[i] == unitOf[j] || a.sid == b.sid || a.roundup || b.roundup || math.Abs(a.pub-b.pub) > hotWindowSame {
+			if !cand[i*len(docs)+j] || unitOf[i] == unitOf[j] || a.sid == b.sid || a.roundup || b.roundup || math.Abs(a.pub-b.pub) > hotWindowSame {
 				continue
 			}
 			if l := ix.score(a, b); l.ok() {

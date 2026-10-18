@@ -86,6 +86,10 @@ func (s *Store) hArtifactsPatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		d = filepath.Clean(d)
+		if badArtifactsDir(d) {
+			detail(w, 400, "不能用这个目录作为工作目录")
+			return
+		}
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			detail(w, 400, "无法创建目录："+err.Error())
 			return
@@ -113,6 +117,10 @@ func (s *Store) hArtifactsOpen(w http.ResponseWriter, r *http.Request) {
 			d = p
 		}
 	}
+	if st, err := os.Stat(d); err != nil || !st.IsDir() || isPackage(d) { // folders only, never an app / installer
+		writeJSON(w, 200, obj("ok", false, "error", "无法打开"))
+		return
+	}
 	if err := DesktopHooks.OpenPath(d); err != nil {
 		writeJSON(w, 200, obj("ok", false, "error", err.Error()))
 		return
@@ -120,21 +128,17 @@ func (s *Store) hArtifactsOpen(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, obj("ok", true))
 }
 
-// GET /api/artifacts/file?path=… — a generated cover for the article dialog (only files inside the 工作目录).
+// GET /api/artifacts/file?path=… — a generated cover for the article dialog (only images in <工作目录>/缓存/封面).
 func (s *Store) hArtifactFile(w http.ResponseWriter, r *http.Request) {
 	if !desktopOnlyMsg(s, w, "工作目录仅桌面版可用") {
 		return
 	}
-	p := filepath.Clean(r.URL.Query().Get("path"))
-	root := filepath.Clean(s.artifactsDir()) + string(filepath.Separator)
-	if !strings.HasPrefix(p, root) {
+	p, ok := s.coverFile(r.URL.Query().Get("path"))
+	if !ok {
 		detail(w, 404, "文件不存在")
 		return
 	}
-	if st, err := os.Stat(p); err != nil || st.IsDir() {
-		detail(w, 404, "文件不存在")
-		return
-	}
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	http.ServeFile(w, r, p)
 }
 
@@ -166,13 +170,12 @@ func (s *Store) hArtifactsExport(w http.ResponseWriter, r *http.Request) {
 		}
 		p = base + "-" + strconv.Itoa(i) + ".md"
 	}
-	root := filepath.Clean(s.artifactsDir()) + string(filepath.Separator)
 	stem := strings.TrimSuffix(filepath.Base(p), ".md")
 	var head, tail string
 	if xs, ok := b["covers"].([]any); ok {
 		for _, x := range xs {
-			src := filepath.Clean(str(x))
-			if !strings.HasPrefix(src, root) {
+			src, ok := s.coverFile(str(x))
+			if !ok {
 				continue
 			}
 			data, err := os.ReadFile(src)

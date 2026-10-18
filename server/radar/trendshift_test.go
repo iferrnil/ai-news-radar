@@ -2,9 +2,12 @@ package radar
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -126,4 +129,92 @@ func TestFetchTrendshiftFallback(t *testing.T) {
 	if items, err = fetchTrendshift(ctx, "daily", false); err == nil || items != nil || !strings.Contains(err.Error(), "Trendshift") {
 		t.Fatalf("both failing: %v %v", err, items)
 	}
+}
+
+func TestTrendshiftCap25(t *testing.T) {
+	rs := make([]tsRepo, 30)
+	for i := range rs {
+		rs[i] = tsRepo{Rank: i + 1, FullName: fmt.Sprintf("o/r%d", i+1), Period: "2026-10-18"}
+	}
+	got := trendshiftItems("daily", rs, 1792287205)
+	if len(got) != 25 || got[24].Title != "o/r25" {
+		t.Fatalf("cap: %d %s", len(got), got[len(got)-1].Title)
+	}
+}
+
+// 日榜 and 周榜 in one section: a repo shows once (daily wins, then the newest period); other sections unaffected.
+func TestTrendshiftDedupPerSection(t *testing.T) {
+	st := testStore(t)
+	srv := httptest.NewServer(st.Server(nil))
+	defer srv.Close()
+	src := func(name string) *Row {
+		r, err := one(st.DB, "SELECT * FROM sources WHERE name=?", name)
+		if err != nil || r == nil {
+			t.Fatalf("no source %s", name)
+		}
+		r.Set("last_fetched", now())
+		return r
+	}
+	daily, weekly := src("Trendshift 日榜"), src("Trendshift 周榜")
+	at := int64(now()) - 600
+	it := func(kind, period, repo string, off int64) FetchedItem {
+		return FetchedItem{UID: "trendshift:" + kind + ":" + period + ":" + strings.ToLower(repo), Title: repo, URL: "https://github.com/" + repo, Published: at - off}
+	}
+	st.StoreItems(daily, []FetchedItem{it("daily", "2026-10-18", "a/one", 1), it("daily", "2026-10-18", "b/Two", 2), it("daily", "2026-10-17", "a/one", 3600)})
+	st.StoreItems(weekly, []FetchedItem{it("weekly", "2026-W42", "B/two", 1), it("weekly", "2026-W42", "c/three", 2)})
+	other, _ := one(st.DB, "SELECT * FROM sources WHERE name NOT LIKE 'Trendshift%' AND enabled=1 LIMIT 1")
+	other.Set("last_fetched", now())
+	st.StoreItems(other, []FetchedItem{{UID: "https://n.example/1", Title: "a/one", URL: "https://n.example/1", Published: at}}) // not Trendshift: untouched
+	list := func(q string) []string {
+		var items []map[string]any
+		sec := ""
+		if v, ok := strings.CutPrefix(q, "&section="); ok {
+			sec, q = v, ""
+		}
+		r, _ := http.Get(srv.URL + "/api/items?limit=200" + q)
+		json.NewDecoder(r.Body).Decode(&items)
+		r.Body.Close()
+		var out []string
+		for _, x := range items {
+			if sec != "" && x["section"] != sec {
+				continue
+			}
+			out = append(out, x["source"].(string)+"|"+x["title"].(string))
+		}
+		sort.Strings(out)
+		return out
+	}
+	want := func(q string, exp ...string) {
+		t.Helper()
+		got := list(q)
+		var ts []string
+		for _, g := range got {
+			if strings.HasPrefix(g, "Trendshift") || strings.HasSuffix(g, "|a/one") {
+				ts = append(ts, g)
+			}
+		}
+		sort.Strings(exp)
+		if strings.Join(ts, ",") != strings.Join(exp, ",") {
+			t.Fatalf("%s:\n got %v\nwant %v", q, ts, exp)
+		}
+	}
+	otherName := other.Str("name")
+	want("&section=media", "Trendshift 日榜|a/one", "Trendshift 日榜|b/Two", "Trendshift 周榜|c/three")
+	want("", "Trendshift 日榜|a/one", "Trendshift 日榜|b/Two", "Trendshift 周榜|c/three", otherName+"|a/one")
+	// stable across a re-poll (same items again)
+	st.StoreItems(daily, []FetchedItem{it("daily", "2026-10-18", "a/one", 1)})
+	want("&section=media", "Trendshift 日榜|a/one", "Trendshift 日榜|b/Two", "Trendshift 周榜|c/three")
+	// a favorite hidden by the dedup still shows in 收藏
+	var wid int64
+	st.DB.QueryRow("SELECT id FROM items WHERE uid='trendshift:weekly:2026-W42:b/two'").Scan(&wid)
+	postJSON(t, srv.URL+"/api/favorites", "POST", map[string]any{"id": wid, "on": true}, nil)
+	if got := list("&fav=1"); len(got) != 1 || got[0] != "Trendshift 周榜|B/two" {
+		t.Fatalf("fav view: %v", got)
+	}
+	// moving 周榜 to another section: both show again
+	if c := postJSON(t, srv.URL+fmt.Sprintf("/api/sources/%d", weekly.Get("id")), "PATCH", map[string]any{"section": "lab"}, nil); c != 200 {
+		t.Fatalf("move %d", c)
+	}
+	want("&section=media", "Trendshift 日榜|a/one", "Trendshift 日榜|b/Two")
+	want("&section=lab", "Trendshift 周榜|B/two", "Trendshift 周榜|c/three", otherName+"|a/one") // the non-Trendshift item lives in lab
 }

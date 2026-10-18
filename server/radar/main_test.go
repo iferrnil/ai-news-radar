@@ -15,6 +15,7 @@ func TestMain(m *testing.M) {
 	if os.Getenv("ARTIFACTS_DIR") == "" {
 		os.Setenv("ARTIFACTS_DIR", d)
 	}
+	privateOK = true // tests talk to httptest servers on 127.0.0.1; security_test.go turns the guard back on
 	code := m.Run()
 	os.RemoveAll(d)
 	os.Exit(code)

@@ -195,7 +195,6 @@ function FeedList() {
     const vis = enabledIds && !favMode ? raw.filter((it) => enabledIds.has(it.source_id)) : raw;
     return vis.map(loc); // translation shown where its view scope (全部 / section / source) is switched on
   }, [raw, loc, enabledIds, favMode]);
-  useEffect(() => { warmFonts(items.flatMap((it) => [it.title, it.summary ?? "", it.source])); }, [items]);
   const [pending, setPending] = useState<ItemOut[]>([]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -278,6 +277,8 @@ function FeedList() {
   const snap = useMemo(() => { const s = new Set<number>(); for (const it of raw) if (isRead(it.id)) s.add(it.id); return s; }, [f, epoch, loaded]);
   const hide = useCallback((id: number) => snap.has(id), [snap]);
   const view = useMemo(() => items.filter((it) => passes(it, f, hide)), [items, f, hide]);
+  // glyph slices for what this view can scroll to (titles: semibold unread / medium read → both faces; the rest regular)
+  useEffect(() => { warmFonts(view.flatMap((it) => [it.title, it.summary ?? "", it.source, ...(it.kw ?? [])]), view.map((it) => it.title)); }, [view]);
   const pend = useMemo(() => pending.filter((it) => passes(it, f, hide)), [pending, f, hide]);
   // the same view without 只看未读: what 全部标为已读 applies to
   const scope = useMemo(() => (f.unread ? items.filter((it) => passes(it, { ...f, unread: false })) : view), [items, f, view]);

@@ -106,6 +106,8 @@ server/bin/radar-server -ui out                           # http://localhost:300
 | `BREAK_AFTER` | `5` | 连续失败多少次后熔断 |
 | `NOTIFY_BATCH_MS` / `NOTIFY_MIN_GAP_MS` / `NOTIFY_MAX_AGE` | `20000` / `60000` / `10800` | P0 通知合并窗口、最小间隔（毫秒）、只通知多少秒内的内容 |
 | `DISABLE_POLLER` | `0` | `1` = 只提供网页、不抓取 |
+| `ALLOWED_HOSTS` | 空 | 逗号分隔的域名（可带端口）；设置后只接受这些 Host 的请求，其余返回 421（防 DNS 重绑定） |
+| `ALLOW_PRIVATE_FETCH` | `0` | `1` = 允许服务端抓取本机 / 内网地址（默认拒绝，防 SSRF） |
 | `HOST_PORT` / `DATA_DIR` | `3080` / `./data` | 仅 docker compose |
 
 站内「设置」页：

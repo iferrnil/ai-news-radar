@@ -86,7 +86,16 @@ func (s *Store) Server(ui fs.FS) http.Handler {
 	}
 	api := s.Handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		securityHeaders(w)
+		if !hostAllowed(r) {
+			http.Error(w, "unknown host", http.StatusMisdirectedRequest)
+			return
+		}
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+			if crossSite(r) {
+				detail(w, 403, "cross-site request refused")
+				return
+			}
 			api.ServeHTTP(w, r)
 			return
 		}

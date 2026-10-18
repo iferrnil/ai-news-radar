@@ -39,13 +39,14 @@ type ServerConfig struct {
 }
 
 type Server struct {
-	st   *radar.Store
-	srv  *http.Server
-	Port int
-	URL  string
-	done chan struct{}
-	err  error
-	once sync.Once
+	st    *radar.Store
+	srv   *http.Server
+	Port  int
+	URL   string
+	Token string // per-launch API token (gate.go); the window gets it from StartURL
+	done  chan struct{}
+	err   error
+	once  sync.Once
 }
 
 // PreferredPort is tried first so the page keeps the same origin (http://127.0.0.1:47821) between launches:
@@ -108,9 +109,10 @@ func StartServer(cfg ServerConfig) (*Server, error) {
 	if cfg.Log != nil {
 		log.SetOutput(cfg.Log)
 	}
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, err
 	}
+	os.Chmod(cfg.DataDir, 0o700) // DB, secrets, skills, icons: this user only
 	applyEnv(cfg.Version)
 	ui, seed := embeddedUI()
 	if d := os.Getenv("AI_RADAR_UI"); d != "" { // development: serve ../out instead of the embedded copy
@@ -142,8 +144,10 @@ func StartServer(cfg ServerConfig) (*Server, error) {
 		return nil, err
 	}
 	port := l.Addr().(*net.TCPAddr).Port
-	s := &Server{st: st, Port: port, URL: fmt.Sprintf("http://127.0.0.1:%d", port), done: make(chan struct{})}
-	s.srv = &http.Server{Handler: st.Server(ui), ReadHeaderTimeout: 10 * time.Second}
+	tok := newToken()
+	apiToken = tok
+	s := &Server{st: st, Port: port, URL: fmt.Sprintf("http://127.0.0.1:%d", port), Token: tok, done: make(chan struct{})}
+	s.srv = &http.Server{Handler: gate(st.Server(ui), port, tok), ReadHeaderTimeout: 10 * time.Second}
 	st.StartScheduler()
 	go func() {
 		if err := s.srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -174,6 +178,9 @@ func (s *Server) WaitHealthy(ctx context.Context) error {
 		}
 	}
 }
+
+// StartURL is the first page of the window: it carries the session token once (gate.go turns it into a cookie).
+func (s *Server) StartURL() string { return s.URL + "/?_k=" + s.Token }
 
 // Done is closed when the HTTP server stops.
 func (s *Server) Done() <-chan struct{} { return s.done }

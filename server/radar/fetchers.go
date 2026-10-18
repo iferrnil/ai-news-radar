@@ -646,7 +646,7 @@ func hostOf(u string) string {
 }
 
 // Detect: X list URL, X handle, RSS/Atom URL, or a page with <link rel=alternate>.
-func Detect(ctx context.Context, input string) (*Detected, error) {
+func detectRaw(ctx context.Context, input string) (*Detected, error) {
 	s := strings.TrimSpace(input)
 	if m := listInRe.FindStringSubmatch(s); m != nil {
 		u := "https://x.com/i/lists/" + m[1]

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,7 +104,7 @@ func main() {
 					}
 				}()
 			})
-			win.Page().LoadURL(srv.URL + "/")
+			win.Page().LoadURL(srv.StartURL())
 			go watchNotifications(appCtx, srv.URL, func(b notifyBatch) { notifyP0(nt, win, srv.URL, b, show) })
 		}()
 		go func() { // the server died on its own: tell the user instead of a blank window
@@ -116,17 +115,21 @@ func main() {
 		}()
 
 		// links: our own origin stays in the window, everything else goes to the default browser
-		own := func(u string) bool { return srv != nil && strings.HasPrefix(u, srv.URL) }
+		// (only http / https / mailto ever reach the OS: a file://, smb:// or app-scheme link from a feed would
+		// otherwise open a local file or app; see externalURL)
+		own := func(u string) bool { return srv != nil && sameOrigin(u, srv.URL) }
 		win.Page().SetWindowOpenHandler(func(req mygo.WindowOpenRequest) *mygo.WindowOptions {
-			go mygo.Shell.OpenExternal(req.URL)
+			if externalURL(req.URL) {
+				go mygo.Shell.OpenExternal(req.URL)
+			}
 			return nil
 		})
 		win.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
-			if own(e.URL) || strings.HasPrefix(e.URL, "about:") {
-				return
+			if own(e.URL) || strings.HasPrefix(e.URL, "about:") || strings.HasPrefix(e.URL, "blob:"+srv.URL+"/") {
+				return // our pages, blank frames, our own downloads (blob:)
 			}
-			if p, err := url.Parse(e.URL); err == nil && (p.Scheme == "http" || p.Scheme == "https" || p.Scheme == "mailto") {
-				e.PreventDefault()
+			e.PreventDefault() // nothing else loads inside the app window
+			if externalURL(e.URL) {
 				go mygo.Shell.OpenExternal(e.URL)
 			}
 		})

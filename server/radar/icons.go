@@ -135,6 +135,7 @@ func (s *Store) iconCached(ctx context.Context, key string, fetch func(context.C
 
 // iconGet: an image (by content sniffing) of at most 512 KB, else nil.
 func iconGet(ctx context.Context, u string) ([]byte, string) {
+	ctx = PublicOnly(ctx)
 	r, err := httpGet(ctx, u, 8*time.Second, 1, map[string]string{"User-Agent": trendshiftBrowserUA, "Accept": "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"})
 	if err != nil || !r.OK() || len(r.Body) == 0 || len(r.Body) > iconMax {
 		return nil, ""
@@ -155,6 +156,7 @@ func iconGet(ctx context.Context, u string) ([]byte, string) {
 
 // siteIcon: best <link rel=icon> of the home page, /favicon.ico, then the Google favicon service.
 func siteIcon(ctx context.Context, host string) ([]byte, string) {
+	ctx = PublicOnly(ctx)
 	home := "https://" + host + "/"
 	var cands []string
 	if r, err := httpGet(ctx, home, 8*time.Second, 1, map[string]string{"User-Agent": trendshiftBrowserUA, "Accept": "text/html"}); err == nil && r.OK() {

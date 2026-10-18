@@ -55,7 +55,7 @@ func (s *Store) PollOne(src *Row) PollResult {
 	lim <- struct{}{}
 	defer func() { <-lim }()
 	t0 := time.Now()
-	items, err := FetchSource(sc.ctx, src)
+	items, err := FetchSource(sc.s.fetchCtx(sc.ctx), src)
 	if sc.ctx.Err() != nil { // shutting down: the abort is not a source failure, and the DB is about to close
 		return obj("skipped", true)
 	}

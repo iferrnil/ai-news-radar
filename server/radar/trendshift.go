@@ -255,6 +255,9 @@ func groupInt(n int) string {
 // trendshiftItems: title owner/repo, summary "#1 · TypeScript · 今日 +634 星 · description", link to GitHub.
 // published = at − rank seconds, so the feed (newest first) keeps the ranking order.
 func trendshiftItems(kind string, rs []tsRepo, at float64) []FetchedItem {
+	if len(rs) > trendshiftMax {
+		rs = rs[:trendshiftMax] // rs is in rank order
+	}
 	label, gained := "日榜", "今日"
 	if kind == "weekly" {
 		label, gained = "周榜", "本周"
@@ -307,3 +310,18 @@ func trendshiftItems(kind string, rs []tsRepo, at float64) []FetchedItem {
 	}
 	return out
 }
+
+// trendshiftMax: each Trendshift source keeps the top 25 of its list (JSON or page).
+const trendshiftMax = 25
+
+// trendshiftDedupSQL (feed / section lists, not 收藏 or ?id=): a repo shows once per section. When 日榜 and 周榜 (or
+// two periods of one list) both hold it in the same section, the daily one wins over the weekly one, then the
+// newest period; the loser is hidden, so moving a source to another section brings its items back. The twin must
+// itself be in the window (arg: the window start). Titles are owner/repo; uid = trendshift:<kind>:<period>:<repo>
+// (substr 12..17 = the kind); the uid range keeps the lookup on the uid index.
+const trendshiftDedupSQL = `(i.uid NOT BETWEEN 'trendshift:' AND 'trendshift;' OR NOT EXISTS (
+  SELECT 1 FROM items j JOIN sources sj ON sj.id=j.source_id
+  WHERE j.uid BETWEEN 'trendshift:' AND 'trendshift;' AND j.id<>i.id AND j.hidden=0 AND j.published >= ? AND sj.enabled=1
+    AND sj.section=s.section AND lower(j.title) = lower(i.title)
+    AND ((substr(j.uid, 12, 6)='daily:' AND substr(i.uid, 12, 6)<>'daily:')
+      OR (substr(j.uid, 12, 6)=substr(i.uid, 12, 6) AND (j.published > i.published OR (j.published = i.published AND j.id > i.id))))))`

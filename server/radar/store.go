@@ -79,6 +79,7 @@ var xHost = regexp.MustCompile(`^(x\.com|twitter\.com|t\.co)/`)
 
 // StoreItems mirrors store.ts storeItems: dedupe via `seen`, source rule, retention, tweet↔article merge; publishes events.
 func (s *Store) StoreItems(src *Row, items []FetchedItem) (newIDs []int64, merged int, fresh []*Row, err error) {
+	items = safeItems(items) // http(s) links only
 	t := now()
 	cutoff := t - retentionHours()*3600
 	firstFetch := !src.Has("last_fetched")
