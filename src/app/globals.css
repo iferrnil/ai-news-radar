@@ -233,3 +233,5 @@ html[data-titlebar] .app-sidebar .app-brand { --app-region: drag; padding-left: 
 /* long feeds: skip layout/paint of off-screen cards; no hover restyles or hover cards while scrolling */
 .feed-card { content-visibility: auto; contain-intrinsic-size: auto 208px; contain: layout style; }
 .feed-list[data-scrolling] { pointer-events: none; }
+/* /sources table: skip layout/paint of off-screen rows (Select/Tooltip-heavy cells) */
+.sources-row { content-visibility: auto; contain-intrinsic-size: auto 52px; contain: layout style; }

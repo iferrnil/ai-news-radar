@@ -225,6 +225,10 @@ type treeFile struct {
 
 func cleanRel(p string) (string, bool) {
 	p = strings.ReplaceAll(p, "\\", "/")
+	// absolute (unix or Windows drive) must not become a relative write under the skill dir
+	if strings.HasPrefix(p, "/") || (len(p) >= 2 && p[1] == ':' && ((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z'))) {
+		return "", false
+	}
 	p = strings.TrimLeft(p, "/")
 	c := path.Clean(p)
 	if c == "." || c == ".." || strings.HasPrefix(c, "../") || strings.Contains(c, "/../") {
@@ -454,6 +458,11 @@ func (s *Store) saveSkill(tree []treeFile, fm *frontMatterT, source string) (*sk
 	tmp := dir + ".tmp-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	for _, f := range tree {
 		p := filepath.Join(tmp, filepath.FromSlash(f.path))
+		// defense in depth: cleanRel already dropped ".."; refuse anything that still escapes tmp
+		if rel, err := filepath.Rel(tmp, p); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			os.RemoveAll(tmp)
+			return nil, errors.New("非法路径")
+		}
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return nil, err
 		}

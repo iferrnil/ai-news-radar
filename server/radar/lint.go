@@ -33,7 +33,6 @@ var (
 	reAdverbSay  = regexp.MustCompile(`[\p{Han}]{2}地(表示|指出|强调|说|宣布|透露)`)
 	reBoldRun    = regexp.MustCompile(`\*\*[^*\n]+\*\*`)
 	reHashtag    = regexp.MustCompile(`(?:^|[\s　])#[^\s#]{1,30}`)
-	reTweetPart  = regexp.MustCompile(`(?m)^\s*(\d{1,2})/\s*`)
 	reURL        = regexp.MustCompile(`https?://\S+`)
 	reMdLinkURL  = regexp.MustCompile(`\[([^\]]*)\]\((https?://[^)\s]+)\)`)
 	reH1         = regexp.MustCompile(`(?m)^#\s+(.+)$`)
@@ -202,6 +201,47 @@ func bodyOnly(md string) string {
 	return md
 }
 
+// tweetParts splits a twitter draft into posts: blank-line separated paragraphs. Leading "N/" numbering
+// (older skill output) is stripped so length checks still apply. Empty parts are dropped.
+func tweetParts(body string) []string {
+	raw := strings.Split(body, "\n")
+	var parts []string
+	var cur []string
+	flush := func() {
+		p := strings.TrimSpace(strings.Join(cur, "\n"))
+		cur = cur[:0]
+		if p == "" {
+			return
+		}
+		// drop legacy "1/" / "12/" prefixes (require space or EOL after the slash so "3/5" stays)
+		if i := strings.IndexByte(p, '/'); i > 0 && i <= 2 {
+			n := p[:i]
+			ok := true
+			for _, c := range n {
+				if c < '0' || c > '9' {
+					ok = false
+					break
+				}
+			}
+			if ok && (i+1 == len(p) || p[i+1] == ' ' || p[i+1] == '	') {
+				p = strings.TrimSpace(p[i+1:])
+			}
+		}
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	for _, ln := range raw {
+		if strings.TrimSpace(ln) == "" {
+			flush()
+			continue
+		}
+		cur = append(cur, ln)
+	}
+	flush()
+	return parts
+}
+
 func slopLint(md, platform string) []string {
 	body := bodyOnly(md)
 	var out []string
@@ -256,24 +296,15 @@ func slopLint(md, platform string) []string {
 			out = append(out, fmt.Sprintf("emoji %d 个（最多 8 个）", n))
 		}
 	case "twitter":
-		locs := reTweetPart.FindAllStringIndex(body, -1)
-		for i, l := range locs {
-			end := len(body)
-			if i+1 < len(locs) {
-				end = locs[i+1][0]
-			}
-			part := strings.TrimSpace(body[l[0]:end])
+		parts := tweetParts(body)
+		for i, part := range parts {
 			if w := xWeight(part); w > 280 {
 				out = append(out, fmt.Sprintf("第 %d 条推文加权长度 %d（上限 280，汉字算 2，链接算 23）", i+1, w))
 			}
 		}
 		refs := map[string]int{}
-		for i, l := range locs {
-			end := len(body)
-			if i+1 < len(locs) {
-				end = locs[i+1][0]
-			}
-			for n := range setOf(reRefNum.FindAllStringSubmatch(body[l[0]:end], -1)) {
+		for _, part := range parts {
+			for n := range setOf(reRefNum.FindAllStringSubmatch(part, -1)) {
 				refs[n]++
 			}
 		}
@@ -282,8 +313,8 @@ func slopLint(md, platform string) []string {
 				out = append(out, fmt.Sprintf("链接 [[%s]] 出现在 %d 条推文里（全串只放一次，放在讲这条新闻的最后一条）", n, refs[n]))
 			}
 		}
-		if len(locs) > 12 {
-			out = append(out, fmt.Sprintf("串推 %d 条（5–9 条为宜）", len(locs)))
+		if len(parts) > 12 {
+			out = append(out, fmt.Sprintf("串推 %d 条（5–9 条为宜）", len(parts)))
 		}
 		if n := len(reHashtag.FindAllString(body, -1)); n > 2 {
 			out = append(out, fmt.Sprintf("话题标签 %d 个（最多 2 个）", n))

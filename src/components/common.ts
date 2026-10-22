@@ -8,7 +8,16 @@ export type Section = { key: string; zh: string; includeInAll?: boolean; icon?: 
 export type SectionKey = string;
 export type SectionApiRow = { key: string; name: string; icon: string | null; in_all: number; pos: number; tr?: number };
 let LIST: Section[] = []; let READY = false;
-export function setSections(rows: SectionApiRow[]) { LIST = rows.map((r) => ({ key: r.key, zh: r.name, icon: r.icon, includeInAll: !!r.in_all, pos: r.pos, translate: r.tr === 1 })); READY = true; }
+const BUILTIN_ICONS = new Set(["lab", "cn", "media", "x", "ent"]);
+export function setSections(rows: SectionApiRow[]) {
+  LIST = rows.map((r) => ({ key: r.key, zh: r.name, icon: r.icon, includeInAll: !!r.in_all, pos: r.pos, translate: r.tr === 1 }));
+  READY = true;
+  // preload the icon-lib chunk before the user opens a section that uses it — otherwise every card's SectionName
+  // swaps an empty placeholder for the real SVG at once (visible flash on e.g. Github / 开源).
+  if (typeof window !== "undefined" && LIST.some((s) => s.icon?.startsWith("lucide:") && !BUILTIN_ICONS.has(s.icon.slice(7)))) {
+    void import("./section-icon").then((m) => m.loadIconLib());
+  }
+}
 export const allSections = (): Section[] => LIST;
 export const sectionsReady = () => READY;
 export const isSectionKeyLike = (k: string) => /^[a-z][a-z0-9]{0,15}$/.test(k);

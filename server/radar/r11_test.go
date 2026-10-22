@@ -132,7 +132,7 @@ func TestSlopLint(t *testing.T) {
 	if is := slopLint(clean, "wechat"); len(is) != 0 {
 		t.Fatalf("clean wechat flagged: %v", is)
 	}
-	long := "1/ " + strings.Repeat("汉", 135) + " [[1]](https://e.com/1)\n\n2/ 短的一条。\n"
+	long := strings.Repeat("汉", 135) + " [[1]](https://e.com/1)\n\n短的一条。\n"
 	if is := slopLint(long, "twitter"); len(is) != 1 || !strings.Contains(is[0], "第 1 条") {
 		t.Fatalf("tweet weight: %v", is)
 	}

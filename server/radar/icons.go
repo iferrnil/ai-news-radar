@@ -50,6 +50,18 @@ func (s *Store) iconHostAllowed(h string) bool {
 	return false
 }
 
+// iconHandleAllowed: /api/icon?x= is not an open avatar proxy — only handles of configured X sources.
+func (s *Store) iconHandleAllowed(x string) bool {
+	x = strings.ToLower(x)
+	rs, _ := all(s.DB, "SELECT username FROM sources WHERE type IN ('x','x_list') AND username IS NOT NULL AND username != ''")
+	for _, r := range rs {
+		if strings.EqualFold(r.Str("username"), x) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Store) hIcon(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var key string
@@ -57,6 +69,10 @@ func (s *Store) hIcon(w http.ResponseWriter, r *http.Request) {
 	if x := q.Get("x"); x != "" {
 		if !iconHandleRe.MatchString(x) {
 			detail(w, 400, "invalid handle")
+			return
+		}
+		if !s.iconHandleAllowed(x) {
+			detail(w, 404, "unknown handle")
 			return
 		}
 		key = "x:" + strings.ToLower(x)

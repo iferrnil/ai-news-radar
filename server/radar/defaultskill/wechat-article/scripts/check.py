@@ -21,7 +21,6 @@ CONNECTIVE = re.compile(r"此外|同时，|然而|另外，|与此同时|因此�
 ADVERB_SAY = re.compile(r"[\u4e00-\u9fff]{2}地(表示|指出|强调|说|宣布|透露)")
 BOLD = re.compile(r"\*\*[^*\n]+\*\*")
 HASHTAG = re.compile(r"(?:^|[\s\u3000])#[^\s#]{1,30}")
-TWEET = re.compile(r"(?m)^\s*(\d{1,2})/\s*")
 URL = re.compile(r"https?://\S+")
 MDLINK = re.compile(r"\[([^\]]*)\]\((https?://[^)\s]+)\)")
 H1 = re.compile(r"(?m)^#\s+(.+)$")
@@ -79,12 +78,20 @@ def check(md, platform):
         if emoji_count(body) > 10:
             out.append("emoji 超过 8 个")
     elif platform == "twitter":
-        locs = [m.start() for m in TWEET.finditer(body)] + [len(body)]
-        for i in range(len(locs) - 1):
-            w = x_weight(body[locs[i]:locs[i + 1]].strip())
+        # blank-line separated paragraphs (= posts); strip legacy "N/" prefixes
+        chunks = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+        parts = []
+        for p in chunks:
+            m = re.match(r"^(\d{1,2})/\s*", p)
+            if m:
+                p = p[m.end():].strip()
+            if p:
+                parts.append(p)
+        for i, part in enumerate(parts):
+            w = x_weight(part)
             if w > 280:
                 out.append(f"第 {i + 1} 条推文加权长度 {w}（≤280）")
-        if len(locs) - 1 > 12:
+        if len(parts) > 12:
             out.append("串推超过 12 条")
         if len(HASHTAG.findall(body)) > 2:
             out.append("话题标签超过 2 个")

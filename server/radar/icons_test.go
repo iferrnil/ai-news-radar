@@ -72,6 +72,9 @@ func TestIconProxy(t *testing.T) {
 	if r, _ := get("x=../etc"); r.StatusCode != 400 {
 		t.Errorf("bad handle %d", r.StatusCode)
 	}
+	if r, _ := get("x=EvilBot99"); r.StatusCode != 404 || hits["https://unavatar.io/x/EvilBot99?fallback=false"] != 0 {
+		t.Errorf("open x proxy: %d hits=%v", r.StatusCode, hits)
+	}
 	// a host without any icon: a miss (204, no failed-resource log), remembered
 	if r, _ := get("host=www.qbitai.com"); r.StatusCode != 204 {
 		t.Errorf("miss %d", r.StatusCode)

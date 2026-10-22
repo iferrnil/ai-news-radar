@@ -82,9 +82,17 @@ func TestSkillFormat(t *testing.T) {
 		}
 	}
 	// path traversal / junk is dropped
-	files, _, _ := readArchive(zipOf(t, map[string]string{"../evil/SKILL.md": skillText, "__MACOSX/x/SKILL.md": skillText}))
+	files, _, _ := readArchive(zipOf(t, map[string]string{
+		"../evil/SKILL.md":    skillText,
+		"/etc/passwd":         "root",
+		"foo/../../x":         "x",
+		"__MACOSX/x/SKILL.md": skillText,
+	}))
 	if len(files) != 0 {
 		t.Fatalf("unsafe paths kept: %+v", files)
+	}
+	if c, ok := cleanRel("foo/../../../etc/passwd"); ok || c != "" {
+		t.Fatalf("cleanRel abs escape: %q %v", c, ok)
 	}
 	if tb, pre, ok := githubSource(mustURL("https://github.com/o/r/tree/main/skills/x")); !ok || tb != "https://codeload.github.com/o/r/tar.gz/main" || pre != "skills/x" {
 		t.Fatal("github tree", tb, pre)

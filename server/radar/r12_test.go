@@ -295,7 +295,7 @@ func TestFixTitleAndTweetLinks(t *testing.T) {
 	if _, ok := st.fixTitle("# 合适长度的公众号标题写在这里\n\n正文", "wechat"); ok {
 		t.Fatal("a fitting title was rewritten")
 	}
-	issues := slopLint("1/ 钩子 🧵\n\n2/ 细节 [[1]](https://e.com/1)\n\n3/ 更多 [[1]](https://e.com/1)\n\n4/ 结尾 [[2]](https://e.com/2)", "twitter")
+	issues := slopLint("钩子 🧵\n\n细节 [[1]](https://e.com/1)\n\n更多 [[1]](https://e.com/1)\n\n结尾 [[2]](https://e.com/2)", "twitter")
 	if len(issues) != 1 || !strings.Contains(issues[0], "[[1]] 出现在 2 条") {
 		t.Fatalf("tweet links: %v", issues)
 	}

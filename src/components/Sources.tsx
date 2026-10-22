@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, TextCursorInput, Download, Filter, FolderCog, Pencil, FileJson, FileUp, Rss, SearchX, ExternalLink, Link2, Loader2, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +70,101 @@ const statusOk = (s: SourceRow, k: StatusKey) => k === "all" ? true : k === "act
 
 const IV = [60, 120, 180, 300, 600, 1800, 3600, 10800, 21600];
 const ivLabel = (v: number) => (v < 3600 ? `${v / 60} 分钟` : `${v / 3600} 小时`);
+const IV_OPTS = IV; // shared; per-row extras appended only while that row's picker is open
+
+/** Frequency control: a plain button until clicked, then one Select. Avoids N Base UI Selects in the table (main scroll cost). */
+const PollCell = memo(function PollCell({ interval, onChange }: { interval: number; onChange: (v: number) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} title="修改抓取频率"
+        className="inline-flex h-7 w-[104px] items-center justify-between gap-1.5 rounded-md border border-border bg-transparent px-2 type-caption text-foreground outline-none hover:bg-hover focus-visible:ring-3 focus-visible:ring-ring/50">
+        <span className="truncate">每 {ivLabel(interval)}</span>
+        <span className="text-faint" aria-hidden>▾</span>
+      </button>
+    );
+  }
+  const opts = IV.includes(interval) ? IV_OPTS : [...IV_OPTS, interval].sort((a, b) => a - b);
+  return (
+    <Select value={String(interval)} open onOpenChange={(o) => { if (!o) setOpen(false); }}
+      onValueChange={(v) => { onChange(Number(v)); setOpen(false); }}>
+      <SelectTrigger size="sm" className="h-7 w-[104px] type-caption"><SelectValue>{(v: string) => `每 ${ivLabel(Number(v))}`}</SelectValue></SelectTrigger>
+      <SelectContent>{opts.map((v) => <SelectItem key={v} value={String(v)}>每 {ivLabel(v)}</SelectItem>)}</SelectContent>
+    </Select>
+  );
+});
+
+function sameSource(a: SourceRow, b: SourceRow) {
+  return a.id === b.id && a.name === b.name && a.enabled === b.enabled && a.supported === b.supported
+    && a.poll_interval === b.poll_interval && a.last_fetched === b.last_fetched && a.last_error === b.last_error
+    && a.last_new === b.last_new && a.item_count === b.item_count && a.priority === b.priority
+    && a.section === b.section && a.origin === b.origin && a.url === b.url && a.homepage === b.homepage
+    && a.username === b.username && a.type === b.type && a.hidden_count === b.hidden_count
+    && a.f_include === b.f_include && a.f_exclude === b.f_exclude && a.f_scope === b.f_scope
+    && a.h_runs === b.h_runs && a.h_last_ok === b.h_last_ok && a.h_err_at === b.h_err_at
+    && a.h_kind === b.h_kind && a.h_consec === b.h_consec && a.h_lat === b.h_lat && a.h_open === b.h_open;
+}
+
+type RowProps = {
+  s: SourceRow; selected: boolean; renaming: boolean; busy: boolean;
+  onToggleSel: (id: number, on: boolean) => void;
+  onPatch: (s: SourceRow, body: object, msg?: string) => void;
+  onRename: (id: number | null) => void;
+  onSaved: () => void;
+  onEdit: (s: SourceRow) => void;
+  onFetch: (s: SourceRow) => void;
+  onDelete: (s: SourceRow) => void;
+};
+
+const SourceTableRow = memo(function SourceTableRow({
+  s, selected, renaming, busy, onToggleSel, onPatch, onRename, onSaved, onEdit, onFetch, onDelete,
+}: RowProps) {
+  return (
+    <TableRow className={cn("sources-row", !s.enabled && "opacity-60")}>
+      <TableCell className="pl-4"><Checkbox aria-label={`选择 ${s.name}`} checked={selected} onCheckedChange={(v) => onToggleSel(s.id, !!v)} /></TableCell>
+      <TableCell><Switch size="sm" checked={!!s.enabled} onCheckedChange={(v) => onPatch(s, { enabled: v }, `${v ? "已启用" : "已停用"}「${s.name}」`)} /></TableCell>
+      <TableCell className="max-w-[320px]">
+        <div className="flex items-center gap-2.5">
+          <SourceAvatar name={s.name} username={s.username} homepage={s.homepage} url={s.url} x={s.type.startsWith("x")} className="size-7" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <InlineName s={s} editing={renaming} setEditing={(b) => onRename(b ? s.id : null)} onSaved={onSaved} />
+              {s.priority && <Badge size="sm" variant={s.priority === "P0" ? "brand" : "outline"} className={cn("font-mono font-medium", s.priority !== "P0" && "text-faint")}>{s.priority}</Badge>}
+              {s.origin === "user" && <Badge size="sm" variant="secondary">手动</Badge>}
+              {(s.f_include || s.f_exclude) && (
+                <Tooltip><TooltipTrigger render={<Badge size="sm" variant="muted" className="cursor-default" aria-label="有过滤规则" />}><Filter />过滤{s.hidden_count ? ` ${s.hidden_count}` : ""}</TooltipTrigger>
+                  <TooltipContent className="max-w-sm font-mono">{[s.f_include && `包含 /${s.f_include}/`, s.f_exclude && `排除 /${s.f_exclude}/`].filter(Boolean).join(" · ")}{s.f_scope === "all" ? "（标题+摘要）" : "（标题）"}{s.hidden_count ? ` · 已隐藏 ${s.hidden_count} 条` : ""}</TooltipContent></Tooltip>)}
+            </div>
+            <div className="truncate type-caption text-faint">{TYPE[s.type] ?? s.type} · {s.url.replace(/^https?:\/\//, "")}</div>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="hidden type-body text-muted-foreground md:table-cell">{secZh(sourceSection(s))}</TableCell>
+      <TableCell className="hidden sm:table-cell">
+        {s.supported ? <PollCell interval={s.poll_interval} onChange={(v) => onPatch(s, { poll_interval: v }, `${s.name} 改为每 ${ivLabel(v)}`)} /> : <span className="text-muted-foreground">—</span>}
+      </TableCell>
+      <TableCell className="hidden font-mono type-caption text-muted-foreground lg:table-cell" title={bj(s.last_fetched)}>{ago(s.last_fetched)}</TableCell>
+      <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">{s.item_count}</TableCell>
+      <TableCell className="hidden sm:table-cell"><HealthBadge s={s} /></TableCell>
+      <TableCell><StatusBadge s={s} /></TableCell>
+      <TableCell className="pr-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="操作" />}>
+            {busy ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => setTimeout(() => onRename(s.id), 120)}><TextCursorInput />重命名</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEdit(s)}><Pencil />编辑</DropdownMenuItem>
+            <DropdownMenuItem disabled={!s.supported} onClick={() => onFetch(s)}><RefreshCw />立即抓取</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => window.open(s.homepage || s.url, "_blank")}><ExternalLink />打开主页</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(s.url); toast.success("已复制链接"); }}><Link2 />复制 URL</DropdownMenuItem>
+            <DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => onDelete(s)}><Trash2 />删除</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+    </TableRow>
+  );
+}, (a, b) => sameSource(a.s, b.s) && a.selected === b.selected && a.renaming === b.renaming && a.busy === b.busy);
 
 function StatusBadge({ s }: { s: SourceRow }) {
   if (!s.enabled) return <Badge variant="muted">已停用</Badge>;
@@ -105,15 +200,15 @@ export default function Sources() {
   const nErr = rows.filter((s) => s.enabled && s.supported && s.last_error).length;
   const nItems = rows.reduce((a, s) => a + (s.enabled ? s.item_count : 0), 0);
 
-  const patch = async (s: SourceRow, body: object, msg?: string) => {
+  const patch = useCallback(async (s: SourceRow, body: object, msg?: string) => {
     await api(`/api/sources/${s.id}`, { method: "PATCH", body: JSON.stringify(body) }); await reloadSources(); if (msg) toast.success(msg);
-  };
-  const fetchNow = async (s: SourceRow) => {
+  }, [reloadSources]);
+  const fetchNow = useCallback(async (s: SourceRow) => {
     setBusy((b) => ({ ...b, [s.id]: true }));
     const p = api(`/api/sources/${s.id}/fetch`, { method: "POST" }).then((r) => { if (r.error) throw new Error(r.error); return r; });
     toast.promise(p, { loading: `正在抓取 ${s.name}…`, success: (r: any) => `${s.name}：获取 ${r.fetched} 条，新增 ${r.new} 条`, error: (e: Error) => `${s.name} 抓取失败：${e.message}` });
     await p.catch(() => {}); setBusy((b) => ({ ...b, [s.id]: false })); reloadSources();
-  };
+  }, [reloadSources]);
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [toDel, setToDel] = useState<SourceRow[] | null>(null);
   const [deleted, setDeleted] = useState<{ name: string; ts: number }[]>([]);
@@ -136,7 +231,7 @@ export default function Sources() {
     const r = await api<{ restored: number }>("/api/sources/deleted", { method: "POST", body: JSON.stringify({ names }) });
     toast.success(`已恢复 ${r.restored} 个内置源`); await reloadSources(); loadDeleted();
   };
-  const toggleSel = (id: number, on: boolean) => setSel((cur) => { const n = new Set(cur); if (on) n.add(id); else n.delete(id); return n; });
+  const toggleSel = useCallback((id: number, on: boolean) => setSel((cur) => { const n = new Set(cur); if (on) n.add(id); else n.delete(id); return n; }), []);
   const allSel = view.length > 0 && view.every((s) => sel.has(s.id));
   const [impOpen, setImpOpen] = useState(false);
   const [scope, setScope] = useState<"all" | "enabled" | "view" | "sel">("all");
@@ -162,7 +257,7 @@ export default function Sources() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="type-h1 font-semibold tracking-tight">数据源</h1>
-          <p className="mt-0.5 type-body text-muted-foreground">启用/停用、调整抓取频率、立即抓取，或添加新的 RSS / X 账号 / X 列表。</p>
+          <p className="mt-0.5 type-body text-muted-foreground">启用、频率、立即抓取；添加 RSS / X / 列表。</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {deleted.length > 0 && <Button variant="outline" onClick={() => setRestoreOpen(true)}><RotateCcw />已删除的内置源 · {deleted.length}</Button>}
@@ -253,53 +348,9 @@ export default function Sources() {
               <TableRow key={i}><TableCell colSpan={10}><Skeleton className="h-7 w-full" /></TableCell></TableRow>
             ))}
             {view.map((s) => (
-              <TableRow key={s.id} className={cn(!s.enabled && "opacity-60")}>
-                <TableCell className="pl-4"><Checkbox aria-label={`选择 ${s.name}`} checked={sel.has(s.id)} onCheckedChange={(v) => toggleSel(s.id, !!v)} /></TableCell>
-                <TableCell><Switch size="sm" checked={!!s.enabled} onCheckedChange={(v) => patch(s, { enabled: v }, `${v ? "已启用" : "已停用"}「${s.name}」`)} /></TableCell>
-                <TableCell className="max-w-[320px]">
-                  <div className="flex items-center gap-2.5">
-                    <SourceAvatar name={s.name} username={s.username} homepage={s.homepage} url={s.url} x={s.type.startsWith("x")} className="size-7" />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <InlineName s={s} editing={renaming === s.id} setEditing={(b) => setRenaming(b ? s.id : null)} onSaved={reloadSources} />
-                        {s.priority && <Badge size="sm" variant={s.priority === "P0" ? "brand" : "outline"} className={cn("font-mono font-medium", s.priority !== "P0" && "text-faint")}>{s.priority}</Badge>}
-                        {s.origin === "user" && <Badge size="sm" variant="secondary">手动</Badge>}
-                        {(s.f_include || s.f_exclude) && (
-                          <Tooltip><TooltipTrigger render={<Badge size="sm" variant="muted" className="cursor-default" aria-label="有过滤规则" />}><Filter />过滤{s.hidden_count ? ` ${s.hidden_count}` : ""}</TooltipTrigger>
-                            <TooltipContent className="max-w-sm font-mono">{[s.f_include && `包含 /${s.f_include}/`, s.f_exclude && `排除 /${s.f_exclude}/`].filter(Boolean).join(" · ")}{s.f_scope === "all" ? "（标题+摘要）" : "（标题）"}{s.hidden_count ? ` · 已隐藏 ${s.hidden_count} 条` : ""}</TooltipContent></Tooltip>)}
-                      </div>
-                      <div className="truncate type-caption text-faint">{TYPE[s.type] ?? s.type} · {s.url.replace(/^https?:\/\//, "")}</div>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="hidden type-body text-muted-foreground md:table-cell">{secZh(sourceSection(s))}</TableCell>
-                <TableCell className="hidden sm:table-cell">
-                  {s.supported ? (
-                    <Select value={String(s.poll_interval)} onValueChange={(v) => patch(s, { poll_interval: Number(v) }, `${s.name} 改为每 ${ivLabel(Number(v))}`)}>
-                      <SelectTrigger size="sm" className="h-7 w-[104px] type-caption"><SelectValue>{(v: string) => `每 ${ivLabel(Number(v))}`}</SelectValue></SelectTrigger>
-                      <SelectContent>{[...new Set([...IV, s.poll_interval])].sort((a, b) => a - b).map((v) => <SelectItem key={v} value={String(v)}>每 {ivLabel(v)}</SelectItem>)}</SelectContent>
-                    </Select>) : <span className="text-muted-foreground">—</span>}
-                </TableCell>
-                <TableCell className="hidden font-mono type-caption text-muted-foreground lg:table-cell" title={bj(s.last_fetched)}>{ago(s.last_fetched)}</TableCell>
-                <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">{s.item_count}</TableCell>
-                <TableCell className="hidden sm:table-cell"><HealthBadge s={s} /></TableCell>
-                <TableCell><StatusBadge s={s} /></TableCell>
-                <TableCell className="pr-3">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="操作" />}>
-                      {busy[s.id] ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem onClick={() => setTimeout(() => setRenaming(s.id), 120)}><TextCursorInput />重命名</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setEditSrc(s)}><Pencil />编辑</DropdownMenuItem>
-                      <DropdownMenuItem disabled={!s.supported} onClick={() => fetchNow(s)}><RefreshCw />立即抓取</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => window.open(s.homepage || s.url, "_blank")}><ExternalLink />打开主页</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => { navigator.clipboard?.writeText(s.url); toast.success("已复制链接"); }}><Link2 />复制 URL</DropdownMenuItem>
-                      <DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => setToDel([s])}><Trash2 />删除</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
+              <SourceTableRow key={s.id} s={s} selected={sel.has(s.id)} renaming={renaming === s.id} busy={!!busy[s.id]}
+                onToggleSel={toggleSel} onPatch={patch} onRename={setRenaming} onSaved={reloadSources}
+                onEdit={setEditSrc} onFetch={fetchNow} onDelete={(x) => setToDel([x])} />
             ))}
             {rows.length > 0 && view.length === 0 && <TableRow className="hover:bg-transparent"><TableCell colSpan={10} className="p-0">
               <EmptyState icon={SearchX} title="没有匹配的来源" hint="调整搜索词或筛选条件后重试。">
