@@ -16,6 +16,7 @@ import { api } from "./common";
 import { SectionName } from "./section-icon";
 import { askPermission, setWebPrefs, webNotifySupported, webPrefs, type WebNotifyPrefs } from "./notify-client";
 import { markOnHover, setMarkOnHover } from "./read-store";
+import { clearFlashLog, copyFlashLog, flashLogLength, flashProbeEnabled, setFlashProbeEnabled } from "@/lib/flash-probe";
 
 export type NotifyPrefs = { enabled: boolean; sections: string[]; system?: boolean; scope?: "p0" | "all" };
 const PERM: Record<string, { label: string; v: "success" | "destructive" | "secondary" | "warning" }> = {
@@ -143,19 +144,52 @@ export function NotifyCard({ desktop, server, locked, onSaved }: { desktop: bool
 
 export function GeneralCard() {
   const [hover, setHover] = useState(false);
-  useEffect(() => { setHover(markOnHover()); }, []);
+  const [probe, setProbe] = useState(false);
+  const [logN, setLogN] = useState(0);
+  useEffect(() => { setHover(markOnHover()); setProbe(flashProbeEnabled()); setLogN(flashLogLength()); }, []);
+  const refreshN = () => setLogN(flashLogLength());
+  const toggleProbe = (on: boolean) => {
+    setFlashProbeEnabled(on);
+    setProbe(on);
+    if (on) toast.success("已开启闪屏探测：切换几个页面后再回来复制日志");
+    else toast.message("已关闭闪屏探测");
+  };
+  const copy = async () => {
+    try {
+      const n = await copyFlashLog();
+      setLogN(n);
+      toast.success(n ? `已复制 ${n} 条探测记录` : "日志为空：请先切换几个页面再复制");
+    } catch (e) { toast.error("复制失败", { description: (e as Error).message }); }
+  };
   return (
     <Card className="mt-4">
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><SlidersHorizontal className="size-4 text-faint" />常规</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="grid gap-4">
         <label className="flex cursor-pointer items-start gap-3">
           <div className="flex-1">
             <div className="type-ui font-medium">悬停预览时标为已读</div>
           </div>
           <Switch aria-label="悬停预览时标为已读" checked={hover} onCheckedChange={(v) => { setHover(!!v); setMarkOnHover(!!v); }} />
         </label>
+        <div className="rounded-lg border border-dashed border-border px-3 py-3" data-testid="flash-probe">
+          <label className="flex cursor-pointer items-start gap-3">
+            <div className="flex-1">
+              <div className="type-ui font-medium">闪屏探测（调试）</div>
+              <div className="mt-0.5 type-caption text-muted-foreground">记录切页时侧栏/顶栏是否还在 DOM。仅本机 localStorage，默认关闭。</div>
+            </div>
+            <Switch aria-label="闪屏探测" checked={probe} onCheckedChange={(v) => toggleProbe(!!v)} data-testid="flash-probe-toggle" />
+          </label>
+          {probe && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => void copy()} data-testid="flash-probe-copy">复制闪屏探测日志</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => { clearFlashLog(); refreshN(); toast.message("已清空"); }} data-testid="flash-probe-clear">清空</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={refreshN}>刷新条数</Button>
+              <span className="type-meta text-faint" data-testid="flash-probe-count">{logN} 条</span>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

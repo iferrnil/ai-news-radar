@@ -21,6 +21,7 @@ import * as rs from "./read-store";
 import { initReadSync, useReadVersion } from "./read-store";
 import { handleBatch } from "./notify-client";
 import { cn } from "@/lib/utils";
+import { flashProbeEnabled, initFlashProbe, noteFlashNav } from "@/lib/flash-probe";
 import type { ItemOut } from "@/lib/types";
 import { secIcon } from "./section-icon";
 import { HealthDot, healthOf, healthText } from "./source-health";
@@ -315,6 +316,15 @@ function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const path = usePathname();
   const f = useMemo(() => parseFilters(new URLSearchParams(sp.toString())), [sp]);
+  // Opt-in flash probe (localStorage.radarFlashProbe=1 or ?flashProbe=1): sample chrome DOM for ~500ms after each location change.
+  const probeBoot = useRef(false);
+  useEffect(() => { initFlashProbe(); }, []);
+  useEffect(() => {
+    if (!flashProbeEnabled()) return;
+    const to = `${path}${sp.toString() ? `?${sp.toString()}` : ""}`;
+    if (!probeBoot.current) { probeBoot.current = true; return; } // skip initial mount
+    noteFlashNav(to);
+  }, [path, sp]);
   const [facet, setFacet] = useState<ItemOut[]>([]);
   // read state: see read-store.ts (localStorage + optional server mirror); readVer bumps on every change
   const readVer = useReadVersion();
@@ -388,7 +398,9 @@ function Shell({ children }: { children: React.ReactNode }) {
     if (("section" in p || "source" in p) && !("view" in p)) next.view = ""; // picking a section / source leaves 热点 / 收藏
     if ("p0" in p) setP0For(viewKey(next), !!p.p0); else next.p0 = p0For(viewKey(next));
     if ("unread" in p) setUnreadPref(!!p.unread);
-    router.push(toQuery(next), { scroll: false });
+    const q = toQuery(next);
+    noteFlashNav(q);
+    router.push(q, { scroll: false });
   }, [router]);
   const setF = navigate;
   // first load without ?p0: apply the stored value for this view
@@ -426,7 +438,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const desktopCmd = useCallback((cmd: string) => {
     if (cmd === "sidebar") { if (window.matchMedia("(min-width: 1024px)").matches) toggleSidebar(); else setMobileNav((v) => !v); }
     else if (cmd === "search") setPalette(true);
-    else if (cmd === "settings") router.push("/settings");
+    else if (cmd === "settings") { noteFlashNav("/settings"); router.push("/settings"); }
   }, [toggleSidebar, router]);
   useEffect(() => {
     const w = window as unknown as { __radarCmd?: (c: string) => void; __radarDesktop?: boolean };
