@@ -339,7 +339,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 
 ## 0.14.10 notes
 - Live status is Shell-local + memo `LivePill` (not AppCtx); feed module cache avoids skeleton remount flash; HotTopics `dynamic` has a skeleton `loading`.
-- Flash probe (opt-in `localStorage.radarFlashProbe=1` or `?flashProbe=1`): `src/lib/flash-probe.ts` samples chrome DOM ~500ms after location changes into `window.__radarFlashLog`; Settings › 常规 can copy/clear. Default off.
+- Flash probe (opt-in Settings › 常规 / `localStorage.radarFlashProbe=1` / `?flashProbe=1`): `src/lib/flash-probe.ts` arms on toggle (no reload); samples ~500ms after URL or settings-category changes into `window.__radarFlashLog`; live count + copy/download. Default off.
 - `briefShellMin` (20 runes after URL strip) filters empty shells in `autoPick` / `selectBrief` (Telegram + in-app auto brief).
 - Telegram `briefHTML`: date group headers, numbered linked titles, Part N/M on `splitTG`.
 

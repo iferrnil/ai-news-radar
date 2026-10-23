@@ -316,14 +316,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const path = usePathname();
   const f = useMemo(() => parseFilters(new URLSearchParams(sp.toString())), [sp]);
-  // Opt-in flash probe (localStorage.radarFlashProbe=1 or ?flashProbe=1): sample chrome DOM for ~500ms after each location change.
-  const probeBoot = useRef(false);
+  // Opt-in flash probe: sample chrome DOM ~500ms after each location change (no-op until enabled).
   useEffect(() => { initFlashProbe(); }, []);
   useEffect(() => {
     if (!flashProbeEnabled()) return;
     const to = `${path}${sp.toString() ? `?${sp.toString()}` : ""}`;
-    if (!probeBoot.current) { probeBoot.current = true; return; } // skip initial mount
-    noteFlashNav(to);
+    noteFlashNav(to); // same-path no-op inside noteFlashNav
   }, [path, sp]);
   const [facet, setFacet] = useState<ItemOut[]>([]);
   // read state: see read-store.ts (localStorage + optional server mirror); readVer bumps on every change
