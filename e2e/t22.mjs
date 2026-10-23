@@ -61,9 +61,9 @@ const [A, Bk] = rich; const nameOf = (k) => secs.find((s) => s.key === k)?.name 
   await p.keyboard.press("Escape"); await sleep(300);
   await p.keyboard.press("Escape"); await sleep(200);
   rec("manual: Esc leaves selection mode", await p.getByTestId("pick-bar").count() === 0);
-  // 自动简报 API: ≤10 picked
+  // 自动简报 API: ≤20 picked (24h pool)
   const auto = await (await fetch(B + "/api/brief?section=all")).json();
-  rec("auto brief: at most 10 items", auto.count > 0 && auto.count <= 10, String(auto.count));
+  rec("auto brief: at most 20 items", auto.count > 0 && auto.count <= 20, String(auto.count));
   await ctx.close();
 }
 

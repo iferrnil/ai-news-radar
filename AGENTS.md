@@ -253,14 +253,14 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## 0.7.0 notes
 - MyGo is vendored at `desktop/third_party/mygo` (v0.4.3 + patches, see its `PATCHES.md`): opaque WKWebView by default (debug: create `<data>/debug-webview-transparent` to restore the old see-through webview), plus notification authorization status/request APIs.
 - Notifications are native-only (UNUserNotificationCenter). Releases are signed with a stable self-signed identity (secrets `MACOS_CERTIFICATE*`, `MACOS_SIGNING_IDENTITY`, `MACOS_SELF_SIGNED=1`) so permissions survive updates.
-- Brief: `server/radar/briefpick.go` dedupes then picks ≤10 (4 oldest / 3 middle / 3 newest). AI polish = fetch full text → per-item summary → skill brief → verify (`BRIEF_VERIFY=0` skips).
+- Brief: `server/radar/briefpick.go` — current section · last 24h (`BRIEF_HOURS`), ≤20 (`BRIEF_MAX_ITEMS`); story merge; multi-coverage first; fill prefers Asia/Shanghai 00:00–08:00 then P0; final dedupe; thin full-text dropped + one refill. Manual pick still ≤10. AI polish = fetch → summarize → skill → verify (`BRIEF_VERIFY=0` skips). Telegram scheduled send: `telegram.go` (desktop).
 
 ## 0.8.0 notes
 - Brief = one item per paragraph: `briefMarkdown` writes each item as its own paragraph; AI output goes through `onePerParagraph` (splits prose paragraphs after each `[[n]](url)` run). The built-in skill (v1.1) says the same.
 - Scroll perf: `src/lib/font-warm.ts` preloads LXGW WenKai unicode-range slices for loaded items at idle (slices loading mid-scroll caused full relayouts). The scrolling flag is `.feed-list[data-scrolling]` (not on `<html>`). Feed cards are plain divs (no shadcn Card `:has()` selectors) with `shadow-feed`.
 
 ## 0.9.0 notes
-- Brief toolbar: 自动简报 (`autoPick` in briefpick.go: ≤10 → all; else one per multi-source story, then oldest/newest alternately), 手动简报 (`/api/brief?ids=`, ≤10, web too), 生成文章 (desktop, `POST /api/compose`).
+- Brief toolbar: 自动简报 (`autoPick`: ≤20 → all in 24h pool; multi-source first, then morning/P0 fill), 手动简报 (`/api/brief?ids=`, ≤10), 生成文章 (desktop, `POST /api/compose`).
 - Skill kinds (`skillKinds` in skills.go): brief / twitter / wechat / xhs, settings `<kind>_skill`, built-ins under `server/radar/defaultskill/`. `/api/skills*` take `kind`.
 - Covers: a Skill's output line `<!-- cover-image[ size=WxH]: prompt -->`; `multimodal.go` (OpenAI-compatible images, vision chat). The video-task API (`cover-video`, submit→poll) was removed in 0.14.0; the marker line is still stripped from drafts. `vision: true` in front matter sends item images to the vision model.
 - 工作目录 (was 制品目录): `artifacts.go`, setting `artifacts_dir`, env `ARTIFACTS_DIR`, default `~/Documents/AI News Radar`; desktop only.
@@ -324,3 +324,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
   - Settings test: an unsaved Base URL needs a key in the request.
 - Trendshift: `trendshiftMax = 25` per source (rank order). Same-section daily/weekly dedup is a listing-time SQL filter (`trendshiftDedupSQL` in `hItems`' window branch): an item is hidden when another visible Trendshift item of an enabled source in the same section has the same `lower(title)` (owner/repo) and wins — daily beats weekly, else the newer period, else the higher id. Nothing is deleted (`item_count` still counts both), so moving a source to another section restores both lists at once. Client facets / counts follow because they are computed from the list.
 - Perf: `Row.encode` writes strings/keys with `writeStr` (byte-identical to the encoder; rare cases fall back) and ints/bools inline; `Row.Del` is in place; `all()` reuses its scan pointers. `jsonResponse` caches compressed bodies by ETag (`zCache`, 16 entries; brotli q5 / LGWin 19). `clusterHot` only scores pairs that share a distinctive name (an inverted index), `hotIdx.idf` is precomputed. `warmFonts(regular, bold)` warms the current view only. Numbers were taken with Playwright/CDP scripts (TaskDuration, long tasks, font requests during a full feed scroll) and curl timings against a `vacuum-into` copy of the prod DB with the poller off; `go test ./radar -run x -bench HotCompute` for 热点.
+
+## 0.14.5 notes
+- Auto brief: 24h window + max 20; no hot-topics page; morning (0–8 Asia/Shanghai) fill; final dedupe; body-fail refill once.
+- Telegram (desktop): settings card + `secrets.json` token; scheduler in `StartScheduler`; HTML `sendMessage`; web 404; token never in GET.

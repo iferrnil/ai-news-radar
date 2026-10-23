@@ -140,17 +140,24 @@ func (s *Store) briefRows(scope string, ids []int64) ([]*Row, error) {
 		FROM items i JOIN sources s ON s.id=i.source_id
 		WHERE i.merged_into IS NULL AND i.hidden=0 AND s.enabled=1`
 	args := []any{}
-	if len(ids) > 0 { // 手动简报 / 生成文章: exactly the chosen items
+	if len(ids) > 0 { // 手动简报 / 生成文章: exactly the chosen items (no 24h cut)
 		q += " AND i.id IN (" + strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",") + ")"
 		for _, id := range ids {
 			args = append(args, id)
 		}
-	} else if scope != "all" {
-		q += " AND s.section=?"
-		args = append(args, scope)
+	} else {
+		// 自动简报: current section · last BRIEF_HOURS (default 24); 「全部」 = in_all sections' own 24h pool
+		q += " AND i.published >= ?"
+		args = append(args, briefCutoff())
+		if scope != "all" {
+			q += " AND s.section=?"
+			args = append(args, scope)
+		} else {
+			q += " AND COALESCE((SELECT in_all FROM sections WHERE key=s.section), 1)=1"
+		}
 	}
 	q += ` ORDER BY CASE s.priority WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 ELSE 2 END, i.published DESC LIMIT ?`
-	args = append(args, 400) // candidates; selectBrief dedupes and picks ≤10
+	args = append(args, 400) // candidates; selectBrief dedupes and picks ≤ BRIEF_MAX_ITEMS
 	return all(s.DB, q, args...)
 }
 
@@ -287,13 +294,13 @@ func sentence(it briefItem) string {
 func briefMarkdown(b *briefOut) string {
 	var w strings.Builder
 	fmt.Fprintf(&w, "# %s\n\n", b.Title)
-	pickNote := "近 48 小时"
+	pickNote := "近 24 小时"
 	if b.Manual {
 		pickNote = "手动选择"
 	}
 	fmt.Fprintf(&w, "> 共 %d 条 · %d 个来源 · %s\n\n", b.Count, b.Sources, pickNote)
 	if b.Count == 0 {
-		w.WriteString("近 48 小时暂无内容。\n")
+		w.WriteString("近 24 小时暂无内容。\n")
 		return w.String()
 	}
 	n := 0
@@ -524,6 +531,108 @@ func (s *Store) gatherFacts(rule *briefOut, mode ...string) (*briefFacts, error)
 			}
 			out.Groups, out.Count, out.Sources = groups, kept, len(srcs)
 			out.Markdown = briefMarkdown(&out)
+			// refill dropped slots from the same 24h pool (morning / P0 preference); one round
+			if !out.Manual && kept < briefMax() && out.Scope != "" {
+				ex := map[int64]bool{}
+				var taken []briefKey
+				for gi := range out.Groups {
+					for ii := range out.Groups[gi].Items {
+						it := &out.Groups[gi].Items[ii]
+						ex[it.id] = true
+						r := obj("id", it.id, "title", it.origTitle, "title_zh", it.titleZh, "url", it.URL, "source_id", 0, "source", it.Source, "priority", "", "published", it.Published)
+						taken = append(taken, keyOf(r))
+					}
+				}
+				for _, d := range dropped {
+					// dropped items have no id on briefMiss — exclude by URL via pool filter below
+					_ = d
+				}
+				if pool, err := s.briefRows(out.Scope, nil); err == nil {
+					for _, r := range pool {
+						if NormURL(r.Str("url")) != "" {
+							for _, d := range dropped {
+								if NormURL(d.URL) == NormURL(r.Str("url")) {
+									ex[int64(r.Num("id"))] = true
+								}
+							}
+						}
+					}
+					extra := selectBriefRefill(pool, briefMax()-kept, ex, taken)
+					if len(extra) > 0 {
+						// fetch bodies for replacements; drop again if still thin
+						var urls []string
+						for _, r := range extra {
+							if r.Num("is_x") != 1 {
+								urls = append(urls, r.Str("url"))
+							}
+						}
+						f2 := fetchArticlesRes(urls)
+						s.briefProviderFallback(f2)
+						sib := s.siblingFinder()
+						for _, r := range extra {
+							it := briefItem{Title: r.Str("title"), Summary: oneLine(r.Str("summary")), URL: r.Str("url"), Source: r.Str("source"),
+								Published: r.Num("published"), raw: strings.TrimSpace(r.Str("content")), isX: r.Num("is_x") == 1,
+								image: r.Str("image"), id: int64(r.Num("id")), origTitle: r.Str("title"), titleZh: r.Str("title_zh")}
+							if it.raw == "" {
+								it.raw = strings.TrimSpace(r.Str("summary"))
+							}
+							var body string
+							if it.isX {
+								it.Fetch = &articleRes{Status: "full", Reason: "X 帖子：使用帖子全文", Method: "feed"}
+								body = it.raw
+							} else {
+								fr := f2[it.URL]
+								it.Fetch = &articleRes{Status: fr.Status, Reason: fr.Reason, Method: fr.Method, Extract: fr.Extract}
+								body = fr.Text
+								if fr.Status != "full" {
+									best, from := fr.Text, ""
+									if utf8.RuneCountInString(it.raw) > utf8.RuneCountInString(best) {
+										best, from = it.raw, "订阅源全文"
+									}
+									if st, src := sib(&it); utf8.RuneCountInString(st) > utf8.RuneCountInString(best) {
+										best, from = st, "同一事件「"+src+"」的内容"
+									}
+									if from != "" {
+										body = best
+										it.Fetch.Method = "feed"
+										it.Fetch.Reason = strings.TrimLeft(it.Fetch.Reason+"；已改用"+from, "；")
+									}
+								}
+								if strings.TrimSpace(body) == "" {
+									body = it.Summary
+								}
+							}
+							if it.Fetch.Status != "full" && utf8.RuneCountInString(strings.TrimSpace(body)) < briefDropMin {
+								dropped = append(dropped, briefMiss{Title: it.Title, Source: it.Source, URL: it.URL, Status: it.Fetch.Status, Reason: strings.TrimLeft(it.Fetch.Reason+"；未写入简报", "；"), Dropped: true})
+								continue
+							}
+							// append into groups by source
+							hit := -1
+							for gi := range out.Groups {
+								if out.Groups[gi].Source == it.Source {
+									hit = gi
+									break
+								}
+							}
+							if hit < 0 {
+								out.Groups = append(out.Groups, briefGroup{Source: it.Source, Priority: r.Str("priority"), Items: []briefItem{it}})
+								hit = len(out.Groups) - 1
+							} else {
+								out.Groups[hit].Items = append(out.Groups[hit].Items, it)
+							}
+							text[&out.Groups[hit].Items[len(out.Groups[hit].Items)-1]] = body
+							kept++
+						}
+						out.Count = kept
+						srcs := map[string]bool{}
+						for _, g := range out.Groups {
+							srcs[g.Source] = true
+						}
+						out.Sources = len(srcs)
+						out.Markdown = briefMarkdown(&out)
+					}
+				}
+			}
 			// the copied items lost their entry in text: re-key by URL + title
 			byKey := map[string]string{}
 			for it, t := range text {
@@ -799,9 +908,9 @@ func (s *Store) hBrief(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
-// parseIDs reads "1,2,3" (手动简报): at most BRIEF_MAX_ITEMS (10) distinct ids, sorted.
+// parseIDs reads "1,2,3" (手动简报): at most briefManualCap (10) distinct ids — unchanged from auto's 20.
 func parseIDs(v string) ([]int64, error) {
-	return parseIDsMax(v, envIntDef("BRIEF_MAX_ITEMS", briefPick))
+	return parseIDsMax(v, briefManualCap)
 }
 
 // parseIDsMax: parseIDs with an explicit cap (生成文章: composeMax).

@@ -52,7 +52,7 @@ server/bin/radar-server -ui out   # http://localhost:3000
 
 **仅桌面版**
 
-- AI 简报 / 生成文章（推特串推 · 公众号 · 小红书 Skill）、写作风格、抓取 API（Jina / Firecrawl / crawl4ai）
+- AI 简报 / 生成文章（推特串推 · 公众号 · 小红书 Skill）、写作风格、抓取 API（Jina / Firecrawl / crawl4ai）；桌面版可定时把简报推到 Telegram
 - 原生窗口、菜单栏、签名校验的自动更新（含增量包）
 
 ## 文档

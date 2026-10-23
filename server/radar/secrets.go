@@ -27,6 +27,8 @@ type Stored struct {
 	MM MMConfig `json:"multimodal,omitempty"`
 	// 抓取 API (desktop: 生成文章); see fetchapi.go
 	Fetch FetchKeys `json:"fetchApis,omitempty"`
+	// Telegram Bot API token (desktop scheduled brief); never returned by GET /api/settings
+	TelegramToken string `json:"telegramToken,omitempty"`
 }
 
 func (s *Store) loadSecrets() Stored {

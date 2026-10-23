@@ -127,6 +127,7 @@ func (s *Store) StartScheduler() {
 	sc.mu.Unlock()
 	log.Println("[poller] scheduler started")
 	s.startCacheJanitor(sc.ctx.Done())
+	s.startTelegramScheduler(sc.ctx.Done())
 	time.AfterFunc(5*time.Second, func() { s.tr.backfill(false) })
 	go func() {
 		sc.tick()

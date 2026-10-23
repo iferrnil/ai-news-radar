@@ -37,6 +37,7 @@ func (s *Store) Handler() http.Handler {
 	m.HandleFunc("PATCH /api/settings", s.hSettingsPatch)
 	m.HandleFunc("POST /api/settings/test", s.hSettingsTest)
 	m.HandleFunc("POST /api/settings/notify-test", s.hNotifyTest)
+	m.HandleFunc("POST /api/settings/telegram-test", s.hTelegramTest)
 	m.HandleFunc("GET /api/sources", s.hSourcesGet)
 	m.HandleFunc("POST /api/sources", s.hSourcesPost)
 	m.HandleFunc("PATCH /api/sources/{id}", s.hSourcePatch)
@@ -469,6 +470,7 @@ func (s *Store) settingsOut(w http.ResponseWriter) {
 	out.Set("translate", s.translateStatus())
 	out.Set("deepseek", s.deepseekPublic())
 	out.Set("notify", s.NotifyPrefs())
+	out.Set("telegram", s.TelegramPublic())
 	out.Set("watch", s.WatchPrefs())
 	lex, _ := s.GetSetting("hot_lexicon")
 	out.Set("hotLexicon", lex)
@@ -556,6 +558,24 @@ func (s *Store) hSettingsPatch(w http.ResponseWriter, r *http.Request) {
 		}
 		scope, _ := n["scope"].(string)
 		s.SetNotifyPrefs(en, secs, sys, scope)
+	}
+	if tg, ok := b["telegram"].(map[string]any); ok {
+		if !s.Cfg.Desktop {
+			detail(w, 404, "Telegram 推送仅桌面版可用")
+			return
+		}
+		if SettingsLocked() {
+			detail(w, 403, "设置已锁定（SETTINGS_LOCKED=1）")
+			return
+		}
+		if err := s.SetTelegramPrefs(tg); err != nil {
+			if he, ok := err.(*httpError); ok {
+				detail(w, he.code, he.msg)
+				return
+			}
+			detail(w, 500, err.Error())
+			return
+		}
 	}
 	if wv, ok := b["watch"].(map[string]any); ok {
 		// 关键词 are the user's own view / filter like the translation switches (allowed under SETTINGS_LOCKED)

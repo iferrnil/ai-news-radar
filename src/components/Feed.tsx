@@ -27,7 +27,7 @@ import dynamic from "next/dynamic";
 const BriefDialog = dynamic(() => import("./brief-dialog"), { ssr: false });
 const ArticleDialog = dynamic(() => import("./article-dialog"), { ssr: false });
 const HotTopics = dynamic(() => import("./hot-topics"), { ssr: false });
-const PICK_MAX = { brief: 10, article: 2 } as const; // 手动简报 / 生成文章
+const PICK_MAX = { brief: 10, article: 2 } as const; // 手动简报仍 ≤10；自动简报服务端 BRIEF_MAX_ITEMS 默认 20
 const isDesktop = () => typeof window !== "undefined" && !!(window as unknown as { __radarDesktop?: boolean }).__radarDesktop;
 import type { ItemOut } from "@/lib/types";
 import { useApp } from "./app-shell";
@@ -393,7 +393,7 @@ function FeedList() {
               <TooltipTrigger render={<Button variant="ghost" size="sm" onClick={autoBrief} aria-label="自动简报" data-testid="brief-btn" className="px-1.5 type-caption font-normal text-faint" />}>
                 <FileText className="size-3.5" /><span className="hidden md:inline">自动简报</span>
               </TooltipTrigger>
-              <TooltipContent>自动挑选 {PICK_MAX.brief} 条{briefLabel === "全部" ? "" : `「${briefLabel}」`}内容：多源报道的热点优先，再取最早与最新</TooltipContent>
+              <TooltipContent>自动挑选近 24 小时内最多 20 条{briefLabel === "全部" ? "" : `「${briefLabel}」`}：同事件合并，多源优先，其余偏向前半夜（0–8 点）</TooltipContent>
             </Tooltip>}
             <Tooltip>
               <TooltipTrigger render={<Button variant={pickMode === "brief" ? "secondary" : "ghost"} size="sm" onClick={() => startPick("brief")} aria-pressed={pickMode === "brief"} aria-label="手动简报" data-testid="brief-manual-btn" className="px-1.5 type-caption font-normal text-faint aria-pressed:text-foreground" />}>

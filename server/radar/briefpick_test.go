@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 )
 
 func row(id int, title, url string, src int, pub float64) *Row {
@@ -13,9 +14,9 @@ func row(id int, title, url string, src int, pub float64) *Row {
 func TestBriefDedupe(t *testing.T) {
 	rs := []*Row{
 		row(1, "OpenAI releases GPT-6 with 1M context", "https://openai.com/blog/gpt-6?utm_source=x", 1, 100),
-		row(2, "OpenAI releases GPT-6 with 1M context - The Verge", "https://theverge.com/a", 2, 99), // same title + publisher tail
-		row(3, "Something else", "https://openai.com/blog/gpt-6", 3, 98),                             // same URL (utm dropped)
-		row(4, "OpenAI releases GPT‑6, with a 1M-token context", "https://techcrunch.com/b", 4, 97),  // near-identical
+		row(2, "OpenAI releases GPT-6 with 1M context - The Verge", "https://theverge.com/a", 2, 99),
+		row(3, "Something else", "https://openai.com/blog/gpt-6", 3, 98),
+		row(4, "OpenAI releases GPT‑6, with a 1M-token context", "https://techcrunch.com/b", 4, 97),
 		row(5, "谷歌发布 Gemini 3 多模态模型", "https://a.cn/1", 5, 96),
 		row(6, "谷歌发布Gemini 3多模态模型！", "https://b.cn/2", 6, 95),
 		row(7, "Anthropic raises Series F", "https://x.com/7", 7, 94),
@@ -23,7 +24,7 @@ func TestBriefDedupe(t *testing.T) {
 	}
 	rs[6].Set("title_zh", "")
 	tr := row(9, "Llama 5 开源", "https://y.com/9", 9, 92)
-	tr.Set("title_zh", "Meta open-sources Llama 5") // translated duplicate of 8
+	tr.Set("title_zh", "Meta open-sources Llama 5")
 	rs = append(rs, tr)
 	got := dedupeBrief(rs)
 	var ids []int
@@ -38,48 +39,66 @@ func TestBriefDedupe(t *testing.T) {
 	}
 }
 
-func TestBriefSpreadPick(t *testing.T) {
+func TestBriefAutoPickCapAndMorning(t *testing.T) {
+	// fixed "now": 2026-10-23 14:00 Asia/Shanghai
+	at := time.Date(2026, 10, 23, 14, 0, 0, 0, cst)
+	day0 := time.Date(2026, 10, 23, 0, 0, 0, 0, cst)
 	words := []string{"quantum", "robotics", "pricing", "lawsuit", "benchmark", "chips", "funding", "privacy", "agents", "vision",
 		"speech", "datacenter", "energy", "safety", "education", "medical", "coding", "search", "music", "video",
 		"translation", "weather", "finance", "gaming", "drones", "satellite", "battery", "genome", "climate", "retail"}
 	var rs []*Row
-	for i := 1; i <= 30; i++ { // published = i: 1 oldest … 30 newest
-		rs = append(rs, row(i, fmt.Sprintf("%s %s %d", words[i-1], words[(i*7)%30], i*37), fmt.Sprintf("https://e.com/%d", i), i, float64(i)))
+	// 25 distinct afternoon items (10:00–14:00) + 5 morning (01:00–07:00)
+	for i := 1; i <= 25; i++ {
+		pub := float64(day0.Add(time.Duration(10+i%4)*time.Hour + time.Duration(i)*time.Minute).Unix())
+		rs = append(rs, row(i, fmt.Sprintf("%s %s %d", words[i-1], words[(i*7)%30], i*37), fmt.Sprintf("https://e.com/%d", i), i, pub))
 	}
-	if n := len(dedupeBrief(rs)); n != 30 {
-		t.Fatalf("distinct titles deduped to %d", n)
+	mornWords := []string{"xylophone zebra quarry", "bamboo kettle nectar", "cactus orchid pebble", "dolphin quartz raven", "emerald sapphire tulip"}
+	for i := 1; i <= 5; i++ {
+		pub := float64(day0.Add(time.Duration(i) * time.Hour).Unix())
+		id := 100 + i
+		rs = append(rs, row(id, mornWords[i-1]+fmt.Sprintf(" dawn brief %d", id), fmt.Sprintf("https://m.com/%d", id), id, pub))
 	}
-	order, groups, _ := selectBrief(rs)
-	var pubs []int
-	for _, sid := range order {
-		for _, r := range groups[sid] {
-			pubs = append(pubs, int(r.Num("published")))
+	got := autoPickAt(rs, 20, at, nil)
+	if len(got) != 20 {
+		t.Fatalf("cap 20 got %d", len(got))
+	}
+	// all 5 morning items should be preferred in the fill (no multi-coverage here)
+	morn := 0
+	for _, r := range got {
+		if isMorningSH(r.Num("published"), at) {
+			morn++
 		}
 	}
-	// no duplicates: alternately oldest / newest (1,30,2,29,…), shown newest first
-	if fmt.Sprint(pubs) != "[30 29 28 27 26 5 4 3 2 1]" {
-		t.Fatalf("picked %v", pubs)
+	if morn < 5 {
+		t.Fatalf("expected all 5 morning in pick, got %d", morn)
 	}
-	if got := autoPick(rs[:7], 10); len(got) != 7 || got[0].Num("published") != 7 {
-		t.Fatalf("≤10 keeps all, newest first: %d", len(got))
+	// ≤20 → all (one per story), never pad
+	if g := autoPickAt(rs[:7], 20, at, nil); len(g) != 7 {
+		t.Fatalf("≤20 keeps all: %d", len(g))
+	}
+	// default briefPick is 20
+	if briefPick != 20 {
+		t.Fatalf("briefPick=%d", briefPick)
 	}
 }
 
 func TestBriefAutoPickHot(t *testing.T) {
-	var rs []*Row
+	at := time.Date(2026, 10, 23, 14, 0, 0, 0, cst)
+	day0 := time.Date(2026, 10, 23, 0, 0, 0, 0, cst)
 	words := []string{"quantum", "robotics", "pricing", "lawsuit", "benchmark", "chips", "funding", "privacy", "agents", "vision",
 		"speech", "datacenter", "energy", "safety", "education", "medical", "coding", "search", "music", "video"}
 	words2 := append(append([]string(nil), words...), "translation", "weather", "finance", "gaming", "drones", "satellite", "battery", "genome", "climate", "retail")
+	var rs []*Row
 	for i := 1; i <= 20; i++ {
-		rs = append(rs, row(i, fmt.Sprintf("%s %s %d", words[i-1], words2[(i*7)%30], i*37), fmt.Sprintf("https://e.com/%d", i), i, float64(i)))
+		pub := float64(day0.Add(10*time.Hour + time.Duration(i)*time.Minute).Unix())
+		rs = append(rs, row(i, fmt.Sprintf("%s %s %d", words[i-1], words2[(i*7)%30], i*37), fmt.Sprintf("https://e.com/%d", i), i, pub))
 	}
-	if n := len(dedupeBrief(rs)); n != 20 {
-		t.Fatalf("fixture titles collide: %d", n)
-	}
-	// hot stories in the middle of the window: 3 copies of 10, 2 of 12 (different sources / urls)
-	rs = append(rs, row(101, rs[9].Str("title")+" - The Verge", "https://v.com/a", 50, 10.5), row(102, rs[9].Str("title"), "https://w.com/a", 51, 10.4),
-		row(103, rs[11].Str("title"), "https://v.com/b", 50, 12.5))
-	got := autoPick(rs, 10)
+	// hot: 3 copies of story 10, 2 of 12
+	rs = append(rs,
+		row(101, rs[9].Str("title")+" - The Verge", "https://v.com/a", 50, rs[9].Num("published")+0.5),
+		row(102, rs[9].Str("title"), "https://w.com/a", 51, rs[9].Num("published")+0.4),
+		row(103, rs[11].Str("title"), "https://v.com/b", 50, rs[11].Num("published")+0.5))
+	got := autoPickAt(rs, 10, at, nil)
 	var ids []int
 	for _, r := range got {
 		ids = append(ids, int(r.Num("id")))
@@ -101,15 +120,33 @@ func TestBriefAutoPickHot(t *testing.T) {
 	if len(got) != 10 || n10 != 1 || !(has(12) || has(103)) || (has(12) && has(103)) {
 		t.Fatalf("hot stories once each: %v", ids)
 	}
-	// the remaining 8: 1,20,2,19,3,18,4,17
-	for _, id := range []int{1, 2, 3, 4, 17, 18, 19, 20} {
-		if !has(id) {
-			t.Fatalf("missing %d from the ends: %v", id, ids)
-		}
+	// multi-coverage first: both hot reps present
+	if n10 != 1 || !(has(12) || has(103)) {
+		t.Fatalf("missing hot: %v", ids)
 	}
-	// ≤10 items: all of them (one per story)
-	if g := autoPick(rs[:9], 10); len(g) != 9 {
-		t.Fatalf("≤10 keeps all: %d", len(g))
+}
+
+func TestBriefRepPrefersP0(t *testing.T) {
+	a := row(1, "Same Story Title Alpha Beta", "https://a.com/1", 1, 100)
+	a.Set("priority", "P1")
+	b := row(2, "Same Story Title Alpha Beta - Verge", "https://b.com/2", 2, 99)
+	b.Set("priority", "P0")
+	g := storyGroups([]*Row{a, b})
+	if len(g) != 1 || int(g[0][0].Num("id")) != 2 {
+		t.Fatalf("P0 should be representative: %+v", g[0][0])
+	}
+}
+
+func TestBriefFinalDedupe(t *testing.T) {
+	at := time.Now().In(cst)
+	rs := []*Row{
+		row(1, "OpenAI ships GPT-6 Astra model", "https://a.com/1", 1, 100),
+		row(2, "Anthropic announces Claude Opus 5", "https://b.com/2", 2, 99),
+		row(3, "OpenAI ships GPT-6 Astra model - The Verge", "https://c.com/3", 3, 98), // same story as 1
+	}
+	got := autoPickAt(rs, 20, at, nil)
+	if len(got) != 2 {
+		t.Fatalf("final dedupe: %d", len(got))
 	}
 }
 

@@ -4,14 +4,18 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 )
 
-// Brief item selection (自动简报): stories are matched by URL and same / near-identical title (also across sources
-// and between the original and the translated title); see autoPick. 手动简报 uses exactly the chosen items.
+// Brief item selection (自动简报): current section · last BRIEF_HOURS (default 24) only; never uses the hot-topics
+// page. Stories are matched by URL and same / near-identical title (also across sources and between the original
+// and the translated title). Cap BRIEF_MAX_ITEMS (default 20); never pad. 手动简报 uses exactly the chosen items.
 const (
-	briefPick    = 10
-	briefSimilar = 0.6 // Dice coefficient of character bigrams on normalized titles
+	briefPick      = 20  // 自动简报 default (BRIEF_MAX_ITEMS)
+	briefManualCap = 10  // 手动简报 UI / ids= cap (unchanged)
+	briefHours     = 24  // pool window (BRIEF_HOURS); 全部 uses only its own 24h pool
+	briefSimilar   = 0.6 // Dice coefficient of character bigrams on normalized titles
 )
 
 // titleSuffixes are publisher tails ("… - The Verge", "… | 机器之心") that make one story look different.
@@ -142,7 +146,47 @@ func sameStory(a, b briefKey) bool {
 	return false
 }
 
-// dedupeBrief keeps the first of every story (rows come P0 first, newest first).
+func prioRank(p string) int {
+	switch p {
+	case "P0":
+		return 0
+	case "P1":
+		return 1
+	default:
+		return 2
+	}
+}
+
+// betterRep: prefer P0, then newer (for the story representative).
+func betterRep(a, b *Row) bool {
+	pa, pb := prioRank(a.Str("priority")), prioRank(b.Str("priority"))
+	if pa != pb {
+		return pa < pb
+	}
+	return a.Num("published") > b.Num("published")
+}
+
+// isMorningSH: published today 00:00–08:00 Asia/Shanghai (relative to at).
+func isMorningSH(pub float64, at time.Time) bool {
+	t := time.Unix(int64(pub), 0).In(cst)
+	day0 := time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, cst)
+	return !t.Before(day0) && t.Before(day0.Add(8*time.Hour))
+}
+
+// fillLess: sort key for remaining slots — morning first, then P0, then newer.
+func fillLess(a, b *Row, at time.Time) bool {
+	ma, mb := isMorningSH(a.Num("published"), at), isMorningSH(b.Num("published"), at)
+	if ma != mb {
+		return ma // morning before non-morning
+	}
+	pa, pb := prioRank(a.Str("priority")), prioRank(b.Str("priority"))
+	if pa != pb {
+		return pa < pb
+	}
+	return a.Num("published") > b.Num("published")
+}
+
+// dedupeBrief keeps the first of every story (rows come preferred-rep first).
 func dedupeBrief(rs []*Row) []*Row {
 	var out []*Row
 	var keys []briefKey
@@ -163,7 +207,7 @@ func dedupeBrief(rs []*Row) []*Row {
 	return out
 }
 
-// storyGroups clusters rows into stories (first row of a group = its representative; rows come P0 first, newest first).
+// storyGroups clusters rows into stories. The first row of a group is the representative (P0 then newer).
 func storyGroups(rs []*Row) [][]*Row {
 	var groups [][]*Row
 	var keys []briefKey
@@ -181,50 +225,80 @@ func storyGroups(rs []*Row) [][]*Row {
 			keys = append(keys, k)
 		} else {
 			groups[hit] = append(groups[hit], r)
+			// keep the preferred representative at [0]
+			if betterRep(r, groups[hit][0]) {
+				g := groups[hit]
+				g[0], g[len(g)-1] = g[len(g)-1], g[0]
+				keys[hit] = k
+			}
 		}
 	}
 	return groups
 }
 
-// autoPick (自动简报): ≤n rows → all of them (deduped). Otherwise first one item per story that several items /
-// sources carry (hot topics, most-covered first), then the rest alternately from the oldest and the newest end of
-// the window until n. The result is sorted newest first.
+func briefCutoff() float64 {
+	return now() - float64(envIntDef("BRIEF_HOURS", briefHours))*3600
+}
+
+func briefMax() int { return envIntDef("BRIEF_MAX_ITEMS", briefPick) }
+
+// autoPick (自动简报): one item per story; multi-coverage first (higher coverage first); remaining slots prefer
+// today 00:00–08:00 Asia/Shanghai, then other hours, with P0 weighted; never pad past the pool. Final dedupe.
+// exclude skips already-kept ids (refill after a full-text drop).
 func autoPick(rs []*Row, n int) []*Row {
-	groups := storyGroups(rs)
-	var hot, rest []*Row
-	hotG := [][]*Row{}
+	return autoPickAt(rs, n, time.Now().In(cst), nil)
+}
+
+func autoPickAt(rs []*Row, n int, at time.Time, exclude map[int64]bool) []*Row {
+	if n <= 0 {
+		return nil
+	}
+	var pool []*Row
+	for _, r := range rs {
+		if exclude != nil && exclude[int64(r.Num("id"))] {
+			continue
+		}
+		pool = append(pool, r)
+	}
+	groups := storyGroups(pool)
+	var hotG, restG [][]*Row
 	for _, g := range groups {
 		if len(g) > 1 {
 			hotG = append(hotG, g)
 		} else {
-			rest = append(rest, g[0])
+			restG = append(restG, g)
 		}
 	}
+	sort.SliceStable(hotG, func(i, j int) bool {
+		if len(hotG[i]) != len(hotG[j]) {
+			return len(hotG[i]) > len(hotG[j])
+		}
+		return betterRep(hotG[i][0], hotG[j][0])
+	})
 	var out []*Row
-	if len(rs) <= n {
-		for _, g := range groups {
-			out = append(out, g[0])
+	for _, g := range hotG {
+		if len(out) >= n {
+			break
 		}
-	} else {
-		sort.SliceStable(hotG, func(i, j int) bool { return len(hotG[i]) > len(hotG[j]) })
-		for _, g := range hotG {
-			hot = append(hot, g[0])
+		out = append(out, g[0])
+	}
+	if len(out) < n {
+		rest := make([]*Row, 0, len(restG))
+		for _, g := range restG {
+			rest = append(rest, g[0])
 		}
-		if len(hot) > n {
-			hot = hot[:n]
-		}
-		out = hot
-		sort.SliceStable(rest, func(i, j int) bool { return rest[i].Num("published") < rest[j].Num("published") })
-		lo, hi := 0, len(rest)-1
-		for old := true; len(out) < n && lo <= hi; old = !old {
-			if old {
-				out = append(out, rest[lo])
-				lo++
-			} else {
-				out = append(out, rest[hi])
-				hi--
+		sort.SliceStable(rest, func(i, j int) bool { return fillLess(rest[i], rest[j], at) })
+		for _, r := range rest {
+			if len(out) >= n {
+				break
 			}
+			out = append(out, r)
 		}
+	}
+	// final dedupe pass (same URL / near title / same story)
+	out = dedupeBrief(out)
+	if len(out) > n {
+		out = out[:n]
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Num("published") > out[j].Num("published") })
 	return out
@@ -246,5 +320,35 @@ func groupBrief(picked []*Row) (order []int64, groups map[int64][]*Row, meta map
 
 // selectBrief: the 自动简报 pick (autoPick), grouped by source.
 func selectBrief(rs []*Row) (order []int64, groups map[int64][]*Row, meta map[int64][2]string) {
-	return groupBrief(autoPick(rs, envIntDef("BRIEF_MAX_ITEMS", briefPick)))
+	return groupBrief(autoPick(rs, briefMax()))
+}
+
+// selectBriefRefill picks up to need more rows from rs, skipping exclude ids / stories already represented.
+func selectBriefRefill(rs []*Row, need int, exclude map[int64]bool, takenKeys []briefKey) []*Row {
+	if need <= 0 {
+		return nil
+	}
+	ex := map[int64]bool{}
+	for id := range exclude {
+		ex[id] = true
+	}
+	// also skip same-story as already taken
+	var filtered []*Row
+	for _, r := range rs {
+		if ex[int64(r.Num("id"))] {
+			continue
+		}
+		k := keyOf(r)
+		dup := false
+		for _, o := range takenKeys {
+			if sameStory(k, o) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			filtered = append(filtered, r)
+		}
+	}
+	return autoPickAt(filtered, need, time.Now().In(cst), nil)
 }
