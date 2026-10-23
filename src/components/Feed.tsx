@@ -336,7 +336,11 @@ function FeedList() {
   const pickSet = useMemo(() => new Set(picked), [picked]);
   const onCard = pickMode ? togglePick : openItem;
   const pickOf = (id: number): 0 | 1 | 2 | 3 => (!pickMode ? 0 : pickSet.has(id) ? 2 : picked.length >= pickMax ? 3 : 1);
-  useEffect(() => { document.title = (pend.length ? `(${pend.length}) ` : "") + "AI Radar · 国内外 AI 情报"; }, [pend.length]);
+  // Desktop: leave <title> alone — MyGo syncs it to NSWindow and AppKit relayouts the hidden title bar on every change.
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window as unknown as { __radarDesktop?: boolean }).__radarDesktop) return;
+    document.title = (pend.length ? `(${pend.length}) ` : "") + "AI Radar · 国内外 AI 情报";
+  }, [pend.length]);
 
   const showPending = () => {
     const add = pending.filter((x) => !seen.current.has(x.id));

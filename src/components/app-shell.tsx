@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, memo, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,6 +22,7 @@ import { initReadSync, useReadVersion } from "./read-store";
 import { handleBatch } from "./notify-client";
 import { cn } from "@/lib/utils";
 import { flashProbeEnabled, initFlashProbe, noteFlashNav } from "@/lib/flash-probe";
+import { useClientSearchParams } from "@/lib/client-url";
 import type { ItemOut } from "@/lib/types";
 import { secIcon } from "./section-icon";
 import { HealthDot, healthOf, healthText } from "./source-health";
@@ -324,7 +325,9 @@ const LivePill = memo(function LivePill({ live }: { live: boolean }) {
 });
 
 function Shell({ children }: { children: React.ReactNode }) {
-  const sp = useSearchParams();
+  // Client URL store (not useSearchParams): avoids Suspense around the whole Shell — a null/full-screen
+  // fallback would unmount aside+header and read as a full-webview black flash (same #0e0e11 as the window).
+  const sp = useClientSearchParams();
   const router = useRouter();
   const path = usePathname();
   const f = useMemo(() => parseFilters(new URLSearchParams(sp.toString())), [sp]);
@@ -503,7 +506,10 @@ function Shell({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
             <Button variant="ghost" size="icon" render={<Link href="/sources" aria-label="数据源" />} className="hidden sm:inline-flex"><Database className="size-4" /></Button>
           </header>
-          <main className="app-main @container min-w-0 flex-1">{children}</main>
+          <main className="app-main @container min-w-0 flex-1">
+            {/* Only page trees use useSearchParams (Feed item=, Sources sections=). Keep chrome outside. */}
+            <Suspense fallback={<div className="min-h-[40vh] bg-background" aria-hidden />}>{children}</Suspense>
+          </main>
         </div>
       </div>
       {paletteUsed && <Palette open={palette} onOpenChange={setPalette} />}
@@ -517,8 +523,8 @@ function Shell({ children }: { children: React.ReactNode }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-      {/* null fallback: a full-viewport bg-background placeholder unmounts aside+header and reads as a black flash on opaque WKWebView. */}
-      <TooltipProvider delay={300}><Suspense fallback={null}><Shell>{children}</Shell></Suspense></TooltipProvider>
+      {/* Shell must NOT sit under Suspense: useSearchParams bailout used to wrap aside+header; fallback null/bg-background = full black. */}
+      <TooltipProvider delay={300}><Shell>{children}</Shell></TooltipProvider>
     </ThemeProvider>
   );
 }

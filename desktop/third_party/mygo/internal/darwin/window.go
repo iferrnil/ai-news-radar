@@ -776,7 +776,13 @@ func (w *window) SetBackgroundColor(c platform.Color) {
 		} else {
 			send(w.win, "setBackgroundColor:", uintptr(nsColor(c)))
 		}
-		send(w.web, "setValue:forKey:", uintptr(nsBool(false)), uintptr(nsString("drawsBackground")))
+		// [ai-news-radar patch] Match createWebView: only see-through windows turn drawsBackground off.
+		// Upstream always cleared it here, undoing the opaque webview on every light-dark appearance flip.
+		o := w.opts
+		seeThrough := o != nil && (o.Transparent || o.Vibrancy != "" || (o.BackgroundColor != nil && os.Getenv("MYGO_WEBVIEW_TRANSPARENT") == "1"))
+		if seeThrough {
+			send(w.web, "setValue:forKey:", uintptr(nsBool(false)), uintptr(nsString("drawsBackground")))
+		}
 		if respondsTo(w.web, "setUnderPageBackgroundColor:") {
 			send(w.web, "setUnderPageBackgroundColor:", uintptr(nsColor(c)))
 		}

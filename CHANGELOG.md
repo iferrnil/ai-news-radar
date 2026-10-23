@@ -5,6 +5,11 @@
 
 ## [Unreleased]
 
+## [0.14.14] - 2026-10-24
+
+### Fixed
+- **任意切页整页黑闪（实验）：** 透明 WKWebView A/B 后仍闪，说明「只怪 opaque」不够。0.14.13 把整个 `Shell`（侧栏+顶栏）放在 `useSearchParams` 的 Suspense 下，fallback 为 `null`/深色块时一旦挂起就是整页黑（与窗口 `underPage` `#0e0e11` 同色，透明 webview 也挡不住）。现用 History 订阅的 `useClientSearchParams` 驱动壳层，Suspense 只包 `<main>` 里的页面树；桌面冻结原生窗口标题（避免隐藏 titlebar 随 `<title>` 重排）；`SetBackgroundColor` 与 createWebView 的 opaque 策略对齐；`nav: did-navigate` 写入 server.log 以确认侧栏点击是否硬加载。Credit Lang。
+
 ## [0.14.13] - 2026-10-24
 
 ### 修复

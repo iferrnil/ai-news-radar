@@ -180,6 +180,8 @@
     scrollbar-gutter: stable;
     overflow-y: scroll;
   }
+  /* Explicit solid fill: if a layer clears, underPage/#0e0e11 and page bg stay the same hue but chrome must stay painted. */
+  html { background-color: var(--background); }
   body { @apply bg-background text-foreground; -webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto; font-feature-settings: "cv11", "ss01", "ss03"; font-optical-sizing: auto; text-rendering: optimizeLegibility; }
   /* one stroke weight for every lucide icon (overrides the per-icon attribute) */
   svg.lucide { stroke-width: 1.75; }
@@ -221,6 +223,8 @@ html[data-desktop] .glow { background-attachment: scroll; }
 }
 /* desktop: opaque header (backdrop-filter under the title bar left stale samples of the sidebar behind it) */
 html[data-desktop] .app-header { background-color: var(--background); -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* shell root: never transparent over underPage during main swap */
+.flex.min-h-screen { background-color: var(--background); } /* min-h-screen-shell-bg */
 /* Isolate chrome vs main paints so a feed/settings swap does not clear the sidebar/header layer (opaque WKWebView). */
 .app-sidebar, .app-header { contain: layout paint style; }
 .app-main { contain: layout paint style; }

@@ -16,3 +16,8 @@ examples, JS packages and `_test.go` files of upstream are left out. Patches (se
    answer.
 
 To update MyGo: copy the new release here, re-apply the patches above, keep this file.
+
+3. `internal/darwin/window.go` (`SetBackgroundColor`): upstream always sets `drawsBackground = NO` when updating
+   the background (including light-dark appearance flips). That undid patch (1). Now it uses the same see-through
+   gate as `createWebView` (`Transparent` / `Vibrancy` / `MYGO_WEBVIEW_TRANSPARENT`).
+
