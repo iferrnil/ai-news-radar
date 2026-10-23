@@ -344,3 +344,12 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 
 ## 0.14.8 notes
 - Telegram `tgSend`: no PublicOnly on fixed `api.telegram.org` (Clash/Surge fake-ip → 198.18.0.0/15 false positive). User/content URL SSRF unchanged.
+
+## Cursor Cloud specific instructions
+- Go: `server/go.mod` and `desktop/go.mod` say `go 1.27.1`. Ubuntu's `/usr/bin/go` is 1.22 and cannot compile this module. The Cloud Agent image has Go 1.27.1 at `/usr/local/go`; login shells (`bash -lc`, which is how `install` / `start` run) source `/etc/profile.d/dev-toolchain.sh` (`PATH` with that Go and Node 22, `GOTOOLCHAIN=local`, `CGO_ENABLED=0`). Node 22 is also linked on `/usr/local/bin`. Do not upgrade Go or npm as part of unrelated work.
+- Dev servers come up from the environment `start` script. tmux sessions `radar-api` and `radar-web`; logs `/tmp/radar-api.log` and `/tmp/radar-web.log`.
+  - API: `PORT=3001 DISABLE_POLLER=1 go run ./cmd/radar-server` in `server/`, database `data/news.db` (gitignored). The poller is off so a boot does not hit upstream rate limits. One manual fetch: `POST /api/sources/<id>/fetch`.
+  - UI: `npm run dev -- --hostname 0.0.0.0 --port 3000` proxies `/api` to port 3001 (`API_URL`).
+- Open the UI at `http://localhost:3000`. Next.js dev HMR answers `Origin: http://127.0.0.1:3000` with a raw `Unauthorized` body (no status line). Chrome then reports `ERR_INVALID_HTTP_RESPONSE`, the app never hydrates, and the shell stays on 重连中 / 暂无内容 even though curl to the API works. `localhost` is accepted.
+- Run exactly one `radar-server` per data directory. `DEEPSEEK_API_KEY` is optional; the feed, sources page, and manual fetch work without it.
+- Checks already used in CI: `npm run lint`, `npm run typecheck`, `npm run build`, `(cd server && CGO_ENABLED=0 go test ./...)`, `(cd desktop && CGO_ENABLED=0 go test ./...)`.
