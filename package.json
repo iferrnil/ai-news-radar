@@ -9,7 +9,8 @@
     "lint": "eslint",
     "screenshots": "node scripts/screenshots.mjs",
     "docs:rate-limits": "node --no-warnings scripts/gen-rate-limits-md.mts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:view-ok": "node --experimental-strip-types --test src/lib/view-ok.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

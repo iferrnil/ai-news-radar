@@ -16,7 +16,6 @@ import { api } from "./common";
 import { SectionName } from "./section-icon";
 import { askPermission, setWebPrefs, webNotifySupported, webPrefs, type WebNotifyPrefs } from "./notify-client";
 import { markOnHover, setMarkOnHover } from "./read-store";
-import { FLASH_PROBE_EVENT, clearFlashLog, copyFlashLog, flashLogLength, flashProbeEnabled, setFlashProbeEnabled } from "@/lib/flash-probe";
 
 export type NotifyPrefs = { enabled: boolean; sections: string[]; system?: boolean; scope?: "p0" | "all" };
 const PERM: Record<string, { label: string; v: "success" | "destructive" | "secondary" | "warning" }> = {
@@ -144,36 +143,7 @@ export function NotifyCard({ desktop, server, locked, onSaved }: { desktop: bool
 
 export function GeneralCard() {
   const [hover, setHover] = useState(false);
-  const [probe, setProbe] = useState(false);
-  const [logN, setLogN] = useState(0);
-  useEffect(() => { setHover(markOnHover()); setProbe(flashProbeEnabled()); setLogN(flashLogLength()); }, []);
-  // live count while probe is on (bursts emit FLASH_PROBE_EVENT)
-  useEffect(() => {
-    if (!probe) return;
-    const sync = () => setLogN(flashLogLength());
-    sync();
-    window.addEventListener(FLASH_PROBE_EVENT, sync);
-    const t = setInterval(sync, 500);
-    return () => { window.removeEventListener(FLASH_PROBE_EVENT, sync); clearInterval(t); };
-  }, [probe]);
-  const refreshN = () => setLogN(flashLogLength());
-  const toggleProbe = (on: boolean) => {
-    setFlashProbeEnabled(on); // arms immediately when on (no reload)
-    setProbe(on);
-    if (on) {
-      setLogN(flashLogLength()); // setFlashProbeEnabled already arms + baseline sample
-      toast.success("已开启：请切换侧栏页面（或本页左侧分类），条数会自动增加");
-    } else toast.message("已关闭闪屏探测");
-  };
-  const copy = async () => {
-    try {
-      const { n, via } = await copyFlashLog();
-      setLogN(n);
-      if (!n) toast.message("日志为空：请先切换几个页面再复制");
-      else if (via === "clipboard") toast.success(`已复制 ${n} 条探测记录`);
-      else toast.success(`已下载 ${n} 条探测记录（剪贴板不可用）`);
-    } catch (e) { toast.error("导出失败", { description: (e as Error).message }); }
-  };
+  useEffect(() => { setHover(markOnHover()); }, []);
   return (
     <Card className="mt-4">
       <CardHeader>
@@ -186,23 +156,6 @@ export function GeneralCard() {
           </div>
           <Switch aria-label="悬停预览时标为已读" checked={hover} onCheckedChange={(v) => { setHover(!!v); setMarkOnHover(!!v); }} />
         </label>
-        <div className="rounded-lg border border-dashed border-border px-3 py-3" data-testid="flash-probe">
-          <label className="flex cursor-pointer items-start gap-3">
-            <div className="flex-1">
-              <div className="type-ui font-medium">闪屏探测（调试）</div>
-              <div className="mt-0.5 type-caption text-muted-foreground">开启后立即生效（不用重启）。切换侧栏页面或本页左侧分类时采样；条数会自动更新。仅本机 localStorage，默认关闭。</div>
-            </div>
-            <Switch aria-label="闪屏探测" checked={probe} onCheckedChange={(v) => toggleProbe(!!v)} data-testid="flash-probe-toggle" />
-          </label>
-          {probe && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => void copy()} data-testid="flash-probe-copy">复制闪屏探测日志</Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => { clearFlashLog(); refreshN(); toast.message("已清空"); }} data-testid="flash-probe-clear">清空</Button>
-              <Button type="button" size="sm" variant="ghost" onClick={refreshN}>刷新条数</Button>
-              <span className="type-meta text-faint" data-testid="flash-probe-count">{logN} 条</span>
-            </div>
-          )}
-        </div>
       </CardContent>
     </Card>
   );

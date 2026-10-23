@@ -134,9 +134,10 @@ func main() {
 			}
 		})
 
-		// Soft History API nav does not fire these; a line here during a sidebar click means a hard document load
-		// (out/*.html) — the empty Suspense body until hydrate looks like a full-webview black flash.
-		win.Page().OnDidNavigate(func(url string) { log.Printf("nav: did-navigate %s", url) })
+		// Soft History nav must not fire did-navigate. Opt-in: `touch <data>/debug-nav-log` to log hard loads again.
+		if _, err := os.Stat(filepath.Join(data, "debug-nav-log")); err == nil {
+			win.Page().OnDidNavigate(func(url string) { log.Printf("nav: did-navigate %s", url) })
+		}
 		win.Page().OnPageTitleUpdated(func(e *mygo.TitleEvent) {
 			// Keep NSWindow title = appName. Page <title> changes on every route/unread bump; AppKit relayouts the
 			// hidden inset title bar on setTitle, which can blank the WKWebView content behind the traffic lights.

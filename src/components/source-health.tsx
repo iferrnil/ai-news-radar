@@ -1,8 +1,9 @@
 "use client";
 import { cn } from "@/lib/utils";
+import { healthLevelOf, type HealthLevel } from "@/lib/view-ok";
 import { type SourceRow, bj } from "./common";
 
-export type HealthLevel = "ok" | "degraded" | "down" | "open" | "unknown" | "off";
+export type { HealthLevel };
 export const KIND_ZH: Record<string, string> = {
   timeout: "超时", network: "网络错误", http: "HTTP 错误", rate_limit: "被限流 (429)", not_found: "不存在 (404)",
   false_404: "FxEmbed 伪 404", parse: "解析失败", other: "其他错误",
@@ -14,13 +15,7 @@ export function healthOf(s: SourceRow, now = Date.now() / 1000) {
   const n = runs.length, ok = [...runs].filter((c) => c === "1").length;
   const rate = n ? ok / n : null;
   const open = !!(s.h_open && s.h_open > now);
-  let level: HealthLevel;
-  if (!s.enabled || !s.supported) level = "off";
-  else if (open) level = "open";
-  else if (!n) level = s.last_error ? "down" : "unknown";
-  else if ((s.h_consec ?? 0) >= 2 || (runs.endsWith("0") && rate! < 0.5)) level = "down";
-  else if (rate! < 0.9 || runs.endsWith("0")) level = "degraded";
-  else level = "ok";
+  const level = healthLevelOf(s, now);
   return { level, rate, n, ok, open, runs };
 }
 

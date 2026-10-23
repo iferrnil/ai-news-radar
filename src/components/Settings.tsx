@@ -19,7 +19,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { type TrScopes, api, secZh } from "./common";
 import { GeneralCard, NotifyCard, UpdateRow, type NotifyPrefs } from "./settings-extra";
-import { flashProbeEnabled, noteFlashNav } from "@/lib/flash-probe";
 import { softNav } from "@/lib/client-url";
 
 const SkillCard = dynamic(() => import("./settings-skill"), { ssr: false });
@@ -90,13 +89,10 @@ export default function Settings() {
   }, [visibleCats, cat]);
 
   const pick = (id: Cat) => {
-    const prev = cat;
     setCat(id);
     try { localStorage.setItem(CAT_KEY, id); } catch { /* */ }
     // short ↔ tall panels: keep the viewport at the top so content width/scrollbar stay predictable
     if (typeof window !== "undefined") window.scrollTo(0, 0);
-    // settings left-nav is not a Next route — still record for flash digs
-    if (flashProbeEnabled() && id !== prev) noteFlashNav(`/settings#${id}`);
   };
 
   const patch = async (body: object, what: typeof busy, msg: string) => {

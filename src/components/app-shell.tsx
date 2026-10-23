@@ -19,8 +19,8 @@ import * as rs from "./read-store";
 import { initReadSync, useReadVersion } from "./read-store";
 import { handleBatch } from "./notify-client";
 import { cn } from "@/lib/utils";
-import { flashProbeEnabled, initFlashProbe, noteFlashNav } from "@/lib/flash-probe";
 import { softNav, useClientPathname, useClientSearchParams } from "@/lib/client-url";
+import { viewSourcesOk } from "@/lib/view-ok";
 import ClientOutlet from "@/components/client-outlet";
 import type { ItemOut } from "@/lib/types";
 import { secIcon } from "./section-icon";
@@ -331,13 +331,6 @@ function Shell({ children }: { children: React.ReactNode }) {
   const sp = useClientSearchParams();
   const path = useClientPathname();
   const f = useMemo(() => parseFilters(new URLSearchParams(sp.toString())), [sp]);
-  // Opt-in flash probe: sample chrome DOM ~500ms after each location change (no-op until enabled).
-  useEffect(() => { initFlashProbe(); }, []);
-  useEffect(() => {
-    if (!flashProbeEnabled()) return;
-    const to = `${path}${sp.toString() ? `?${sp.toString()}` : ""}`;
-    noteFlashNav(to); // same-path no-op inside noteFlashNav
-  }, [path, sp]);
   const [facet, setFacet] = useState<ItemOut[]>([]);
   // read state: see read-store.ts (localStorage + optional server mirror); readVer bumps on every change
   const readVer = useReadVersion();
@@ -412,7 +405,6 @@ function Shell({ children }: { children: React.ReactNode }) {
     if ("p0" in p) setP0For(viewKey(next), !!p.p0); else next.p0 = p0For(viewKey(next));
     if ("unread" in p) setUnreadPref(!!p.unread);
     const q = toQuery(next);
-    noteFlashNav(q);
     // History soft nav — never Next router.push (static-export MPA → did-navigate → black flash on WKWebView).
     startTransition(() => { softNav(q, { scroll: false }); });
   }, []);
@@ -452,7 +444,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const desktopCmd = useCallback((cmd: string) => {
     if (cmd === "sidebar") { if (window.matchMedia("(min-width: 1024px)").matches) toggleSidebar(); else setMobileNav((v) => !v); }
     else if (cmd === "search") setPalette(true);
-    else if (cmd === "settings") { noteFlashNav("/settings"); startTransition(() => { softNav("/settings"); }); }
+    else if (cmd === "settings") { startTransition(() => { softNav("/settings"); }); }
   }, [toggleSidebar]);
   useEffect(() => {
     const w = window as unknown as { __radarCmd?: (c: string) => void; __radarDesktop?: boolean };
@@ -476,18 +468,14 @@ function Shell({ children }: { children: React.ReactNode }) {
     [facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, open, setOpen, addOpen, onStream, tr, settingsLocked, reloadTr, loc]);
   const filterCtx = useMemo(() => ({ f, setF, navigate, trView }), [f, setF, navigate, trView]);
   // Green Live only when SSE is up and the current feed view's sources look healthy.
-  const viewOk = useMemo(() => {
-    if (path !== "/") return true;
-    const active = sources.filter((s) => s.enabled && s.supported);
-    const inView = f.source != null ? active.filter((s) => s.id === f.source)
-      : f.section ? active.filter((s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }) === f.section)
-      : active.filter((s) => inAll(sectionOf({ ...s, is_x: s.type.startsWith("x") })));
-    if (!inView.length) return true;
-    return !inView.some((s) => {
-      const l = healthOf(s).level;
-      return l === "degraded" || l === "down" || l === "open" || !!s.last_error;
-    });
-  }, [path, sources, f.source, f.section]);
+  const viewOk = useMemo(
+    () => viewSourcesOk(
+      path, sources, { source: f.source, section: f.section || null },
+      (s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }),
+      inAll,
+    ),
+    [path, sources, f.source, f.section],
+  );
   const title = path === "/sources" ? "数据源" : path === "/settings" ? "设置" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
     : f.view === "hot" ? "热点" : f.view === "fav" ? "收藏" : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
   useEffect(() => {
