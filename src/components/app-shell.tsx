@@ -47,7 +47,7 @@ type Ctx = {
   /** Switch the feed view (section / source), keeping the P0 toggle. */
   navigate: (p: Partial<Filters>) => void;
   facet: ItemOut[]; setFacet: (i: ItemOut[]) => void; isRead: (id: number) => boolean; markRead: (id: number) => void; markManyRead: (ids: number[]) => boolean; markManyUnread: (ids: number[]) => void; readVer: number; sources: SourceRow[]; reloadSources: () => Promise<void>;
-  live: boolean; setLive: (b: boolean) => void; open: ItemOut | null; setOpen: (i: ItemOut | null) => void;
+  open: ItemOut | null; setOpen: (i: ItemOut | null) => void;
   sections: Section[]; // built-in + user-created (re-render trigger; read via allSections()/secZh too)
   setPalette: (b: boolean) => void; addOpen: boolean; setAddOpen: (b: boolean) => void;
   onStream: (fn: (ev: string, data: any) => void) => () => void;
@@ -289,6 +289,27 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
   );
 });
 
+
+/** SSE status badge. `live` stays OUT of AppCtx so Live↔重连中 does not rebuild the feed (WKWebView black flash). */
+const LivePill = memo(function LivePill({ live }: { live: boolean }) {
+  return (
+    <Tooltip>
+      {/* Fixed-width shell: "Live" vs "重连中" must not resize the badge and shove the header. */}
+      <TooltipTrigger render={<Badge variant="outline" className="hidden h-6 w-[4.75rem] shrink-0 justify-center gap-1.5 px-2 text-muted-foreground sm:inline-flex" data-testid="live-pill" />}>
+        <span className="relative flex size-1.5 shrink-0">
+          {live && <span className="absolute inline-flex size-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_3_forwards] rounded-full bg-emerald-400 opacity-75" />}
+          <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-amber-500")} />
+        </span>
+        <span className="relative inline-grid justify-items-start type-caption leading-none">
+          <span className="invisible col-start-1 row-start-1" aria-hidden>重连中</span>
+          <span className="col-start-1 row-start-1">{live ? "Live" : "重连中"}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{live ? "实时推送已连接（SSE）" : "实时推送已断开，正在自动重连；内容仍可浏览"}</TooltipContent>
+    </Tooltip>
+  );
+});
+
 function Shell({ children }: { children: React.ReactNode }) {
   const sp = useSearchParams();
   const router = useRouter();
@@ -301,7 +322,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- new identity per read change, so memoized consumers re-render
   const isRead = useCallback((id: number) => rs.isRead(id), [readVer]);
   const [sources, setSources] = useState<SourceRow[]>([]);
-  const [live, setLive] = useState(false);
+  // optimistic Live: avoid 重连中 flash before SSE opens; not in AppCtx (see LivePill)
+  const [live, setLive] = useState(true);
   const [tr, setTr] = useState<TrInfo | null>(null);
   const [settingsLocked, setSettingsLocked] = useState(false);
   const reloadTr = useCallback(async () => {
@@ -334,11 +356,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => { reloadTrRef.current = reloadTr; }, [reloadTr]);
   const listeners = useRef(new Set<(ev: string, data: any) => void>());
   const onStream = useCallback((fn: (ev: string, data: any) => void) => { listeners.current.add(fn); return () => { listeners.current.delete(fn); }; }, []);
+  // One EventSource for stream events + live status. live is NOT in AppCtx: status flips only
+  // re-render Shell + memoized LivePill, not Feed/Sidebar (that full rebuild flashed black in WKWebView).
   useEffect(() => {
     const es = new EventSource("/api/stream");
     let dropTimer: ReturnType<typeof setTimeout> | undefined;
     es.onopen = () => { clearTimeout(dropTimer); setLive(true); };
-    // Debounce offline: a short EventSource blip (tab stall / section switch work) must not shrink/flash the Live pill.
     es.onerror = () => { clearTimeout(dropTimer); dropTimer = setTimeout(() => setLive(false), 800); };
     for (const ev of ["item", "update", "removed", "sources", "notify", "translate", "fav"]) es.addEventListener(ev, (e) => {
       const d = JSON.parse((e as MessageEvent).data); listeners.current.forEach((fn) => fn(ev, d));
@@ -422,8 +445,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   const markManyRead = useCallback((ids: number[]) => rs.markRead(ids), []);
   const markManyUnread = useCallback((ids: number[]) => rs.markUnread(ids), []);
   const trView = !!tr && trOnFor(tr.scopes, f.source, f.source != null ? sources.find((s) => s.id === f.source)?.section ?? null : f.section || null);
-  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, setLive, open, setOpen, setPalette, addOpen, setAddOpen, onStream, tr, settingsLocked, reloadTr, trView, loc }),
-    [f, setF, navigate, facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, live, open, setOpen, addOpen, onStream, tr, settingsLocked, reloadTr, trView, loc]);
+  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, open, setOpen, setPalette, addOpen, setAddOpen, onStream, tr, settingsLocked, reloadTr, trView, loc }),
+    [f, setF, navigate, facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, open, setOpen, addOpen, onStream, tr, settingsLocked, reloadTr, trView, loc]);
   const title = path === "/sources" ? "数据源" : path === "/settings" ? "设置" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
     : f.view === "hot" ? "热点" : f.view === "fav" ? "收藏" : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
 
@@ -449,22 +472,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <Search className="size-3.5" /><span className="truncate">搜索新闻、来源、命令…</span>
               <Kbd className="ml-auto hidden bg-background/80 font-mono shadow-hair sm:inline-flex"><CommandIcon className="size-2.5" />K</Kbd>
             </Button>
-            <Tooltip>
-              {/* Fixed-width shell: "Live" vs "重连中" used to resize the badge and shove the header (search + icons).
-                  Reserve the longer label's width; ping stays absolute so it never affects layout. */}
-              <TooltipTrigger render={<Badge variant="outline" className="hidden h-6 w-[4.75rem] shrink-0 justify-center gap-1.5 px-2 text-muted-foreground sm:inline-flex" data-testid="live-pill" />}>
-                <span className="relative flex size-1.5 shrink-0">
-                  {/* pings 3× after (re)connecting, then rests: an endless animation kept the desktop app repainting (~17% CPU idle) */}
-                  {live && <span className="absolute inline-flex size-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_3_forwards] rounded-full bg-emerald-400 opacity-75" />}
-                  <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-amber-500")} />
-                </span>
-                <span className="relative inline-grid justify-items-start type-caption leading-none">
-                  <span className="invisible col-start-1 row-start-1" aria-hidden>重连中</span>
-                  <span className="col-start-1 row-start-1">{live ? "Live" : "重连中"}</span>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{live ? "实时推送已连接（SSE）" : "实时推送已断开，正在自动重连；内容仍可浏览"}</TooltipContent>
-            </Tooltip>
+            <LivePill live={live} />
             {trUsed ? <TranslateMenu defaultOpen /> : <TrButton onClick={() => setTrUsed(true)} />}
             <ThemeToggle />
             <Button variant="ghost" size="icon" render={<Link href="/sources" aria-label="数据源" />} className="hidden sm:inline-flex"><Database className="size-4" /></Button>
@@ -482,7 +490,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-      <TooltipProvider delay={300}><Suspense><Shell>{children}</Shell></Suspense></TooltipProvider>
+      <TooltipProvider delay={300}><Suspense fallback={<div className="min-h-screen bg-background" aria-hidden />}><Shell>{children}</Shell></Suspense></TooltipProvider>
     </ThemeProvider>
   );
 }

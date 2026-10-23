@@ -337,6 +337,11 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - `html { scrollbar-gutter: stable; overflow-y: scroll; }` — settings category switch (and Select open) must not change layout width when a classic scrollbar appears.
 - Select defaults: `modal={false}`, `alignItemWithTrigger={false}` (portal overlay, no body scroll-lock).
 
+## 0.14.10 notes
+- Live status is Shell-local + memo `LivePill` (not AppCtx); feed module cache avoids skeleton remount flash; HotTopics `dynamic` has a skeleton `loading`.
+- `briefShellMin` (20 runes after URL strip) filters empty shells in `autoPick` / `selectBrief` (Telegram + in-app auto brief).
+- Telegram `briefHTML`: date group headers, numbered linked titles, Part N/M on `splitTG`.
+
 ## 0.14.9 notes
 - Telegram section Select: `SelectValue` children map id → section name (no icons); same pattern as /sources filter.
 - Telegram test: PATCH current prefs first; failure JSON includes `telegram`; client clears `busy` in `finally` and drops `lastError` on success.

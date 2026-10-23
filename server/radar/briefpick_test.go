@@ -162,3 +162,29 @@ func TestDiceVecMatchesDice(t *testing.T) {
 		}
 	}
 }
+
+func TestBriefShellFilter(t *testing.T) {
+	at := time.Date(2026, 10, 23, 14, 0, 0, 0, cst)
+	fat := row(1, "Has real body about models shipping", "https://e.com/1", 1, float64(at.Unix()))
+	fat.Set("summary", "A substantial summary with enough words to clear the empty-shell threshold for auto briefing.")
+	link := row(2, "Just a link", "https://e.com/only", 2, float64(at.Unix())-10)
+	link.Set("summary", "https://e.com/only")
+	link.Set("content", "https://e.com/only")
+	tiny := row(3, "短", "https://e.com/short", 3, float64(at.Unix())-20)
+	tiny.Set("summary", "ok")
+	tiny.Set("content", "ok")
+	if isBriefShell(fat) {
+		t.Fatal("fat body should pass")
+	}
+	if !isBriefShell(link) || !isBriefShell(tiny) {
+		t.Fatal("link-only / few words should be shells")
+	}
+	got := autoPickAt([]*Row{fat, link, tiny}, 20, at, nil)
+	if len(got) != 1 || int(got[0].Num("id")) != 1 {
+		ids := []int{}
+		for _, r := range got {
+			ids = append(ids, int(r.Num("id")))
+		}
+		t.Fatalf("shells dropped from pick: %v", ids)
+	}
+}

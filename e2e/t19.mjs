@@ -55,6 +55,22 @@ for (const desktop of [false, true]) {
   await sleep(50);
   const w2 = await pill.evaluate((el) => el.getBoundingClientRect().width);
   rec(`${tag}: Live pill width stable across Live/重连中`, Math.abs(w1 - w2) < 1, `w1=${w1} w2=${w2}`);
+  // Live→重连中 must not blank <main> (root cause was AppCtx rebuild + 热点 dynamic with no fallback)
+  await p.evaluate(() => { window.__blankMs = 0; window.__blankLast = performance.now();
+    const tick = () => {
+      const main = document.querySelector("main");
+      const blank = !main || main.childElementCount === 0 || (main.innerHTML.length < 80 && !main.querySelector("[data-slot=card],[data-slot=skeleton],[data-slot=empty]"));
+      const now = performance.now();
+      if (blank) window.__blankMs += now - window.__blankLast;
+      window.__blankLast = now;
+      window.__blankRaf = requestAnimationFrame(tick);
+    };
+    window.__blankRaf = requestAnimationFrame(tick);
+  });
+  const secBtn = p.locator(".app-sidebar").getByRole("button", { name: /^全部|^实验室|^国内/ }).first();
+  if (await secBtn.count()) { await secBtn.click(); await sleep(200); await p.locator(".app-sidebar").getByRole("button", { name: /^热点/ }).click(); await sleep(400); }
+  const blankMs = await p.evaluate(() => { cancelAnimationFrame(window.__blankRaf); return window.__blankMs; });
+  rec(`${tag}: section/热点 switch main blank duration ~0`, blankMs < 120, `blankMs=${blankMs}`);
   await ctx.close();
 }
 

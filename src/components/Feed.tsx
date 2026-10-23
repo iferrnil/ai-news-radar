@@ -26,7 +26,15 @@ import { EmptyState } from "./empty-state";
 import dynamic from "next/dynamic";
 const BriefDialog = dynamic(() => import("./brief-dialog"), { ssr: false });
 const ArticleDialog = dynamic(() => import("./article-dialog"), { ssr: false });
-const HotTopics = dynamic(() => import("./hot-topics"), { ssr: false });
+const HotTopics = dynamic(() => import("./hot-topics"), {
+  ssr: false,
+  // Keep the feed chrome painted while the chunk loads — empty main was the WKWebView black flash on 热点.
+  loading: () => (
+    <div className={cn("mx-auto w-full max-w-[1480px] pb-24 pt-4", "px-4 sm:px-6 xl:px-8 2xl:px-10")}>
+      <div className="mt-4 space-y-3">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[104px] rounded-xl" />)}</div>
+    </div>
+  ),
+});
 const PICK_MAX = { brief: 10, article: 2 } as const; // 手动简报仍 ≤10；自动简报服务端 BRIEF_MAX_ITEMS 默认 20
 const isDesktop = () => typeof window !== "undefined" && !!(window as unknown as { __radarDesktop?: boolean }).__radarDesktop;
 import type { ItemOut } from "@/lib/types";
@@ -143,6 +151,9 @@ export default function Feed() {
   return f.view === "hot" ? <HotTopics /> : <FeedList />;
 }
 
+// Survive Soft remounts (Suspense / query nav): keep the last feed so Live→重连中 never blanks to skeletons.
+let feedCache: ItemOut[] | null = null;
+
 function FeedList() {
   const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, markRead, markManyRead, markManyUnread, loc, sections } = useApp();
   const [briefOpen, setBriefOpen] = useState(false);
@@ -177,12 +188,16 @@ function FeedList() {
     if (pickMode === "brief") { setBriefIds([...picked]); setBriefOpen(true); } else setArticleOpen(true);
   };
   const secReady = sections.length > 0 || sectionsReady(); // 全部 must know which sections are excluded before rendering
-  const [feedRaw, setItems] = useState<ItemOut[]>([]);
+  const [feedRaw, setItems] = useState<ItemOut[]>(() => feedCache ?? []);
   // 收藏: favorites of any age (the feed itself is the retention window)
   const [favRaw, setFavRaw] = useState<ItemOut[] | null>(null);
-  const loadFav = useCallback(async () => { try { setFavRaw(await api<ItemOut[]>("/api/items?fav=1&limit=2000&zh=1")); } catch { setFavRaw((c) => c ?? []); } }, []);
+  const loadFav = useCallback(async () => {
+    try { setFavRaw(await api<ItemOut[]>("/api/items?fav=1&limit=2000&zh=1")); }
+    catch { setFavRaw((c) => c ?? []); }
+  }, []);
   useEffect(() => { if (favMode) void loadFav(); }, [favMode, loadFav]);
-  const raw = useMemo(() => (favMode ? favRaw ?? [] : feedRaw), [favMode, favRaw, feedRaw]);
+  // While 收藏 is fetching (favRaw == null), keep the previous feed painted — never blank the grid.
+  const raw = useMemo(() => (favMode ? favRaw ?? feedRaw : feedRaw), [favMode, favRaw, feedRaw]);
   const onFav = useCallback((it: ItemOut) => {
     const on = !it.fav;
     const flip = (c: ItemOut[]) => c.map((x) => (x.id === it.id ? { ...x, fav: on } : x));
@@ -197,7 +212,8 @@ function FeedList() {
   }, [raw, loc, enabledIds, favMode]);
   const [pending, setPending] = useState<ItemOut[]>([]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
+  // If we already have a cache, paint it immediately (no skeleton flash on remount / Live blip).
+  const [loading, setLoading] = useState(() => !feedCache);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [cursor, setCursor] = useState(-1);
@@ -211,6 +227,7 @@ function FeedList() {
     try { rs = await api<ItemOut[]>(`/api/items?limit=1000&zh=1`); } // translations are picked per item by loc()
     catch (e) { setLoadErr(e instanceof Error ? e.message : String(e)); setLoading(false); return; }
     seen.current = new Set(rs.map((r) => r.id));
+    feedCache = rs;
     setLoadErr(null); setItems(rs); setPending([]); setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -429,8 +446,10 @@ function FeedList() {
         <EmptyState icon={WifiOff} tone="error" className="mt-6 rounded-xl border border-dashed py-14" title="加载失败" hint={`无法获取内容：${loadErr}`}>
           <Button variant="outline" size="sm" onClick={() => { setLoading(true); load(); }}><RefreshCw />重试</Button>
         </EmptyState>
-      ) : loading || !secReady || (favMode && favRaw == null) ? (
-        <div className={cn(GRID, "mt-4")}>{Array.from({ length: 12 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>
+      ) : (loading && !feedRaw.length) || !secReady ? (
+        <div className={cn(GRID, "mt-4")} data-testid="feed-skeleton">{Array.from({ length: 12 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>
+      ) : view.length === 0 && favMode && favRaw == null ? (
+        <div className={cn(GRID, "mt-4")} data-testid="feed-skeleton">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className={cn(CARD_H, "rounded-xl")} />)}</div>
       ) : view.length === 0 && favMode ? (
         <EmptyState icon={Star} className="mt-6 rounded-xl border border-dashed py-14" title={f.unread || f.p0 || f.kw ? "没有符合条件的收藏" : "还没有收藏"} hint="在卡片或详情里点 ☆ 收藏选题；收藏的内容不会被 48 小时清理。" />
       ) : view.length === 0 ? (

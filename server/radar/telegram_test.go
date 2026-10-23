@@ -70,14 +70,20 @@ func TestBriefHTMLAndSplit(t *testing.T) {
 	if !strings.Contains(h, "<b>") || !strings.Contains(h, "GPT &lt;6&gt;") || !strings.Contains(h, "a &amp; b") {
 		t.Fatalf("html escape: %s", h)
 	}
+	if !strings.Contains(h, "<a href=") || !strings.Contains(h, "——") {
+		t.Fatalf("expected linked title + date header: %s", h)
+	}
 	big := strings.Repeat("段落内容测试 ", 500)
 	parts := splitTG(big, 400)
 	if len(parts) < 2 {
 		t.Fatalf("expected split, got %d", len(parts))
 	}
-	for _, p := range parts {
+	for i, p := range parts {
 		if len([]rune(p)) > 400 {
 			t.Fatalf("part too long: %d", len([]rune(p)))
+		}
+		if !strings.Contains(p, "Part ") {
+			t.Fatalf("part %d missing Part header: %q", i, p[:40])
 		}
 	}
 }

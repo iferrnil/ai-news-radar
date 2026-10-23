@@ -1,11 +1,13 @@
 package radar
 
 import (
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Brief item selection (自动简报): current section · last BRIEF_HOURS (default 24) only; never uses the hot-topics
@@ -16,7 +18,35 @@ const (
 	briefManualCap = 10  // 手动简报 UI / ids= cap (unchanged)
 	briefHours     = 24  // pool window (BRIEF_HOURS); 全部 uses only its own 24h pool
 	briefSimilar   = 0.6 // Dice coefficient of character bigrams on normalized titles
+	// briefShellMin: after stripping URLs + whitespace, content|summary below this many runes is an
+	// empty shell (link-only / a few words; ~20 keeps short-but-real RSS blurbs) — skipped at 自动简报 pick so in-app + Telegram never get them.
+	// Manual picks (ids=) are unchanged. AI polish still uses briefDropMin (120) on fetched full text.
+	briefShellMin = 20
 )
+
+
+// strip URLs so a body that is only "https://…" counts as empty.
+var briefURLRe = regexp.MustCompile(`(?i)https?://\S+`)
+
+// briefBodyText is the stored body used at pick time (full content, else summary).
+func briefBodyText(r *Row) string {
+	if c := strings.TrimSpace(r.Str("content")); c != "" {
+		return c
+	}
+	return strings.TrimSpace(r.Str("summary"))
+}
+
+// isBriefShell: a *stored* body that is only a URL or a few words after stripping links/whitespace.
+// Title-only rows (no summary/content yet) are kept — common for thin RSS; AI polish still uses briefDropMin.
+func isBriefShell(r *Row) bool {
+	raw := briefBodyText(r)
+	if raw == "" {
+		return false
+	}
+	s := briefURLRe.ReplaceAllString(raw, " ")
+	s = strings.Join(strings.Fields(s), " ")
+	return utf8.RuneCountInString(s) < briefShellMin
+}
 
 // titleSuffixes are publisher tails ("… - The Verge", "… | 机器之心") that make one story look different.
 var titleSep = []string{" | ", " - ", " — ", " – ", "｜", " · "}
@@ -257,6 +287,9 @@ func autoPickAt(rs []*Row, n int, at time.Time, exclude map[int64]bool) []*Row {
 	for _, r := range rs {
 		if exclude != nil && exclude[int64(r.Num("id"))] {
 			continue
+		}
+		if isBriefShell(r) {
+			continue // empty shell: no real body for a briefing
 		}
 		pool = append(pool, r)
 	}

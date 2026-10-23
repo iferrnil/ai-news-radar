@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -207,42 +208,101 @@ func (s *Store) recordTG(ok bool, errMsg string) {
 }
 
 // briefHTML formats a rule brief for Telegram HTML parse_mode.
+// Layout: title + meta, then date group headers (今天 / 昨天 / M/D), then numbered items —
+// each item is its own paragraph (blank line between): bold linked title, optional one-line
+// summary, small source · time line. Source subheads are omitted so date grouping stays obvious.
 func briefHTML(b *briefOut) string {
 	var w strings.Builder
 	fmt.Fprintf(&w, "<b>%s</b>\n", html.EscapeString(b.Title))
-	fmt.Fprintf(&w, "<i>共 %d 条 · %d 个来源 · 近 24 小时</i>\n\n", b.Count, b.Sources)
+	pickNote := "近 24 小时"
+	if b.Manual {
+		pickNote = "手动选择"
+	}
+	fmt.Fprintf(&w, "<i>共 %d 条 · %d 个来源 · %s</i>\n", b.Count, b.Sources, pickNote)
 	if b.Count == 0 {
-		w.WriteString("近 24 小时暂无内容。")
+		w.WriteString("\n近 24 小时暂无内容。")
 		return w.String()
 	}
-	n := 0
+	// flatten in group order (already newest-first within sources) then re-group by calendar day
+	type flat struct {
+		it  briefItem
+		src string
+		p0  bool
+	}
+	var all []flat
 	for _, g := range b.Groups {
-		tag := ""
-		if g.Priority == "P0" {
-			tag = " · P0"
-		}
-		fmt.Fprintf(&w, "<b>%s%s</b>\n\n", html.EscapeString(g.Source), tag)
 		for _, it := range g.Items {
-			n++
-			title := html.EscapeString(it.Title)
-			if it.Title == "" {
-				title = "(无标题)"
-			}
-			sum := html.EscapeString(it.Summary)
-			link := html.EscapeString(it.URL)
-			if sum != "" {
-				fmt.Fprintf(&w, "<b>%d. %s</b>\n%s\n<a href=\"%s\">原文</a>\n\n", n, title, sum, link)
-			} else {
-				fmt.Fprintf(&w, "<b>%d. %s</b>\n<a href=\"%s\">原文</a>\n\n", n, title, link)
-			}
+			all = append(all, flat{it: it, src: g.Source, p0: g.Priority == "P0"})
 		}
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].it.Published > all[j].it.Published })
+	n := 0
+	lastDay := ""
+	for _, f := range all {
+		n++
+		day := tgDayLabel(f.it.Published)
+		if day != lastDay {
+			fmt.Fprintf(&w, "\n<b>—— %s ——</b>\n", html.EscapeString(day))
+			lastDay = day
+		}
+		title := strings.TrimSpace(f.it.Title)
+		if title == "" {
+			title = "(无标题)"
+		}
+		link := html.EscapeString(f.it.URL)
+		escTitle := html.EscapeString(title)
+		if link != "" {
+			fmt.Fprintf(&w, "\n<b>%d.</b> <a href=\"%s\"><b>%s</b></a>", n, link, escTitle)
+		} else {
+			fmt.Fprintf(&w, "\n<b>%d. %s</b>", n, escTitle)
+		}
+		if sum := strings.TrimSpace(f.it.Summary); sum != "" && sum != title {
+			// one line only
+			sum = oneLine(sum)
+			fmt.Fprintf(&w, "\n%s", html.EscapeString(sum))
+		}
+		meta := html.EscapeString(f.src)
+		if f.p0 {
+			meta += " · P0"
+		}
+		if t := fmtBriefTime(f.it.Published); t != "" {
+			meta += " · " + t
+		}
+		fmt.Fprintf(&w, "\n<i>%s</i>\n", meta)
 	}
 	return strings.TrimSpace(w.String())
 }
 
+// tgDayLabel: 今天 / 昨天 / M/D (Asia/Shanghai) for Telegram date group headers.
+func tgDayLabel(pub float64) string {
+	if pub <= 0 {
+		return "日期未知"
+	}
+	t := time.Unix(int64(pub), 0).In(cst)
+	now := time.Now().In(cst)
+	y1, m1, d1 := t.Date()
+	y2, m2, d2 := now.Date()
+	if y1 == y2 && m1 == m2 && d1 == d2 {
+		return "今天 · " + t.Format("1/2")
+	}
+	yest := now.Add(-24 * time.Hour)
+	y3, m3, d3 := yest.Date()
+	if y1 == y3 && m1 == m3 && d1 == d3 {
+		return "昨天 · " + t.Format("1/2")
+	}
+	return t.Format("1/2")
+}
+
+
 func splitTG(s string, max int) []string {
 	if utf8.RuneCountInString(s) <= max {
 		return []string{s}
+	}
+	// Reserve room for "<b>Part N/M</b>\n\n" so labeled parts stay ≤ max.
+	const partHdr = 32
+	limit := max - partHdr
+	if limit < 64 {
+		limit = max
 	}
 	var out []string
 	paras := strings.Split(s, "\n\n")
@@ -258,7 +318,7 @@ func splitTG(s string, max int) []string {
 		if cur.Len() > 0 {
 			cand = cur.String() + "\n\n" + p
 		}
-		if utf8.RuneCountInString(cand) <= max {
+		if utf8.RuneCountInString(cand) <= limit {
 			if cur.Len() > 0 {
 				cur.WriteString("\n\n")
 			}
@@ -266,14 +326,13 @@ func splitTG(s string, max int) []string {
 			continue
 		}
 		flush()
-		if utf8.RuneCountInString(p) <= max {
+		if utf8.RuneCountInString(p) <= limit {
 			cur.WriteString(p)
 			continue
 		}
-		// hard split by runes
 		r := []rune(p)
 		for len(r) > 0 {
-			n := max
+			n := limit
 			if n > len(r) {
 				n = len(r)
 			}
@@ -282,7 +341,15 @@ func splitTG(s string, max int) []string {
 		}
 	}
 	flush()
-	return out
+	if len(out) <= 1 {
+		return out
+	}
+	total := len(out)
+	labeled := make([]string, total)
+	for i, part := range out {
+		labeled[i] = fmt.Sprintf("<b>Part %d/%d</b>\n\n%s", i+1, total, part)
+	}
+	return labeled
 }
 
 func (s *Store) tgSend(chat, text string) error {
