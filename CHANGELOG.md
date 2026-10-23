@@ -5,6 +5,11 @@
 
 ## [Unreleased]
 
+## [0.14.4] - 2026-10-23
+
+### 安全
+- **升级 Next.js 16.4.0 → 16.4.2**（同系列补丁），修复构建时提示的已知漏洞：图片优化接口在启用 SVG 时的未认证远程代码执行（[GHSA-2464-fhr4-w9xw](https://github.com/advisories/GHSA-2464-fhr4-w9xw)）、`use cache` 返回 typed array 时的未认证远程代码执行（[GHSA-673q-mjm6-r5xr](https://github.com/advisories/GHSA-673q-mjm6-r5xr)）、App Router Server Actions 拒绝服务（[GHSA-p3m5-59mp-jv5r](https://github.com/advisories/GHSA-p3m5-59mp-jv5r)）。本项目为静态导出 + Go 后端，不走 Next 的图片优化 / Server Actions / `use cache`，但仍升级依赖以免供应链与后续改动踩中。`eslint-config-next` 同步到 16.4.2。
+
 ## [0.14.3] - 2026-10-23
 
 性能、文章 Skill 与安全补强。
