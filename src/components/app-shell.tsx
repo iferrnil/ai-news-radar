@@ -283,7 +283,7 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border p-3 type-meta text-faint">
-        <div className="flex h-5 items-center gap-2 tabular-nums"><Activity className="size-3.5" />{active.length} 个源在线{errs ? <span className="text-red-500">· {errs} 报错</span> : null}{weak ? <span className="text-amber-500" title="成功率低于 90% 或已熔断">· {weak} 不稳定</span> : null}</div>
+        <div className="flex h-5 min-w-0 items-center gap-2 overflow-hidden tabular-nums"><Activity className="size-3.5 shrink-0" /><span className="min-w-0 truncate">{active.length} 个源在线{errs ? <span className="text-red-500"> · {errs} 报错</span> : null}{weak ? <span className="text-amber-500" title="成功率低于 90% 或已熔断"> · {weak} 不稳定</span> : null}</span></div>
       </div>
     </div>
   );
@@ -336,8 +336,10 @@ function Shell({ children }: { children: React.ReactNode }) {
   const onStream = useCallback((fn: (ev: string, data: any) => void) => { listeners.current.add(fn); return () => { listeners.current.delete(fn); }; }, []);
   useEffect(() => {
     const es = new EventSource("/api/stream");
-    es.onopen = () => setLive(true);
-    es.onerror = () => setLive(false);
+    let dropTimer: ReturnType<typeof setTimeout> | undefined;
+    es.onopen = () => { clearTimeout(dropTimer); setLive(true); };
+    // Debounce offline: a short EventSource blip (tab stall / section switch work) must not shrink/flash the Live pill.
+    es.onerror = () => { clearTimeout(dropTimer); dropTimer = setTimeout(() => setLive(false), 800); };
     for (const ev of ["item", "update", "removed", "sources", "notify", "translate", "fav"]) es.addEventListener(ev, (e) => {
       const d = JSON.parse((e as MessageEvent).data); listeners.current.forEach((fn) => fn(ev, d));
       if (ev === "notify" && d.batch) handleBatch(d.batch, (id) => openByIdRef.current(id));
@@ -345,7 +347,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       if (ev === "sources") reloadNowRef.current?.();
       if (ev === "translate") reloadTrRef.current();
     });
-    return () => es.close();
+    return () => { clearTimeout(dropTimer); es.close(); };
   }, []);
   const fRef = useRef(f);
   useEffect(() => { fRef.current = f; }, [f]);
@@ -448,12 +450,18 @@ function Shell({ children }: { children: React.ReactNode }) {
               <Kbd className="ml-auto hidden bg-background/80 font-mono shadow-hair sm:inline-flex"><CommandIcon className="size-2.5" />K</Kbd>
             </Button>
             <Tooltip>
-              <TooltipTrigger render={<Badge variant="outline" className="hidden h-6 gap-1.5 px-2.5 text-muted-foreground sm:inline-flex" />}>
-                <span className="relative flex size-1.5">
+              {/* Fixed-width shell: "Live" vs "重连中" used to resize the badge and shove the header (search + icons).
+                  Reserve the longer label's width; ping stays absolute so it never affects layout. */}
+              <TooltipTrigger render={<Badge variant="outline" className="hidden h-6 w-[4.75rem] shrink-0 justify-center gap-1.5 px-2 text-muted-foreground sm:inline-flex" data-testid="live-pill" />}>
+                <span className="relative flex size-1.5 shrink-0">
                   {/* pings 3× after (re)connecting, then rests: an endless animation kept the desktop app repainting (~17% CPU idle) */}
                   {live && <span className="absolute inline-flex size-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_3_forwards] rounded-full bg-emerald-400 opacity-75" />}
                   <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-amber-500")} />
-                </span>{live ? "Live" : "重连中"}
+                </span>
+                <span className="relative inline-grid justify-items-start type-caption leading-none">
+                  <span className="invisible col-start-1 row-start-1" aria-hidden>重连中</span>
+                  <span className="col-start-1 row-start-1">{live ? "Live" : "重连中"}</span>
+                </span>
               </TooltipTrigger>
               <TooltipContent>{live ? "实时推送已连接（SSE）" : "实时推送已断开，正在自动重连；内容仍可浏览"}</TooltipContent>
             </Tooltip>

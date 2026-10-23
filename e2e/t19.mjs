@@ -43,6 +43,18 @@ for (const desktop of [false, true]) {
   await p.screenshot({ path: SHOT(`r5_sidebar_expanded_${tag}.png`), clip: { x: 0, y: 0, width: 640, height: 220 } });
   // settings icon is lucide "settings"
   rec(`${tag}: sidebar 设置 uses lucide settings icon`, await p.locator(".app-sidebar").getByRole("button", { name: "设置" }).locator("svg.lucide-settings").count() === 1);
+  // Live pill must keep a stable width (Live ↔ 重连中 used to shove the header)
+  const pill = p.getByTestId("live-pill");
+  await pill.waitFor({ timeout: 10000 });
+  const w1 = await pill.evaluate((el) => el.getBoundingClientRect().width);
+  await p.evaluate(() => {
+    const el = document.querySelector("[data-testid=live-pill]");
+    const lab = el?.querySelector(".inline-grid > span:last-child");
+    if (lab) lab.textContent = lab.textContent?.trim() === "Live" ? "重连中" : "Live";
+  });
+  await sleep(50);
+  const w2 = await pill.evaluate((el) => el.getBoundingClientRect().width);
+  rec(`${tag}: Live pill width stable across Live/重连中`, Math.abs(w1 - w2) < 1, `w1=${w1} w2=${w2}`);
   await ctx.close();
 }
 
