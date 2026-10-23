@@ -81,3 +81,7 @@ desktop/scripts/package.sh darwin/universal,linux/amd64     # 也可以在 Linux
 ```
 
 `AI_RADAR_UI=<目录>`（如 `../out`）可让 App 使用该目录的界面而不是嵌入的版本。网页版 / Docker 不受影响（`desktop/` 已加入 `.dockerignore`）。
+
+## Experimental native UI
+
+See [EXPERIMENT.md](./EXPERIMENT.md) on branch `experiment/mygo-native-ui` for the pure MyGo native preview (no webview chrome).
