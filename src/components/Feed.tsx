@@ -12,7 +12,7 @@ function useCanHover() {
   return useSyncExternalStore((cb) => { const m = window.matchMedia(HOVER_Q); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); }, () => window.matchMedia(HOVER_Q).matches, () => false);
 }
 import { ArrowUp, ArrowUpRight, Check, CheckCheck, CircleDot, FileText, Inbox, ListChecks, PenLine, RefreshCw, Star, Tag, WifiOff, X } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { softNav, useClientSearchParams } from "@/lib/client-url";
 import { toast } from "sonner";
 import { markOnHover } from "./read-store";
 import { XLogo as Twitter } from "./x-logo";
@@ -169,7 +169,7 @@ function FeedList() {
   const favMode = f.view === "fav";
   const briefScope = f.source != null ? null : (f.section || "all");
   const briefLabel = favMode ? "收藏" : briefScope === "all" ? "全部" : briefScope ? (sections.find((s) => s.key === briefScope)?.zh ?? briefScope) : "";
-  const sp = useSearchParams(); const router = useRouter();
+  const sp = useClientSearchParams();
   // a brief / article / selection belongs to one view: switching view (sidebar, ⌘K, notification) ends them, so a
   // dialog can never show the previous section's result
   const viewId = `${briefScope}|${f.view ?? ""}`;
@@ -314,7 +314,7 @@ function FeedList() {
   const itemParam = Number(sp.get("item")) || 0;
   useEffect(() => {
     if (!itemParam || loading) return;
-    const strip = () => { const q = new URLSearchParams(sp.toString()); q.delete("item"); const s = q.toString(); router.replace(s ? `/?${s}` : "/", { scroll: false }); };
+    const strip = () => { const q = new URLSearchParams(sp.toString()); q.delete("item"); const s = q.toString(); softNav(s ? `/?${s}` : "/", { replace: true, scroll: false }); };
     const hit = items.find((x) => x.id === itemParam);
     if (hit) { setOpen(loc(hit)); strip(); return; }
     api<ItemOut[]>(`/api/items?id=${itemParam}&zh=1`).then((r) => { if (r[0]) setOpen(loc(r[0])); else toast("这条内容已不在 48 小时窗口内"); }).catch(() => {}).finally(strip);

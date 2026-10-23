@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+## [0.14.15] - 2026-10-24
+
+### Fixed
+- **侧栏切分区整页黑闪（根因）：** Mac `server.log` 里每次 `?section=` / 进设置都出现 `nav: did-navigate`——说明不是「同文档 History」，而是 **整页文档加载**。Next `output: "export"` 在 WKWebView 上 soft Flight 失败会 `location.assign`（MPA），空白到窗口底色 `#0e0e11` 就是黑闪。现侧栏/命令面板/打开条目一律走 **原生 History softNav**（绕过 Next 对 `pushState` 的 `restore→MPA`），并用 `ClientOutlet` 按 pathname 切 Feed/设置/数据源/文档；同路径查询不再触发 `did-navigate`。Credit Lang。
+- **不健康分区仍显示绿色 Live：** Live 胶囊现在还看当前分区/源的健康（degraded/down/open/报错 → 琥珀色「重连中」）。
+- **侧栏点击后滚动条跳回顶部：** 硬导航会整树重挂载 ScrollArea；softNav 后滚动位置保留。
+
+### 致谢
+- Lang
+
 ## [0.14.14] - 2026-10-24
 
 ### Fixed

@@ -1,9 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { Languages, Loader2, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { softNav } from "@/lib/client-url";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -103,7 +103,7 @@ export default function TranslateMenu({ defaultOpen = false }: { defaultOpen?: b
           </>
         )}
         <Separator className="bg-border/50" />
-        <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-2.5 type-caption text-muted-foreground hover:bg-hover hover:text-foreground"><Settings className="size-3.5" />DeepSeek 设置…</Link>
+        <button type="button" onClick={() => { setOpen(false); softNav("/settings"); }} className="flex w-full items-center gap-2 px-4 py-2.5 type-caption text-muted-foreground hover:bg-hover hover:text-foreground"><Settings className="size-3.5" />DeepSeek 设置…</button>
       </PopoverContent>
     </Popover>
   );

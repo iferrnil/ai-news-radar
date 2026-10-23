@@ -107,9 +107,12 @@ func (s *Store) Server(ui fs.FS) http.Handler {
 // is compressed once on first request and kept in memory (keyed by name + size + mtime, so a rebuilt out/ is
 // picked up); the whole export is ~1 MB compressed.
 
+// .txt (Next Flight / RSC payloads for output:export) stay uncompressed: WKWebView has been
+// observed to fall through to MPA `location.assign` when soft-nav fetch of br-compressed .txt fails decode.
 var staticTypes = map[string]string{".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
-	".html": "text/html; charset=utf-8", ".txt": "text/plain; charset=utf-8", ".json": "application/json",
+	".html": "text/html; charset=utf-8", ".json": "application/json",
 	".svg": "image/svg+xml", ".webmanifest": "application/manifest+json"}
+// text/plain for .txt is set in StaticHandler when serving; listed here only if we ever compress again.
 
 type staticZ struct {
 	once sync.Once

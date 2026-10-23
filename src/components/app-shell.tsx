@@ -1,6 +1,4 @@
 "use client";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, createContext, memo, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,7 +20,8 @@ import { initReadSync, useReadVersion } from "./read-store";
 import { handleBatch } from "./notify-client";
 import { cn } from "@/lib/utils";
 import { flashProbeEnabled, initFlashProbe, noteFlashNav } from "@/lib/flash-probe";
-import { useClientSearchParams } from "@/lib/client-url";
+import { softNav, useClientPathname, useClientSearchParams } from "@/lib/client-url";
+import ClientOutlet from "@/components/client-outlet";
 import type { ItemOut } from "@/lib/types";
 import { secIcon } from "./section-icon";
 import { HealthDot, healthOf, healthText } from "./source-health";
@@ -240,7 +239,7 @@ function GroupLink({ on, icon: Icon, children, onClick }: { on: boolean; icon?: 
 export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const { sources, facet, sections, isRead } = useApp();
   const { f, navigate } = useFilter();
-  const router = useRouter(); const path = usePathname();
+  const path = useClientPathname();
   const active = sources.filter((s) => s.enabled && s.supported);
   const feed = path === "/";
   const count = (section: Filters["section"]) => facet.length ? countOf(facet, { section, source: null, p0: p0For(section || "all") })
@@ -251,7 +250,7 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
   const on = (section: Filters["section"]) => feed && !f.view && f.source == null && f.section === section;
   const errs = active.filter((s) => s.last_error).length;
   const weak = active.filter((s) => { const l = healthOf(s).level; return l === "degraded" || l === "open"; }).length;
-  const manage = () => { startTransition(() => { router.push("/sources?sections=1"); }); onNavigate?.(); };
+  const manage = () => { startTransition(() => { softNav("/sources?sections=1", { scroll: false }); }); onNavigate?.(); };
   const [closed, toggleFolder] = useClosedFolders();
   const listOf = (k: string) => active.filter((s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }) === k);
   const sec = (s: Section) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} unread={unread(s.key)} onClick={() => go({ section: s.key })} onManage={manage} />;
@@ -290,10 +289,10 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
               );
             })}
           </NavGroup>
-          <NavGroup icon={BookOpen} label="文档" storageKey={DOCS_KEY} current={path === "/docs"} inside={path.startsWith("/docs")} onHeader={() => { startTransition(() => { router.push("/docs"); }); onNavigate?.(); }}>
-            {DOCS.map((d) => <GroupLink key={d.slug} on={path === docHref(d)} onClick={() => { startTransition(() => { router.push(docHref(d)); }); onNavigate?.(); }}>{d.title}</GroupLink>)}
+          <NavGroup icon={BookOpen} label="文档" storageKey={DOCS_KEY} current={path === "/docs"} inside={path.startsWith("/docs")} onHeader={() => { startTransition(() => { softNav("/docs"); }); onNavigate?.(); }}>
+            {DOCS.map((d) => <GroupLink key={d.slug} on={path === docHref(d)} onClick={() => { startTransition(() => { softNav(docHref(d)); }); onNavigate?.(); }}>{d.title}</GroupLink>)}
           </NavGroup>
-          <NavItem active={path === "/settings"} icon={Settings} label="设置" onClick={() => { startTransition(() => { router.push("/settings"); }); onNavigate?.(); }} />
+          <NavItem active={path === "/settings"} icon={Settings} label="设置" onClick={() => { startTransition(() => { softNav("/settings"); }); onNavigate?.(); }} />
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border p-3 type-meta text-faint">
@@ -304,22 +303,24 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
 });
 
 
-/** SSE status badge. `live` stays OUT of AppCtx so Live↔重连中 does not rebuild the feed (WKWebView black flash). */
-const LivePill = memo(function LivePill({ live }: { live: boolean }) {
+/** SSE + current-view source health. Green Live only when the stream is up AND the active
+ *  section/source has no degraded/down/open sources (unhealthy view → 重连中 / amber). */
+const LivePill = memo(function LivePill({ live, viewOk }: { live: boolean; viewOk: boolean }) {
+  const ok = live && viewOk;
   return (
     <Tooltip>
       {/* Fixed-width shell: "Live" vs "重连中" must not resize the badge and shove the header. */}
       <TooltipTrigger render={<Badge variant="outline" className="hidden h-6 w-[4.75rem] shrink-0 justify-center gap-1.5 px-2 text-muted-foreground sm:inline-flex" data-testid="live-pill" />}>
         <span className="relative flex size-1.5 shrink-0">
-          {live && <span className="absolute inline-flex size-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_3_forwards] rounded-full bg-emerald-400 opacity-75" />}
-          <span className={cn("relative inline-flex size-1.5 rounded-full", live ? "bg-emerald-500" : "bg-amber-500")} />
+          {ok && <span className="absolute inline-flex size-full animate-[ping_1s_cubic-bezier(0,0,0.2,1)_3_forwards] rounded-full bg-emerald-400 opacity-75" />}
+          <span className={cn("relative inline-flex size-1.5 rounded-full", ok ? "bg-emerald-500" : "bg-amber-500")} />
         </span>
         <span className="relative inline-grid justify-items-start type-caption leading-none">
           <span className="invisible col-start-1 row-start-1" aria-hidden>重连中</span>
-          <span className="col-start-1 row-start-1">{live ? "Live" : "重连中"}</span>
+          <span className="col-start-1 row-start-1">{ok ? "Live" : "重连中"}</span>
         </span>
       </TooltipTrigger>
-      <TooltipContent>{live ? "实时推送已连接（SSE）" : "实时推送已断开，正在自动重连；内容仍可浏览"}</TooltipContent>
+      <TooltipContent>{ok ? "实时推送已连接（SSE）" : !live ? "实时推送已断开，正在自动重连；内容仍可浏览" : "当前分区有源不稳定或报错"}</TooltipContent>
     </Tooltip>
   );
 });
@@ -328,8 +329,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   // Client URL store (not useSearchParams): avoids Suspense around the whole Shell — a null/full-screen
   // fallback would unmount aside+header and read as a full-webview black flash (same #0e0e11 as the window).
   const sp = useClientSearchParams();
-  const router = useRouter();
-  const path = usePathname();
+  const path = useClientPathname();
   const f = useMemo(() => parseFilters(new URLSearchParams(sp.toString())), [sp]);
   // Opt-in flash probe: sample chrome DOM ~500ms after each location change (no-op until enabled).
   useEffect(() => { initFlashProbe(); }, []);
@@ -398,7 +398,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const fRef = useRef(f);
   useEffect(() => { fRef.current = f; }, [f]);
   // open an item by id from anywhere (notification click, desktop shell via window.__radarOpenItem): the Feed reads ?item=
-  const openByIdRef = useRef((id: number) => { const q = toQuery({ ...fRef.current }); router.push(`${q}${q.includes("?") ? "&" : "?"}item=${id}`, { scroll: false }); });
+  const openByIdRef = useRef((id: number) => { const q = toQuery({ ...fRef.current }); softNav(`${q}${q.includes("?") ? "&" : "?"}item=${id}`, { scroll: false }); });
   useEffect(() => {
     const w = window as unknown as { __radarOpenItem?: (id: number) => void };
     w.__radarOpenItem = (id) => openByIdRef.current(Number(id));
@@ -413,16 +413,16 @@ function Shell({ children }: { children: React.ReactNode }) {
     if ("unread" in p) setUnreadPref(!!p.unread);
     const q = toQuery(next);
     noteFlashNav(q);
-    // Non-urgent: keep prior paint until the view commit is ready (opaque WKWebView flashes black on sync full-tree updates).
-    startTransition(() => { router.push(q, { scroll: false }); });
-  }, [router]);
+    // History soft nav — never Next router.push (static-export MPA → did-navigate → black flash on WKWebView).
+    startTransition(() => { softNav(q, { scroll: false }); });
+  }, []);
   const setF = navigate;
   // first load without ?p0: apply the stored value for this view
   useEffect(() => {
     const qs = new URLSearchParams(window.location.search);
     if (path !== "/" || qs.has("item")) return;
     const p0 = qs.has("p0") ? fRef.current.p0 : p0For(viewKey(fRef.current)), unread = qs.has("unread") ? !!fRef.current.unread : unreadPref();
-    if (p0 !== fRef.current.p0 || unread !== !!fRef.current.unread) router.replace(toQuery({ ...fRef.current, p0, unread }), { scroll: false });
+    if (p0 !== fRef.current.p0 || unread !== !!fRef.current.unread) softNav(toQuery({ ...fRef.current, p0, unread }), { replace: true, scroll: false });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [sections, setSectionList] = useState<Section[]>(() => allSections());
   const reloadSources = useCallback(async () => {
@@ -452,8 +452,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   const desktopCmd = useCallback((cmd: string) => {
     if (cmd === "sidebar") { if (window.matchMedia("(min-width: 1024px)").matches) toggleSidebar(); else setMobileNav((v) => !v); }
     else if (cmd === "search") setPalette(true);
-    else if (cmd === "settings") { noteFlashNav("/settings"); startTransition(() => { router.push("/settings"); }); }
-  }, [toggleSidebar, router]);
+    else if (cmd === "settings") { noteFlashNav("/settings"); startTransition(() => { softNav("/settings"); }); }
+  }, [toggleSidebar]);
   useEffect(() => {
     const w = window as unknown as { __radarCmd?: (c: string) => void; __radarDesktop?: boolean };
     w.__radarCmd = desktopCmd;
@@ -475,8 +475,26 @@ function Shell({ children }: { children: React.ReactNode }) {
   const ctx = useMemo(() => ({ facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, open, setOpen, setPalette, addOpen, setAddOpen, onStream, tr, settingsLocked, reloadTr, loc }),
     [facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, open, setOpen, addOpen, onStream, tr, settingsLocked, reloadTr, loc]);
   const filterCtx = useMemo(() => ({ f, setF, navigate, trView }), [f, setF, navigate, trView]);
+  // Green Live only when SSE is up and the current feed view's sources look healthy.
+  const viewOk = useMemo(() => {
+    if (path !== "/") return true;
+    const active = sources.filter((s) => s.enabled && s.supported);
+    const inView = f.source != null ? active.filter((s) => s.id === f.source)
+      : f.section ? active.filter((s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }) === f.section)
+      : active.filter((s) => inAll(sectionOf({ ...s, is_x: s.type.startsWith("x") })));
+    if (!inView.length) return true;
+    return !inView.some((s) => {
+      const l = healthOf(s).level;
+      return l === "degraded" || l === "down" || l === "open" || !!s.last_error;
+    });
+  }, [path, sources, f.source, f.section]);
   const title = path === "/sources" ? "数据源" : path === "/settings" ? "设置" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
     : f.view === "hot" ? "热点" : f.view === "fav" ? "收藏" : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
+  useEffect(() => {
+    const base = "AI Radar · 国内外 AI 情报";
+    document.title = path === "/settings" ? "AI 新闻雷达 · 设置" : path === "/sources" ? "AI 新闻雷达 · 数据源管理"
+      : path.startsWith("/docs") ? `${title} · 文档 · AI Radar` : base;
+  }, [path, title]);
 
   return (
     <AppCtx.Provider value={ctx}>
@@ -501,14 +519,16 @@ function Shell({ children }: { children: React.ReactNode }) {
               <Search className="size-3.5" /><span className="truncate">搜索新闻、来源、命令…</span>
               <Kbd className="ml-auto hidden bg-background/80 font-mono shadow-hair sm:inline-flex"><CommandIcon className="size-2.5" />K</Kbd>
             </Button>
-            <LivePill live={live} />
+            <LivePill live={live} viewOk={viewOk} />
             {trUsed ? <TranslateMenu defaultOpen /> : <TrButton onClick={() => setTrUsed(true)} />}
             <ThemeToggle />
-            <Button variant="ghost" size="icon" render={<Link href="/sources" aria-label="数据源" />} className="hidden sm:inline-flex"><Database className="size-4" /></Button>
+            <Button variant="ghost" size="icon" aria-label="数据源" className="hidden sm:inline-flex" onClick={() => softNav("/sources")}><Database className="size-4" /></Button>
           </header>
           <main className="app-main @container min-w-0 flex-1">
-            {/* Only page trees use useSearchParams (Feed item=, Sources sections=). Keep chrome outside. */}
-            <Suspense fallback={<div className="min-h-[40vh] bg-background" aria-hidden />}>{children}</Suspense>
+            {/* ClientOutlet: History soft path changes without Next MPA / did-navigate. */}
+            <Suspense fallback={<div className="min-h-[40vh] bg-background" aria-hidden />}>
+              <ClientOutlet>{children}</ClientOutlet>
+            </Suspense>
           </main>
         </div>
       </div>

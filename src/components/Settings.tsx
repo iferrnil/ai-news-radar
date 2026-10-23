@@ -3,7 +3,6 @@
 // Categories: 常规 · 通知与推送 · 模型与抓取 · 写作与 Skill (desktop) · 数据 · 关于
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import {
   BellRing, BookOpen, CheckCircle2, Database, Eye, EyeOff, FolderOpen, ExternalLink, Info,
   Languages, Loader2, Lock, PenLine, PlugZap, SlidersHorizontal, Trash2, XCircle,
@@ -21,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { type TrScopes, api, secZh } from "./common";
 import { GeneralCard, NotifyCard, UpdateRow, type NotifyPrefs } from "./settings-extra";
 import { flashProbeEnabled, noteFlashNav } from "@/lib/flash-probe";
+import { softNav } from "@/lib/client-url";
 
 const SkillCard = dynamic(() => import("./settings-skill"), { ssr: false });
 const MultimodalCard = dynamic(() => import("./settings-media").then((m) => m.MultimodalCard), { ssr: false });
@@ -285,7 +285,7 @@ function AboutCard({ version, desktop }: { version: string | null; desktop: bool
         <CardDescription>AI News Radar{version ? <span className="font-mono"> v{version}</span> : null}{desktop ? " · 桌面版" : ""}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" render={<Link href="/docs" />}><BookOpen />使用文档</Button>
+        <Button variant="outline" size="sm" onClick={() => softNav("/docs")}><BookOpen />使用文档</Button>
         <Button variant="outline" size="sm" render={<a href="https://github.com/iferrnil/ai-news-radar" target="_blank" rel="noreferrer" />}><ExternalLink />GitHub</Button>
       </CardContent>
     </Card>

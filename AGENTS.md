@@ -340,6 +340,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## 0.14.10 notes
 - Live status is Shell-local + memo `LivePill` (not AppCtx); feed module cache avoids skeleton remount flash; HotTopics `dynamic` has a skeleton `loading`.
 - Filter/`f` + `navigate` + `trView` live in `FilterCtx` (`useFilter`); fat `AppCtx` stays stable across section/view nav (0.14.14). Suspense fallback around Shell is `null` (never full-viewport blank). Desktop `.glow` uses `background-attachment: scroll`; `.app-sidebar` / `.app-header` / `.app-main` use `contain: paint`.
+- In-app nav is History `softNav` + `ClientOutlet` (not Next `router.push`): static-export MPA in WKWebView was firing `nav: did-navigate` on every section click and blanking to `#0e0e11`.
 - Flash probe (opt-in Settings › 常规 / `localStorage.radarFlashProbe=1` / `?flashProbe=1`): `src/lib/flash-probe.ts` arms on toggle (no reload); samples ~500ms after URL or settings-category changes into `window.__radarFlashLog`; live count + copy/download. Default off.
 - `briefShellMin` (20 runes after URL strip) filters empty shells in `autoPick` / `selectBrief` (Telegram + in-app auto brief).
 - Telegram `briefHTML`: date group headers, numbered linked titles, Part N/M on `splitTG`.

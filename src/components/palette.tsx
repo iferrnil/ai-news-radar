@@ -1,12 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { BookOpen, Database, FileText, Moon, Plus, SearchX, Settings } from "lucide-react";
 import { EmptyState } from "./empty-state";
 import { CommandDialog, Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from "@/components/ui/command";
 import { DOCS, docHref } from "@/lib/docs-registry";
+import { softNav } from "@/lib/client-url";
 import type { ItemOut } from "@/lib/types";
 import type { Filters } from "./filters";
 import { inAll, ago, api, handleOf, sectionOf, xText } from "./common";
@@ -19,7 +19,6 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
   const { sources, sections, setOpen, setAddOpen, loc } = useApp();
   const { navigate } = useFilter();
   const { resolvedTheme, setTheme } = useTheme();
-  const router = useRouter();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<ItemOut[]>([]);
   useEffect(() => {
@@ -37,11 +36,11 @@ export default function Palette({ open, onOpenChange }: { open: boolean; onOpenC
   const navSec = sections.filter((s) => !ql || s.zh.includes(q.trim()));
   const navSrc = ql ? sources.filter((s) => s.enabled && s.name.toLowerCase().includes(ql)).slice(0, 6) : [];
   const acts = [
-    { k: "add", label: "添加数据源", icon: Plus, go: () => { router.push("/sources"); setAddOpen(true); } },
-    { k: "sources", label: "管理数据源", icon: Database, go: () => router.push("/sources") },
-    { k: "settings", label: "设置", icon: Settings, go: () => router.push("/settings") },
-    { k: "docs", label: "文档", icon: BookOpen, go: () => router.push("/docs") },
-    ...DOCS.map((d) => ({ k: `docs-${d.slug}`, label: `文档 / ${d.title}`, icon: FileText, go: () => router.push(docHref(d)) })),
+    { k: "add", label: "添加数据源", icon: Plus, go: () => { softNav("/sources"); setAddOpen(true); } },
+    { k: "sources", label: "管理数据源", icon: Database, go: () => softNav("/sources") },
+    { k: "settings", label: "设置", icon: Settings, go: () => softNav("/settings") },
+    { k: "docs", label: "文档", icon: BookOpen, go: () => softNav("/docs") },
+    ...DOCS.map((d) => ({ k: `docs-${d.slug}`, label: `文档 / ${d.title}`, icon: FileText, go: () => softNav(docHref(d)) })),
     { k: "theme", label: "切换深色/浅色", icon: Moon, go: () => setTheme(resolvedTheme === "dark" ? "light" : "dark") },
   ].filter((a) => !ql || a.label.toLowerCase().includes(ql) || a.k.includes(ql));
   return (

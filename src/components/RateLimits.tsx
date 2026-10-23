@@ -1,12 +1,12 @@
 "use client";
 // Client component: the static export has no server, so the live usage is computed from /api/sources (served by the Go backend).
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, BookOpen, ChevronRight, Hash, ExternalLink, Gauge, Info, ShieldCheck } from "lucide-react";
 import data from "@/data/rate-limits.json";
 import { computeUsage, RISK_ZH, type RLEntry, type UsageSource } from "@/lib/rate-usage";
+import { softNav } from "@/lib/client-url";
 
 
 const RISK_V = { low: "success", medium: "warning", high: "destructive" } as const;
@@ -26,7 +26,7 @@ export default function RateLimits() {
 
   return (
     <div className="mx-auto w-full max-w-[1000px] px-4 pb-24 pt-6 sm:px-6">
-      <nav className="mb-4 flex items-center gap-1 type-caption text-faint"><Link href="/docs" className="transition-colors duration-150 ease-out hover:text-foreground">文档</Link><ChevronRight className="size-3.5" /><span className="text-muted-foreground">抓取限制</span></nav>
+      <nav className="mb-4 flex items-center gap-1 type-caption text-faint"><button type="button" onClick={() => softNav("/docs")} className="transition-colors duration-150 ease-out hover:text-foreground">文档</button><ChevronRight className="size-3.5" /><span className="text-muted-foreground">抓取限制</span></nav>
       <div className="flex items-start gap-3">
         <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand"><BookOpen className="size-4" /></div>
         <div>

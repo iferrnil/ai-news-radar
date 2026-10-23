@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import dynamic from "next/dynamic";
-import { useRouter, useSearchParams } from "next/navigation";
+import { softNav, useClientSearchParams } from "@/lib/client-url";
 import type { ExportSource } from "@/lib/portable-export";
 
 const ImportDialog = dynamic(() => import("./import-dialog"), { ssr: false });
@@ -187,8 +187,8 @@ export default function Sources() {
   const [secOpen, setSecOpen] = useState(false); const [secUsed, setSecUsed] = useState(false);
   useEffect(() => { if (secOpen) setSecUsed(true); }, [secOpen]);
   // sidebar "管理分区" links here with ?sections=1
-  const sp = useSearchParams(); const router = useRouter();
-  useEffect(() => { if (sp.get("sections") === "1") { setSecOpen(true); router.replace("/sources", { scroll: false }); } }, [sp, router]);
+  const sp = useClientSearchParams();
+  useEffect(() => { if (sp.get("sections") === "1") { setSecOpen(true); softNav("/sources", { replace: true, scroll: false }); } }, [sp]);
   const [q, setQ] = useState(""); const [ft, setFt] = useState("all"); const [fsec, setFsec] = useState("all"); const [fs, setFs] = useState<StatusKey>("active");
   const [busy, setBusy] = useState<Record<number, boolean>>({});
   useEffect(() => { const t = setInterval(() => { if (!document.hidden) reloadSources(); }, 15000); return () => clearInterval(t); }, [reloadSources]);
