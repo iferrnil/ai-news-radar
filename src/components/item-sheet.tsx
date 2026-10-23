@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import type { ItemOut } from "@/lib/types";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useApp } from "./app-shell";
+import { useApp, useFilter } from "./app-shell";
 import { ago, api, bj, bjFull, dekText, handleOf, localize, sectionOf, setFav, srcName } from "./common";
 import { SectionName } from "./section-icon";
 import { Original, useFullItem } from "./item-preview";
@@ -20,7 +20,8 @@ const translated = new Map<number, ItemOut>(); // per-item translations fetched 
 
 // Item drawer, code-split: mounted after the first item is opened.
 export default function ItemSheet() {
-  const { open, setOpen, tr, onStream, f, setF } = useApp();
+  const { open, setOpen, tr, onStream } = useApp();
+  const { f, setF } = useFilter();
   // 收藏: local state, kept in sync with the SSE "fav" events (cards / other windows)
   const [fav, setFavOn] = useState(false);
   useEffect(() => { setFavOn(!!open?.fav); }, [open?.id, open?.fav]);

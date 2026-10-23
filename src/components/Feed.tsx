@@ -38,7 +38,7 @@ const HotTopics = dynamic(() => import("./hot-topics"), {
 const PICK_MAX = { brief: 10, article: 2 } as const; // 手动简报仍 ≤10；自动简报服务端 BRIEF_MAX_ITEMS 默认 20
 const isDesktop = () => typeof window !== "undefined" && !!(window as unknown as { __radarDesktop?: boolean }).__radarDesktop;
 import type { ItemOut } from "@/lib/types";
-import { useApp } from "./app-shell";
+import { useApp, useFilter } from "./app-shell";
 import { sectionsReady, ago, api, bj, dekText, handleOf, sectionOf, setFav, srcName, xText } from "./common";
 import { SectionName } from "./section-icon";
 import { countOf, passes } from "./filters";
@@ -147,7 +147,7 @@ const ItemCard = memo(function ItemCard({ it, active, fresh, read, onOpen, onFav
 
 /** 热点 is its own page; everything else (全部 / sections / sources / 收藏) is the card feed. */
 export default function Feed() {
-  const { f } = useApp();
+  const { f } = useFilter();
   return f.view === "hot" ? <HotTopics /> : <FeedList />;
 }
 
@@ -155,7 +155,8 @@ export default function Feed() {
 let feedCache: ItemOut[] | null = null;
 
 function FeedList() {
-  const { f, setF, onStream, setOpen, open, sources, setFacet, isRead, markRead, markManyRead, markManyUnread, loc, sections } = useApp();
+  const { onStream, setOpen, open, sources, setFacet, isRead, markRead, markManyRead, markManyUnread, loc, sections } = useApp();
+  const { f, setF } = useFilter();
   const [briefOpen, setBriefOpen] = useState(false);
   // 手动简报 / 生成文章: pick up to PICK_MAX cards of this view
   const [pickMode, setPickMode] = useState<null | "brief" | "article">(null);

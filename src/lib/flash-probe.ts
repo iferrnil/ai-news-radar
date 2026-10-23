@@ -85,6 +85,7 @@ export function armFlashProbe() {
 function sample(): FlashSample {
   const aside = document.querySelector(".app-sidebar");
   const header = document.querySelector(".app-header");
+  // Legacy Suspense fallback was min-h-screen bg-background; 0.14.13 uses null. Still detect any full-blank placeholder.
   const fallback = [...document.querySelectorAll('div.min-h-screen.bg-background[aria-hidden="true"]')]
     .find((el) => el.parentElement === document.body);
   const brand = document.querySelector(".app-brand");

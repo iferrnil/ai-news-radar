@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { useApp } from "./app-shell";
+import { useApp, useFilter } from "./app-shell";
 import { type TrInfo, api, secZh } from "./common";
 
 // Code-split: app-shell renders a placeholder button and loads this on first click.
@@ -16,7 +16,8 @@ import { type TrInfo, api, secZh } from "./common";
 type Scope = { scope: "all" | "section" | "source"; key?: string | number; label: string };
 type Progress = { total: number; translated: number; pending: number; skipped: number; inQueue: number; queued: number; running: number; done: number; failed: number; lastError: string | null; available: boolean; reason: string | null };
 export default function TranslateMenu({ defaultOpen = false }: { defaultOpen?: boolean }) {
-  const { f, sources, tr, reloadTr, trView, onStream } = useApp();
+  const { sources, tr, reloadTr, onStream } = useApp();
+  const { f, trView } = useFilter();
   const [open, setOpen] = useState(defaultOpen);
   const [busy, setBusy] = useState(false);
   const [p, setP] = useState<Progress | null>(null);

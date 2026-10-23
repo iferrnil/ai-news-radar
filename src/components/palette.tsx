@@ -12,11 +12,12 @@ import type { Filters } from "./filters";
 import { inAll, ago, api, handleOf, sectionOf, xText } from "./common";
 import { SectionName } from "./section-icon";
 import { SourceAvatar } from "./source-avatar";
-import { useApp } from "./app-shell";
+import { useApp, useFilter } from "./app-shell";
 import { secIcon } from "./section-icon";
 
 export default function Palette({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
-  const { navigate, sources, sections, setOpen, setAddOpen, loc } = useApp();
+  const { sources, sections, setOpen, setAddOpen, loc } = useApp();
+  const { navigate } = useFilter();
   const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
   const [q, setQ] = useState("");

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
-import { Suspense, createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, createContext, memo, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, BookOpen, ChevronRight, Command as CommandIcon, Database, Inbox, Menu, Moon,
   PanelLeft, Radio, Search, Settings, Settings2, Sun,
@@ -36,31 +36,42 @@ const MobileNav = dynamic(() => import("./mobile-nav"), { ssr: false });
 const TranslateMenu = dynamic(() => import("./translate-menu"), { ssr: false, loading: () => <TrButton /> });
 /** Placeholder with the same look as the translate popover trigger; first click loads the real menu (opened). */
 function TrButton({ onClick }: { onClick?: () => void }) {
-  const { trView } = useApp();
+  const { trView } = useFilter();
   return <Button variant="ghost" size="icon" aria-label="翻译" aria-pressed={trView} data-testid="tr-toggle" className={trView ? "text-brand" : ""} onClick={onClick}><Languages className="size-4" /></Button>;
 }
 
 export const SEC_ICON: Record<string, React.ElementType> = { all: Inbox };
 export { secIcon };
 
+/** Fat app state. Filter/`f` lives in FilterCtx so section/view nav does not rebuild every useApp() consumer
+ *  (same WKWebView black-flash class as Live-in-AppCtx in 0.14.10). */
 type Ctx = {
-  f: Filters; setF: (p: Partial<Filters>) => void;
-  /** Switch the feed view (section / source), keeping the P0 toggle. */
-  navigate: (p: Partial<Filters>) => void;
   facet: ItemOut[]; setFacet: (i: ItemOut[]) => void; isRead: (id: number) => boolean; markRead: (id: number) => void; markManyRead: (ids: number[]) => boolean; markManyUnread: (ids: number[]) => void; readVer: number; sources: SourceRow[]; reloadSources: () => Promise<void>;
   open: ItemOut | null; setOpen: (i: ItemOut | null) => void;
   sections: Section[]; // built-in + user-created (re-render trigger; read via allSections()/secZh too)
   setPalette: (b: boolean) => void; addOpen: boolean; setAddOpen: (b: boolean) => void;
   onStream: (fn: (ev: string, data: any) => void) => () => void;
-  /** translation scopes + availability (null until loaded); trView = the current view's scope is translated; loc = show translation if its scope is on */
-  tr: TrInfo | null; settingsLocked: boolean; reloadTr: () => Promise<void>; trView: boolean; loc: (it: ItemOut) => ItemOut;
+  /** translation scopes + availability (null until loaded); loc = show translation if its scope is on */
+  tr: TrInfo | null; settingsLocked: boolean; reloadTr: () => Promise<void>; loc: (it: ItemOut) => ItemOut;
 };
 const AppCtx = createContext<Ctx>(null as unknown as Ctx);
 export const useApp = () => useContext(AppCtx);
 
+/** URL filter / view. Split from AppCtx so chrome consumers that only need sources/SSE stay put on every nav. */
+type FilterCtxValue = {
+  f: Filters; setF: (p: Partial<Filters>) => void;
+  /** Switch the feed view (section / source), keeping the P0 toggle. */
+  navigate: (p: Partial<Filters>) => void;
+  /** true when the current view's translation scope is on */
+  trView: boolean;
+};
+const FilterCtx = createContext<FilterCtxValue>(null as unknown as FilterCtxValue);
+export const useFilter = () => useContext(FilterCtx);
+
 /** Sidebar source row: click to filter; hover/focus (always on touch) reveals 取消订阅 with a small confirm + undo toast. */
 function SourceRowNav({ s, active, onGo }: { s: SourceRow; active: boolean; onGo: () => void }) {
-  const { reloadSources, f, navigate } = useApp();
+  const { reloadSources } = useApp();
+  const { f, navigate } = useFilter();
   const [confirm, setConfirm] = useState(false);
   const label = s.name.replace(/^X @(\S+).*$/, "@$1");
   const setEnabled = (enabled: boolean) => api(`/api/sources/${s.id}`, { method: "PATCH", body: JSON.stringify({ enabled }) });
@@ -226,7 +237,8 @@ function GroupLink({ on, icon: Icon, children, onClick }: { on: boolean; icon?: 
 
 // memo: toggling the sidebar re-renders AppShell; the (large) sidebar tree itself does not need to re-render
 export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
-  const { f, navigate, sources, facet, sections, isRead } = useApp();
+  const { sources, facet, sections, isRead } = useApp();
+  const { f, navigate } = useFilter();
   const router = useRouter(); const path = usePathname();
   const active = sources.filter((s) => s.enabled && s.supported);
   const feed = path === "/";
@@ -238,7 +250,7 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
   const on = (section: Filters["section"]) => feed && !f.view && f.source == null && f.section === section;
   const errs = active.filter((s) => s.last_error).length;
   const weak = active.filter((s) => { const l = healthOf(s).level; return l === "degraded" || l === "open"; }).length;
-  const manage = () => { router.push("/sources?sections=1"); onNavigate?.(); };
+  const manage = () => { startTransition(() => { router.push("/sources?sections=1"); }); onNavigate?.(); };
   const [closed, toggleFolder] = useClosedFolders();
   const listOf = (k: string) => active.filter((s) => sectionOf({ ...s, is_x: s.type.startsWith("x") }) === k);
   const sec = (s: Section) => <SecNav key={s.key} s={s} active={on(s.key)} count={count(s.key)} unread={unread(s.key)} onClick={() => go({ section: s.key })} onManage={manage} />;
@@ -277,10 +289,10 @@ export const SidebarBody = memo(function SidebarBody({ onNavigate }: { onNavigat
               );
             })}
           </NavGroup>
-          <NavGroup icon={BookOpen} label="文档" storageKey={DOCS_KEY} current={path === "/docs"} inside={path.startsWith("/docs")} onHeader={() => { router.push("/docs"); onNavigate?.(); }}>
-            {DOCS.map((d) => <GroupLink key={d.slug} on={path === docHref(d)} onClick={() => { router.push(docHref(d)); onNavigate?.(); }}>{d.title}</GroupLink>)}
+          <NavGroup icon={BookOpen} label="文档" storageKey={DOCS_KEY} current={path === "/docs"} inside={path.startsWith("/docs")} onHeader={() => { startTransition(() => { router.push("/docs"); }); onNavigate?.(); }}>
+            {DOCS.map((d) => <GroupLink key={d.slug} on={path === docHref(d)} onClick={() => { startTransition(() => { router.push(docHref(d)); }); onNavigate?.(); }}>{d.title}</GroupLink>)}
           </NavGroup>
-          <NavItem active={path === "/settings"} icon={Settings} label="设置" onClick={() => { router.push("/settings"); onNavigate?.(); }} />
+          <NavItem active={path === "/settings"} icon={Settings} label="设置" onClick={() => { startTransition(() => { router.push("/settings"); }); onNavigate?.(); }} />
         </div>
       </ScrollArea>
       <div className="border-t border-sidebar-border p-3 type-meta text-faint">
@@ -398,7 +410,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     if ("unread" in p) setUnreadPref(!!p.unread);
     const q = toQuery(next);
     noteFlashNav(q);
-    router.push(q, { scroll: false });
+    // Non-urgent: keep prior paint until the view commit is ready (opaque WKWebView flashes black on sync full-tree updates).
+    startTransition(() => { router.push(q, { scroll: false }); });
   }, [router]);
   const setF = navigate;
   // first load without ?p0: apply the stored value for this view
@@ -436,7 +449,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const desktopCmd = useCallback((cmd: string) => {
     if (cmd === "sidebar") { if (window.matchMedia("(min-width: 1024px)").matches) toggleSidebar(); else setMobileNav((v) => !v); }
     else if (cmd === "search") setPalette(true);
-    else if (cmd === "settings") { noteFlashNav("/settings"); router.push("/settings"); }
+    else if (cmd === "settings") { noteFlashNav("/settings"); startTransition(() => { router.push("/settings"); }); }
   }, [toggleSidebar, router]);
   useEffect(() => {
     const w = window as unknown as { __radarCmd?: (c: string) => void; __radarDesktop?: boolean };
@@ -455,13 +468,16 @@ function Shell({ children }: { children: React.ReactNode }) {
   const markManyRead = useCallback((ids: number[]) => rs.markRead(ids), []);
   const markManyUnread = useCallback((ids: number[]) => rs.markUnread(ids), []);
   const trView = !!tr && trOnFor(tr.scopes, f.source, f.source != null ? sources.find((s) => s.id === f.source)?.section ?? null : f.section || null);
-  const ctx = useMemo(() => ({ f, setF, navigate, facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, open, setOpen, setPalette, addOpen, setAddOpen, onStream, tr, settingsLocked, reloadTr, trView, loc }),
-    [f, setF, navigate, facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, open, setOpen, addOpen, onStream, tr, settingsLocked, reloadTr, trView, loc]);
+  // Fat ctx intentionally omits f/trView: section clicks must not invalidate Sources/HotTopics/settings subscribers.
+  const ctx = useMemo(() => ({ facet, setFacet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, open, setOpen, setPalette, addOpen, setAddOpen, onStream, tr, settingsLocked, reloadTr, loc }),
+    [facet, isRead, markRead, markManyRead, markManyUnread, readVer, sources, reloadSources, sections, open, setOpen, addOpen, onStream, tr, settingsLocked, reloadTr, loc]);
+  const filterCtx = useMemo(() => ({ f, setF, navigate, trView }), [f, setF, navigate, trView]);
   const title = path === "/sources" ? "数据源" : path === "/settings" ? "设置" : path.startsWith("/docs") ? ["文档", DOCS.find((d) => path === docHref(d))?.title].filter(Boolean).join(" / ")
     : f.view === "hot" ? "热点" : f.view === "fav" ? "收藏" : f.source != null ? sources.find((s) => s.id === f.source)?.name ?? "来源" : f.section ? secZh(f.section) : "全部动态";
 
   return (
     <AppCtx.Provider value={ctx}>
+      <FilterCtx.Provider value={filterCtx}>
       <div className="flex min-h-screen">
         <aside id="app-sidebar" aria-label="侧边栏" inert={collapsed} className="app-sidebar sticky top-0 hidden h-screen w-[244px] shrink-0 overflow-hidden border-r border-sidebar-border bg-sidebar lg:block">
           <div className="h-full w-[244px]"><SidebarBody /></div>
@@ -487,12 +503,13 @@ function Shell({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
             <Button variant="ghost" size="icon" render={<Link href="/sources" aria-label="数据源" />} className="hidden sm:inline-flex"><Database className="size-4" /></Button>
           </header>
-          <main className="@container min-w-0 flex-1">{children}</main>
+          <main className="app-main @container min-w-0 flex-1">{children}</main>
         </div>
       </div>
       {paletteUsed && <Palette open={palette} onOpenChange={setPalette} />}
       {drawerUsed && <ItemSheet />}
       <Toaster position="bottom-right" />
+      </FilterCtx.Provider>
     </AppCtx.Provider>
   );
 }
@@ -500,7 +517,8 @@ function Shell({ children }: { children: React.ReactNode }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-      <TooltipProvider delay={300}><Suspense fallback={<div className="min-h-screen bg-background" aria-hidden />}><Shell>{children}</Shell></Suspense></TooltipProvider>
+      {/* null fallback: a full-viewport bg-background placeholder unmounts aside+header and reads as a black flash on opaque WKWebView. */}
+      <TooltipProvider delay={300}><Suspense fallback={null}><Shell>{children}</Shell></Suspense></TooltipProvider>
     </ThemeProvider>
   );
 }

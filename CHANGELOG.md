@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+## [0.14.13] - 2026-10-24
+
+### 修复
+- **任意切页整页黑闪（与源是否健康无关）：** 根因同类于 0.14.10 的 Live→AppCtx 全树重绘：每次分区/视图/路由切换都会改 URL 里的 `f`，而 `f` 挂在胖 AppCtx 上，连带 Sources/热点/设置等无关订阅者一起 reconcile；再叠加 Suspense 全屏 `min-h-screen bg-background` 回退（一旦挂起会卸掉侧栏+顶栏）、桌面端 `.glow` 的 `background-attachment: fixed`（WKWebView 不透明表面整页重绘）、以及 feed 卡片 `contain: layout style` 卸载时的图层拆解。现将 `f` / `navigate` / `trView` 拆到独立 FilterCtx；Suspense fallback 改为 `null`；桌面改为 `scroll` 附着；`main`/侧栏/顶栏加 `contain: paint`；导航走 `startTransition`；feed 卡片去掉强 `contain`。删除全部数据源后仍会闪的路径也覆盖到。Mac WKWebView 无法在 Linux 完全复现，请在桌面端切分区/设置验证。
+
+### 致谢
+- Lang
+
 ## [0.14.12] - 2026-10-24
 
 ### 修复

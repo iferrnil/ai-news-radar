@@ -197,6 +197,8 @@
   :lang(zh) { line-break: strict; }
 }
 .glow { background-image: var(--glow); background-repeat: no-repeat; background-attachment: fixed; }
+/* Desktop WKWebView: fixed backgrounds invalidate the whole opaque surface on every main-tree update → black flash. */
+html[data-desktop] .glow { background-attachment: scroll; }
 .fresh-row { animation: enter .45s cubic-bezier(.2,.8,.2,1) both; box-shadow: inset 2px 0 0 var(--brand); }
 .no-scrollbar { scrollbar-width: none; }
 
@@ -219,6 +221,9 @@
 }
 /* desktop: opaque header (backdrop-filter under the title bar left stale samples of the sidebar behind it) */
 html[data-desktop] .app-header { background-color: var(--background); -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* Isolate chrome vs main paints so a feed/settings swap does not clear the sidebar/header layer (opaque WKWebView). */
+.app-sidebar, .app-header { contain: layout paint style; }
+.app-main { contain: layout paint style; }
 @media (prefers-reduced-motion: reduce) {
   .app-sidebar, .app-sidebar > div { transition: none; }
 }
@@ -240,7 +245,8 @@ html[data-titlebar] .app-sidebar .app-brand { --app-region: drag; padding-left: 
 }
 
 /* long feeds: skip layout/paint of off-screen cards; no hover restyles or hover cards while scrolling */
-.feed-card { content-visibility: auto; contain-intrinsic-size: auto 208px; contain: layout style; }
+/* content-visibility only (no contain:layout/style): WebKit was tearing down layers on card unmount during view switches. */
+.feed-card { content-visibility: auto; contain-intrinsic-size: auto 208px; }
 .feed-list[data-scrolling] { pointer-events: none; }
 /* /sources table: skip layout/paint of off-screen rows (Select/Tooltip-heavy cells) */
 .sources-row { content-visibility: auto; contain-intrinsic-size: auto 52px; contain: layout style; }
