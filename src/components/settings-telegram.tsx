@@ -147,7 +147,7 @@ export function TelegramCard({
             data-testid="tg-chat"
           />
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 sm:gap-4">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 sm:gap-4">
           <div className="grid gap-2">
             <Label htmlFor="tg-sched">发送时间（北京时间）</Label>
             <Input
@@ -159,17 +159,26 @@ export function TelegramCard({
               data-testid="tg-sched"
             />
           </div>
-          <div className="grid gap-2">
+          <div className="grid min-w-0 gap-2">
             <Label>简报分区</Label>
+            {/* alignItemWithTrigger=false + modal=false: popup overlays via portal without resizing the
+                trigger / locking page scroll (otherwise the settings page jumps upward). */}
             <Select
               value={p.section || "all"}
-onValueChange={(v) => setP((c) => ({ ...c, section: (v as string) || "all" }))}
+              onValueChange={(v) => setP((c) => ({ ...c, section: (v as string) || "all" }))}
               disabled={locked}
+              modal={false}
             >
-              <SelectTrigger className="w-full" data-testid="tg-section">
+              <SelectTrigger className="w-full max-w-full" data-testid="tg-section">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent
+                alignItemWithTrigger={false}
+                align="start"
+                side="bottom"
+                sideOffset={6}
+                className="max-h-72"
+              >
                 <SelectItem value="all">全部</SelectItem>
                 {sections.map((s) => (
                   <SelectItem key={s.key} value={s.key}>{s.zh}</SelectItem>

@@ -56,7 +56,7 @@ await measure("palette open (⌘K)", () => p.keyboard.press("Control+k"), () => 
 await measure("palette type 6 chars", () => p.keyboard.type("OpenAI", { delay: 60 }), () => sleep(400));
 await p.keyboard.press("Escape"); await sleep(300);
 await measure("SSE-like burst: mark-all read + refresh", () => p.evaluate(() => window.dispatchEvent(new Event("focus"))));
-await measure("navigate → 设置", () => p.locator(".app-sidebar").getByRole("button", { name: "设置" }).click(), () => p.getByTestId("ai-card").waitFor());
+await measure("navigate → 设置", async () => { await p.locator(".app-sidebar").getByRole("button", { name: "设置" }).click(); await p.getByTestId("settings-page").waitFor(); await p.getByTestId("settings-nav-model").click(); }, () => p.getByTestId("ai-card").waitFor());
 await measure("navigate → 数据源", () => p.locator("[aria-label=\"数据源\"]").first().click(), () => p.getByRole("heading", { name: "数据源" }).waitFor());
 await measure("navigate back → 全部", () => side("全部").click(), () => p.locator("[data-item]").first().waitFor());
 console.table(res);

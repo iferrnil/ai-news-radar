@@ -4,7 +4,7 @@ import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { rec, B, RESTART, DATA, mock } from "./lib.mjs";
+import { rec, B, RESTART, DATA, mock , settingsOpen} from "./lib.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SH = process.env.R11_SHOTS ?? "/tmp/shots-r11"; fs.mkdirSync(SH, { recursive: true });
 const shot = (n) => path.join(SH, n);
@@ -58,7 +58,7 @@ execSync(`bash ${RESTART} AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_KEY", process.env.
   const p = await ctx.newPage(); p.on("pageerror", (e) => errors.push(String(e)));
 
   // settings › 抓取 API
-  await p.goto(B + "/settings"); await p.getByTestId("fetchapi-card").waitFor({ timeout: 15000 }); await sleep(600);
+  await settingsOpen(p, "model"); await p.getByTestId("fetchapi-card").waitFor({ timeout: 15000 }); await sleep(600);
   const card = p.getByTestId("fetchapi-card");
   rec("fetch API card: three providers, all 未配置", (await card.locator("[data-testid$=-status]").allInnerTexts()).join(",") === "未配置,未配置,未配置");
   const keys = { jina: "jina_" + "e2efakekey000000000000", firecrawl: "fc-" + "e2efakekey000000000000", crawl4ai: "c4-" + "e2efakekey000000000000" };

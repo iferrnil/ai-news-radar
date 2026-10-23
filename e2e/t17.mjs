@@ -3,7 +3,7 @@
 // Screenshots go to $E2E_SHOTS (r2_*/r3_*.png).
 import { execSync } from "node:child_process";
 import { chromium } from "playwright";
-import { rec, B, RESTART, SHOT, srcs, api } from "./lib.mjs";
+import { rec, B, RESTART, SHOT, srcs, api , settingsOpen} from "./lib.mjs";
 const J = { "Content-Type": "application/json" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const dsEnv = () => ["DEEPSEEK_API_KEY", process.env.E2E_DS_KEY].join("=");
@@ -87,7 +87,7 @@ await page.goto(B + "/sources"); await page.getByRole("heading", { name: "数据
 await page.getByRole("button", { name: /^分区/ }).first().click(); await page.getByRole("dialog").waitFor(); await sleep(400);
 rec("section dialog has no translate switch", await page.getByRole("dialog").getByRole("switch", { name: /^翻译「/ }).count() === 0);
 await page.keyboard.press("Escape");
-await page.goto(B + "/settings"); await page.getByTestId("settings-translate").waitFor();
+await settingsOpen(page, "model"); await page.getByTestId("settings-translate").waitFor();
 await page.getByTestId("settings-translate").screenshot({ path: SHOT("r3_settings_translate.png") });
 rec("settings: no separate translate switch", await page.getByRole("switch", { name: "抓取时翻译" }).count() === 0);
 
@@ -171,7 +171,7 @@ await patch("/api/settings", { notify: { scope: "bogus" } });
 rec("invalid scope ignored", (await api("/api/settings")).notify.scope === "all");
 await patch("/api/settings", { notify: { system: true, enabled: true } });
 const b2 = await chromium.launch(); const sp = await b2.newPage({ viewport: { width: 1100, height: 1300 } });
-await sp.goto(B + "/settings"); await sp.getByTestId("notify-system").waitFor();
+await settingsOpen(sp, "notify"); await sp.getByTestId("notify-system").waitFor();
 rec("settings: 桌面系统通知 switch + scope radio (desktop)", await sp.getByRole("switch", { name: "桌面系统通知" }).isChecked() && await sp.getByRole("radio", { name: "全部新内容" }).isChecked());
 await sp.getByTestId("notify-card").screenshot({ path: SHOT("r2_settings_notify.png") });
 // digest SSE event when scope=all

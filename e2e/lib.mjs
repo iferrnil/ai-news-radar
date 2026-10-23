@@ -49,3 +49,22 @@ export async function setMode(dlg, label) { await dlg.getByRole("radio", { name:
 export async function applyImport(dlg) { await dlg.getByRole("button", { name: /^(导入|覆盖导入)/ }).click(); }
 export const srcs = async () => (await api("/api/sources"));
 export const deleted = () => api("/api/sources/deleted");
+
+/** Open /settings and switch to a category (general|notify|model|writing|data|about). Only the active panel is mounted. */
+export async function settingsOpen(page, cat = "general") {
+  await page.goto(B + "/settings");
+  await page.getByTestId("settings-page").waitFor({ timeout: 15000 });
+  await page.evaluate((k) => { try { localStorage.setItem("settings.category", k); } catch {} }, cat);
+  const nav = page.getByTestId(`settings-nav-${cat}`);
+  if (await nav.count()) {
+    await nav.click();
+  } else {
+    // narrow layout: top select
+    const trigger = page.getByTestId("settings-cat-select");
+    await trigger.waitFor({ timeout: 5000 });
+    await trigger.click();
+    await page.getByRole("option", { name: { general: "常规", notify: "通知与推送", model: "模型与抓取", writing: "写作与 Skill", data: "数据", about: "关于" }[cat] }).click();
+  }
+  await page.getByTestId("settings-panel").waitFor();
+  await page.waitForTimeout(200);
+}

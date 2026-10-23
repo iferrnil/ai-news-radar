@@ -2,7 +2,7 @@
 // vs toast (foreground), click opens the item, server prefs for the desktop, locked mode, desktop flag.
 import { execSync } from "node:child_process";
 import { chromium } from "playwright";
-import { rec, B, mock, RESTART, SHOT, srcs } from "./lib.mjs";
+import { rec, B, mock, RESTART, SHOT, srcs , settingsOpen} from "./lib.mjs";
 const J = { "Content-Type": "application/json" };
 const byName = async (n) => (await srcs()).find((s) => s.name.startsWith(n));
 const poll = async (n) => (await fetch(`${B}/api/sources/${(await byName(n)).id}/fetch`, { method: "POST", headers: J })).json();
@@ -26,7 +26,7 @@ page.on("pageerror", (e) => errors.push(String(e)));
 const notes = () => page.evaluate(() => window.__notes.map((n) => ({ title: n.title, body: n.body, tag: n.tag })));
 
 // opt in (web prefs live in this browser)
-await page.goto(B + "/settings"); await page.getByTestId("notify-card").waitFor();
+await settingsOpen(page, "notify"); await page.getByTestId("notify-card").waitFor();
 rec("web: notifications off by default", !(await page.getByRole("switch", { name: "P0 通知" }).isChecked()) && (await page.getByTestId("notify-perm").innerText()).includes("已允许"));
 await page.getByRole("switch", { name: "P0 通知" }).click(); await page.waitForTimeout(300);
 rec("opt-in stored locally", (await page.evaluate(() => JSON.parse(localStorage.getItem("notify.web")))).enabled === true);
@@ -100,9 +100,11 @@ rec("locked: notify prefs + test notification → 403", lp.status === 403 && lt.
 execSync(`bash ${RESTART} AI_RADAR_DESKTOP=1 AI_RADAR_VERSION=9.9.9`);
 const c2 = await br.newContext(); await c2.addInitScript(() => { window.__notes = []; class N { constructor(t) { window.__notes.push(t); } close() {} } N.permission = "granted"; window.Notification = N; document.hasFocus = () => false; localStorage.setItem("notify.web", JSON.stringify({ enabled: true, sections: [] })); });
 const p2 = await c2.newPage();
-await p2.goto(B + "/settings"); await p2.getByTestId("notify-card").waitFor(); await p2.waitForTimeout(800);
+await settingsOpen(p2, "notify"); await p2.getByTestId("notify-card").waitFor(); await p2.waitForTimeout(800);
 const card = await p2.getByTestId("notify-card").innerText();
-rec("desktop: settings show native-notification text, permission status, version and 检查更新", /系统通知/.test(card) && /不支持/.test(await p2.getByTestId("notify-perm").innerText()) && await p2.getByText("v9.9.9").count() >= 1 && await p2.getByText(/检查更新/).count() >= 1);
+rec("desktop: settings show native-notification text + permission status", /系统通知/.test(card) && /不支持/.test(await p2.getByTestId("notify-perm").innerText()), card.slice(0, 120));
+await p2.getByTestId("settings-nav-data").click(); await p2.getByTestId("data-card").waitFor(); await p2.waitForTimeout(400);
+rec("desktop: 数据 shows version and 检查更新", await p2.getByText("v9.9.9").count() >= 1 && await p2.getByText(/检查更新/).count() >= 1, await p2.getByTestId("data-card").innerText());
 const ds = await (await fetch(B + "/api/settings")).json();
 rec("desktop: prefs on the server (default on)", ds.desktop === true && ds.notify.enabled === true);
 await p2.goto(B + "/"); await p2.waitForTimeout(2500);

@@ -1,12 +1,12 @@
 // in-app DeepSeek settings: masked key, never echoed, 0600 file, clear, locked mode
 import fs from "node:fs"; import { execSync } from "node:child_process";
-import { launch, rec, B, SHOT, RESTART, LOG, DATA } from "./lib.mjs";
+import { launch, rec, B, SHOT, RESTART, LOG, DATA , settingsOpen} from "./lib.mjs";
 const KEY = "sk-" + "e2efake" + Math.random().toString(36).slice(2, 14) + "zz";
 const leak = (t) => t.includes(KEY) || t.includes(KEY.slice(3, 20));
 const get = async (p) => (await fetch(B + p)).text();
 const SF = DATA + "/secrets.json";
 let { br, page, errors } = await launch(false);
-await page.goto(B + "/settings"); await page.waitForTimeout(1200);
+await settingsOpen(page, "model"); await page.getByTestId("ai-card").waitFor();
 rec("settings page renders, unconfigured", (await page.getByTestId("key-status").textContent()) === "未配置");
 const inp = page.locator("#ds-key"); await inp.fill(KEY);
 rec("key input masked (type=password)", (await inp.getAttribute("type")) === "password");
@@ -30,7 +30,7 @@ rec("server log has no key", !leak(fs.readFileSync(LOG, "utf8")));
 await br.close(); execSync("bash " + RESTART + "");
 rec("persisted after restart", JSON.parse(await get("/api/settings")).deepseek.configured === true);
 ({ br, page, errors } = await launch(false));
-await page.goto(B + "/settings"); await page.waitForTimeout(1200);
+await settingsOpen(page, "model"); await page.getByTestId("ai-card").waitFor();
 await page.getByRole("button", { name: "清除" }).click(); await page.waitForTimeout(1000);
 rec("clear → 未配置, key removed from file", (await page.getByTestId("key-status").textContent()) === "未配置" && !leak(fs.readFileSync(SF, "utf8")));
 // locked mode
@@ -40,7 +40,7 @@ rec("locked: PATCH key → 403", r.status === 403 && JSON.parse(await get("/api/
 const rt = await fetch(B + "/api/settings/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: KEY }) });
 rec("locked: test with typed key refused", rt.status === 403, `${rt.status}`);
 ({ br, page, errors } = await launch(false));
-await page.goto(B + "/settings"); await page.waitForTimeout(1200);
+await settingsOpen(page, "model"); await page.getByTestId("ai-card").waitFor();
 rec("locked: UI shows notice, inputs/save disabled", await page.getByText("密钥由部署方配置").count() === 1 && await page.locator("#ds-key").isDisabled() && await page.getByTestId("ai-card").getByRole("button", { name: "保存" }).isDisabled());
 await page.screenshot({ path: SHOT("settings_locked.png") });
 rec("no console errors (t12)", errors.filter((e) => !/status of (400|401|403)/.test(e)).length === 0, errors.join("|").slice(0, 200));

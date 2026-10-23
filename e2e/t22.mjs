@@ -4,7 +4,7 @@ import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { rec, B, RESTART, DATA } from "./lib.mjs";
+import { rec, B, RESTART, DATA , settingsOpen} from "./lib.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SH = process.env.R11_SHOTS ?? "/tmp/shots-r11"; fs.mkdirSync(SH, { recursive: true });
 const shot = (n) => path.join(SH, n);
@@ -106,15 +106,18 @@ execSync(`bash ${RESTART} AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_KEY", process.env.
   await p.keyboard.press("Escape");
 
   // settings
-  await p.goto(B + "/settings"); await p.getByTestId("artifacts-card").waitFor({ timeout: 15000 }); await sleep(800);
+  await settingsOpen(p, "writing"); await p.getByTestId("artifacts-card").waitFor({ timeout: 15000 }); await sleep(800);
   rec("settings: 推特 / 公众号 / 小红书 Skill cards with their built-in defaults",
     /twitter-article/.test(await p.getByTestId("skill-card-twitter").innerText()) && /wechat-article/.test(await p.getByTestId("skill-card-wechat").innerText()) && /xhs-article/.test(await p.getByTestId("skill-card-xhs").innerText()));
   rec("settings: 工作目录 shows the configured dir", (await p.getByTestId("artifacts-dir").getAttribute("placeholder")) === ART);
+  await p.getByTestId("skill-card-twitter").screenshot({ path: shot("settings-skill-twitter.png") });
+  await p.getByTestId("artifacts-card").screenshot({ path: shot("settings-artifacts.png") });
+  await p.getByTestId("settings-nav-model").click(); await p.getByTestId("mm-card").waitFor(); await sleep(400);
   await p.locator("#mm-baseUrl").fill("https://mm.example.com/v1"); await p.locator("#mm-imageModel").fill("img-model"); await p.locator("#mm-key").fill("sk-" + "e2emultimodalkey0000");
   await p.getByTestId("mm-save").click(); await p.getByTestId("mm-on").waitFor();
   const mm = await (await fetch(B + "/api/multimodal")).json();
   rec("multimodal config saved, key never returned", mm.image === true && mm.configured && !JSON.stringify(mm).includes("e2emultimodalkey"));
-  for (const [id, f] of [["skill-card-twitter", "settings-skill-twitter.png"], ["mm-card", "settings-multimodal.png"], ["artifacts-card", "settings-artifacts.png"]]) await p.getByTestId(id).screenshot({ path: shot(f) });
+  await p.getByTestId("mm-card").screenshot({ path: shot("settings-multimodal.png") });
   await p.screenshot({ path: shot("settings-full.png"), fullPage: true });
   await ctx.close();
 }

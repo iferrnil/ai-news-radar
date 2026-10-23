@@ -2,7 +2,7 @@
 // persistence, hover-to-read option, server mirror (READ_SYNC / desktop).
 import { execSync } from "node:child_process";
 import { chromium } from "playwright";
-import { rec, B, RESTART, SHOT } from "./lib.mjs";
+import { rec, B, RESTART, SHOT , settingsOpen} from "./lib.mjs";
 const br = await chromium.launch();
 const ctx = await br.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage(); const errors = [];
@@ -51,7 +51,7 @@ await page.goto(B + "/"); await page.waitForTimeout(800);
 rec("turning 只看未读 off is remembered", !page.url().includes("unread=1"));
 
 // hover option
-await page.goto(B + "/settings"); await page.getByRole("switch", { name: "悬停预览时标为已读" }).click();
+await settingsOpen(page, "general"); await page.getByRole("switch", { name: "悬停预览时标为已读" }).click();
 await page.goto(B + "/"); await page.waitForSelector("[data-slot=card]"); await page.waitForTimeout(600);
 const unreadCard = page.locator('[data-item][data-read="false"]').nth(2); const id3 = await unreadCard.getAttribute("data-item");
 await unreadCard.hover(); await page.waitForTimeout(1200); await page.mouse.move(5, 5); await page.waitForTimeout(300);

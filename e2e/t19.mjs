@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
-import { rec, B, RESTART, SHOT, DATA } from "./lib.mjs";
+import { rec, B, RESTART, SHOT, DATA, settingsOpen } from "./lib.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const dsEnv = () => ["DEEPSEEK_API_KEY", process.env.E2E_DS_KEY].join("=");
 const fetchR = async (url, o, n = 4) => { for (let i = 0; i < n; i++) { try { return await fetch(url, o); } catch { await sleep(500); } } return fetch(url, o); };
@@ -46,16 +46,20 @@ for (const desktop of [false, true]) {
   await ctx.close();
 }
 
-// ---- web settings: grouped cards, no desktop-only bits
+// ---- web settings: left category nav; only active panel mounted (no desktop-only cats)
 {
   const p = await br.newPage({ viewport: { width: 1280, height: 1000 } }); p.on("pageerror", (e) => errors.push(String(e)));
-  await p.goto(B + "/settings"); await p.getByTestId("ai-card").waitFor(); await sleep(600);
-  const titles = await p.locator("[data-slot=card-title]").allInnerTexts();
-  rec("web settings: cards 常规 / 通知 / 关键词 / 热点词表 / 翻译 / AI / 关于 (no 数据 on web) (in order)", titles.join(",") === "常规,通知,关键词,热点词表,翻译 / AI,关于", titles.join(","));
+  await settingsOpen(p, "general"); await sleep(400);
+  const nav = (await p.getByTestId("settings-nav").innerText()).replace(/\n/g, ",");
+  rec("web settings nav: 常规 / 通知与推送 / 模型与抓取 / 关于 (no 写作·数据)", nav === "常规,通知与推送,模型与抓取,关于", nav);
+  rec("web general: 常规 card", (await p.locator("[data-slot=card-title]").allInnerTexts()).includes("常规"));
+  await p.getByTestId("settings-nav-notify").click(); await sleep(300);
+  rec("web notify: 通知 + 关键词, no Telegram", /通知/.test((await p.locator("[data-slot=card-title]").allInnerTexts()).join(",")) && await p.getByTestId("telegram-card").count() === 0 && await p.getByTestId("watch-card").count() === 1);
+  await p.getByTestId("settings-nav-model").click(); await p.getByTestId("ai-card").waitFor(); await sleep(300);
+  rec("web model: 翻译 / AI only", (await p.locator("[data-slot=card-title]").allInnerTexts()).join(",") === "翻译 / AI");
   rec("web: no 简报 Skill / 更新 cards", await p.getByTestId("skill-card").count() === 0 && await p.getByTestId("update-card").count() === 0);
   rec("web: skills API is desktop-only", (await fetch(B + "/api/skills")).status === 404);
   rec("web: telegram-test is desktop-only", (await fetch(B + "/api/settings/telegram-test", { method: "POST" })).status === 404);
-  rec("web: no Telegram card", await p.getByTestId("telegram-card").count() === 0);
   await p.screenshot({ path: SHOT("r5_settings_web.png"), fullPage: true });
   await p.close();
 }
@@ -66,15 +70,21 @@ await sleep(600);
 const ctx = await br.newContext({ viewport: { width: 1280, height: 1000 } });
 await ctx.addInitScript(() => { window.__radarDesktop = true; });
 const p = await ctx.newPage(); p.on("pageerror", (e) => errors.push(String(e)));
-await p.goto(B + "/settings"); await p.getByTestId("skill-card").waitFor({ timeout: 15000 }); await sleep(800);
-const titles = await p.locator("[data-slot=card-title]").allInnerTexts();
-rec("desktop settings: 常规 / 通知 / 关键词 / 热点词表 / 翻译 / AI / Telegram / 简报·推特·公众号·小红书 Skill / 写作风格 / 多模态模型 / 抓取 API / 工作目录 / 数据 / 关于", titles.join(",") === "常规,通知,关键词,热点词表,翻译 / AI,Telegram 定时简报,简报 Skill,推特 Skill,公众号 Skill,小红书 Skill,写作风格,多模态模型,抓取 API,工作目录,数据,关于", titles.join(","));
-rec("desktop: 更新 is a section of the 数据 card (version + menu hint)", await p.getByTestId("update-card").count() === 0 && /更新\s*v0\.5\.0 · 自动检查/.test(await p.getByTestId("data-card").getByTestId("update-section").innerText()), await p.getByTestId("data-card").innerText());
-{ const sh = process.env.R11_SHOTS ?? "/tmp/shots-r11"; fs.mkdirSync(sh, { recursive: true }); await p.getByTestId("data-card").scrollIntoViewIfNeeded(); await p.getByTestId("data-card").screenshot({ path: path.join(sh, "settings-data-update.png") }); }
+await settingsOpen(p, "writing"); await p.getByTestId("skill-card").waitFor({ timeout: 15000 }); await sleep(500);
+const navD = (await p.getByTestId("settings-nav").innerText()).replace(/\n/g, ",");
+rec("desktop settings nav: 常规 / 通知与推送 / 模型与抓取 / 写作与 Skill / 数据 / 关于", navD === "常规,通知与推送,模型与抓取,写作与 Skill,数据,关于", navD);
+const writingTitles = (await p.locator("[data-slot=card-title]").allInnerTexts()).join(",");
+rec("desktop writing panel: Skills + 风格 + 工作目录", writingTitles === "简报 Skill,推特 Skill,公众号 Skill,小红书 Skill,写作风格,工作目录", writingTitles);
+await p.getByTestId("settings-nav-notify").click(); await p.getByTestId("notify-card").waitFor(); await sleep(300);
+rec("desktop notify: Telegram card present", await p.getByTestId("telegram-card").count() === 1);
 rec("desktop: no 发送方式 / AppleScript option (native only)", await p.getByTestId("notify-method").count() === 0 && !/AppleScript/.test(await p.getByTestId("notify-card").innerText()));
 { const r = (await fetchR(B + "/api/desktop/notify", { method: "PATCH", headers: J, body: JSON.stringify({ method: "applescript" }) })).status; rec("notify method API removed", r === 405 || r === 404, String(r)); }
 rec("desktop: notification status + 发送测试通知 button", /不支持|尚未询问|已允许|已拒绝/.test(await p.getByTestId("notify-perm").innerText()) && await p.getByTestId("notify-test").count() === 1);
+await p.getByTestId("settings-nav-data").click(); await p.getByTestId("data-card").waitFor(); await sleep(300);
+rec("desktop: 更新 is a section of the 数据 card (version + menu hint)", await p.getByTestId("update-card").count() === 0 && /更新\s*v0\.5\.0 · 自动检查/.test(await p.getByTestId("data-card").getByTestId("update-section").innerText()), await p.getByTestId("data-card").innerText());
+{ const sh = process.env.R11_SHOTS ?? "/tmp/shots-r11"; fs.mkdirSync(sh, { recursive: true }); await p.getByTestId("data-card").screenshot({ path: path.join(sh, "settings-data-update.png") }); }
 rec("desktop: data dir shown, no import/export", (await p.getByTestId("data-card").getByRole("button").count()) === 1 && /打开数据目录/.test(await p.getByTestId("data-card").innerText()));
+await p.getByTestId("settings-nav-writing").click(); await p.getByTestId("skill-card").waitFor(); await sleep(300);
 rec("default skill active", (await p.getByTestId("skill-row").count()) === 1 && /brief-polish/.test(await p.getByTestId("skill-list").innerText()) && await p.getByTestId("skill-active").count() === 1);
 
 // install via URL (https only, validated)

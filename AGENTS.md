@@ -328,3 +328,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## 0.14.5 notes
 - Auto brief: 24h window + max 20; no hot-topics page; morning (0–8 Asia/Shanghai) fill; final dedupe; body-fail refill once.
 - Telegram (desktop): settings card + `secrets.json` token; scheduler in `StartScheduler`; HTML `sendMessage`; web 404; token never in GET.
+
+## 0.14.6 notes
+- Settings: left category nav (`settings.category` in localStorage); only the active panel mounts. Narrow: top Select.
+- Telegram section Select: `alignItemWithTrigger={false}` + `modal={false}` so the popup portals without scroll jump.

@@ -7,7 +7,7 @@ import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { rec, B, RESTART, DATA, mock, srcs, exportFile } from "./lib.mjs";
+import { rec, B, RESTART, DATA, mock, srcs, exportFile , settingsOpen} from "./lib.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SH = process.env.R13_SHOTS ?? "/tmp/shots-r13"; fs.mkdirSync(SH, { recursive: true });
 const shot = (n) => path.join(SH, n);
@@ -34,7 +34,7 @@ await sleep(1800);
     const hf = document.hasFocus.bind(document); document.hasFocus = () => (window.__bg ? false : hf());
   });
   const p = await ctx.newPage(); p.on("pageerror", (e) => errors.push(String(e)));
-  await p.goto(B + "/settings"); await p.getByTestId("watch-card").waitFor({ timeout: 15000 });
+  await settingsOpen(p, "notify"); await p.getByTestId("watch-card").waitFor({ timeout: 15000 });
   await p.getByTestId("watch-input").fill("Zephyrion, 求索、zephyrion"); await p.getByTestId("watch-add").click(); await sleep(600);
   const w = (await (await fetch(B + "/api/settings")).json()).watch;
   rec("关键词: comma / 、 split, case-insensitive dedupe, saved", JSON.stringify(w.keywords) === '["Zephyrion","求索"]' && w.scope === "all" && !w.caseSensitive, JSON.stringify(w));
@@ -42,12 +42,12 @@ await sleep(1800);
   rec("关键词 card: no 通知 switch, no 提醒 wording", await p.getByTestId("watch-notify").count() === 0 && !/提醒|通知/.test(await p.getByTestId("watch-card").innerText()), await p.getByTestId("watch-card").innerText());
   await patch({ watch: { notify: true } });
   rec("关键词 API: a notify flag is not stored", !("notify" in (await (await fetch(B + "/api/settings")).json()).watch));
-  // 热点词表
-  await p.getByTestId("hotlex-card").waitFor();
+  await p.getByTestId("watch-card").screenshot({ path: shot("settings-watch.png") });
+  // 热点词表 lives under 常规
+  await p.getByTestId("settings-nav-general").click(); await p.getByTestId("hotlex-card").waitFor(); await sleep(300);
   await p.getByTestId("hotlex-input").fill("星澜 = Xinglan\n星澜"); await p.getByTestId("hotlex-card").screenshot({ path: shot("settings-hotlex.png") });
   await p.getByTestId("hotlex-save").click(); await sleep(600);
   rec("热点词表: saved normalized", (await (await fetch(B + "/api/settings")).json()).hotLexicon === "星澜=Xinglan", JSON.stringify((await (await fetch(B + "/api/settings")).json()).hotLexicon));
-  await p.getByTestId("watch-card").screenshot({ path: shot("settings-watch.png") });
   rec("web: 写作风格 card hidden, API 404", await p.getByTestId("style-card").count() === 0 && (await fetch(B + "/api/style?kind=wechat")).status === 404);
   await p.evaluate(() => localStorage.setItem("notify.web", JSON.stringify({ enabled: true, sections: [] })));
 
@@ -164,7 +164,7 @@ execSync(`bash ${RESTART} DISABLE_POLLER=1 SETTINGS_LOCKED=1`);
   await fetch(B + "/api/favorites", { method: "POST", headers: J, body: JSON.stringify({ id: one.id, on: false }) });
   rec("locked: 写作风格 still 404 on web", (await fetch(B + "/api/style?kind=xhs")).status === 404);
   rec("locked: 热点词表 PATCH 403, 关键词 still editable", (await patch({ hotLexicon: "x" })).status === 403 && (await patch({ watch: { keywords: ["Zephyrion"] } })).status === 200);
-  const p = await br.newPage({ viewport: { width: 1280, height: 900 } }); await p.goto(B + "/settings"); await p.getByTestId("watch-card").waitFor({ timeout: 15000 }); await sleep(500);
+  const p = await br.newPage({ viewport: { width: 1280, height: 900 } }); await settingsOpen(p, "notify"); await p.getByTestId("watch-card").waitFor({ timeout: 15000 }); await sleep(500);
   rec("locked web: 热点词表 card hidden", await p.getByTestId("hotlex-card").count() === 0);
   await p.close();
 }
@@ -176,7 +176,7 @@ execSync(`bash ${RESTART} DISABLE_POLLER=1 AI_RADAR_DESKTOP=1 ${["DEEPSEEK_API_K
   await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: B });
   await ctx.addInitScript(() => { window.__radarDesktop = true; });
   const p = await ctx.newPage(); p.on("pageerror", (e) => errors.push(String(e)));
-  await p.goto(B + "/settings"); await p.getByTestId("style-card").waitFor({ timeout: 15000 });
+  await settingsOpen(p, "writing"); await p.getByTestId("style-card").waitFor({ timeout: 15000 });
   const sc = p.getByTestId("style-card");
   await sc.getByTestId("style-tab-wechat").click();
   const sample = "我写东西有个习惯：先说结论，再讲为什么。\n\n" + "上周我们团队试了三款新模型，结果出乎意料，最便宜的那款反而最稳。".repeat(4);
