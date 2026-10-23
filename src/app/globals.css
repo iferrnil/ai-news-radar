@@ -170,7 +170,16 @@
 
 @layer base {
   * { @apply border-border outline-ring/50; }
-  html { @apply font-sans; font-synthesis: none; } /* WenKai ships Regular+Medium only; never fake bold/italic */
+  html {
+    @apply font-sans;
+    font-synthesis: none; /* WenKai ships Regular+Medium only; never fake bold/italic */
+    /* Keep layout width stable when a long settings panel (or any page) gains a scrollbar —
+       otherwise switching 常规 → 通知与推送 shifts the whole app left by the scrollbar width.
+       Prefer gutter reservation; fall back to always showing the vertical scrollbar so classic
+       (non-overlay) scrollbars never appear/disappear mid-navigation. */
+    scrollbar-gutter: stable;
+    overflow-y: scroll;
+  }
   body { @apply bg-background text-foreground; -webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto; font-feature-settings: "cv11", "ss01", "ss03"; font-optical-sizing: auto; text-rendering: optimizeLegibility; }
   /* one stroke weight for every lucide icon (overrides the per-icon attribute) */
   svg.lucide { stroke-width: 1.75; }

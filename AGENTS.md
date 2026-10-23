@@ -332,3 +332,7 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## 0.14.6 notes
 - Settings: left category nav (`settings.category` in localStorage); only the active panel mounts. Narrow: top Select.
 - Telegram section Select: `alignItemWithTrigger={false}` + `modal={false}` so the popup portals without scroll jump.
+
+## 0.14.7 notes
+- `html { scrollbar-gutter: stable; overflow-y: scroll; }` — settings category switch (and Select open) must not change layout width when a classic scrollbar appears.
+- Select defaults: `modal={false}`, `alignItemWithTrigger={false}` (portal overlay, no body scroll-lock).

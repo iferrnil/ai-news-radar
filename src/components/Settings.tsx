@@ -91,6 +91,8 @@ export default function Settings() {
   const pick = (id: Cat) => {
     setCat(id);
     try { localStorage.setItem(CAT_KEY, id); } catch { /* */ }
+    // short ↔ tall panels: keep the viewport at the top so content width/scrollbar stay predictable
+    if (typeof window !== "undefined") window.scrollTo(0, 0);
   };
 
   const patch = async (body: object, what: typeof busy, msg: string) => {
