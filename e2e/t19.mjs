@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
-import { rec, B, RESTART, SHOT, DATA, settingsOpen } from "./lib.mjs";
+import { rec, B, RESTART, SHOT, DATA, settingsOpen, mock } from "./lib.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const dsEnv = () => ["DEEPSEEK_API_KEY", process.env.E2E_DS_KEY].join("=");
 const fetchR = async (url, o, n = 4) => { for (let i = 0; i < n; i++) { try { return await fetch(url, o); } catch { await sleep(500); } } return fetch(url, o); };
@@ -77,6 +77,37 @@ const writingTitles = (await p.locator("[data-slot=card-title]").allInnerTexts()
 rec("desktop writing panel: Skills + 风格 + 工作目录", writingTitles === "简报 Skill,推特 Skill,公众号 Skill,小红书 Skill,写作风格,工作目录", writingTitles);
 await p.getByTestId("settings-nav-notify").click(); await p.getByTestId("notify-card").waitFor(); await sleep(300);
 rec("desktop notify: Telegram card present", await p.getByTestId("telegram-card").count() === 1);
+// Telegram UX: section Select shows names (not cN ids); 发送测试 stays retryable after failure
+{
+  const created = await (await fetchR(B + "/api/sections", { method: "POST", headers: J, body: JSON.stringify({ name: "E2E电报分区", icon: null, inAll: false }) })).json();
+  const secKey = created.key || created.section?.key;
+  rec("telegram: created custom section key", /^c\d+$/.test(secKey || ""), String(secKey));
+  await fetchR(B + "/api/settings", { method: "PATCH", headers: J, body: JSON.stringify({ telegram: { enabled: false, chatId: "@e2e_tg_channel", schedule: "08:00", section: secKey, token: "999000111:BBBfakeTokenForTestsOnly_xxYYzz_0123456789" } }) });
+  await settingsOpen(p, "notify"); await p.getByTestId("telegram-card").waitFor({ timeout: 15000 }); await sleep(500);
+  // wait until app-shell has loaded sections so SelectValue can resolve the name
+  await p.waitForFunction((k) => {
+    const t = document.querySelector("[data-testid=tg-section]")?.textContent || "";
+    return t.includes("E2E电报分区") || (k && !t.includes(k) && t.trim().length > 0);
+  }, secKey, { timeout: 10000 }).catch(() => {});
+  const trig = p.getByTestId("tg-section");
+  const label = (await trig.innerText()).replace(/\s+/g, " ").trim();
+  rec("telegram: 简报分区 shows section name not raw id", label.includes("E2E电报分区") && !/^c\d+$/.test(label), label);
+  await mock("fail=api.telegram.org&mode=500");
+  const btn = p.getByTestId("tg-test");
+  rec("telegram: 发送测试 enabled with token+chatId", await btn.isEnabled());
+  await btn.click();
+  await sleep(1500);
+  const last1 = await p.getByTestId("tg-last").innerText().catch(() => "");
+  rec("telegram: failure shows lastError", /发送失败|mock|HTTP 500|失败/.test(last1), last1.slice(0, 120));
+  rec("telegram: 发送测试 retryable after failure", await btn.isEnabled());
+  await mock("fail=api.telegram.org&mode=ok");
+  await btn.click();
+  await sleep(2000);
+  const last2 = await p.getByTestId("tg-last").innerText().catch(() => "");
+  rec("telegram: success clears lastError", /已发送/.test(last2) && !/失败|HTTP|mock/.test(last2), last2.slice(0, 120));
+  // scrub token from e2e data dir
+  await fetchR(B + "/api/settings", { method: "PATCH", headers: J, body: JSON.stringify({ telegram: { clearToken: true, chatId: "", enabled: false, section: "all" } }) });
+}
 rec("desktop: no 发送方式 / AppleScript option (native only)", await p.getByTestId("notify-method").count() === 0 && !/AppleScript/.test(await p.getByTestId("notify-card").innerText()));
 { const r = (await fetchR(B + "/api/desktop/notify", { method: "PATCH", headers: J, body: JSON.stringify({ method: "applescript" }) })).status; rec("notify method API removed", r === 405 || r === 404, String(r)); }
 rec("desktop: notification status + 发送测试通知 button", /不支持|尚未询问|已允许|已拒绝/.test(await p.getByTestId("notify-perm").innerText()) && await p.getByTestId("notify-test").count() === 1);

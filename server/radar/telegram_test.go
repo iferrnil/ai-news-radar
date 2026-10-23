@@ -167,3 +167,47 @@ func TestSSRFStillBlocksFakeIPAndLoopback(t *testing.T) {
 		t.Fatalf("public IP blocked: %v", err)
 	}
 }
+
+
+func TestTelegramTestFailureReturnsPrefs(t *testing.T) {
+	s := testStore(t)
+	s.Cfg.Desktop = true
+	sec := s.loadSecrets()
+	sec.TelegramToken = "999000111:BBBfakeTokenForTestsOnly_xxYYzz_0123456789"
+	if err := s.saveSecrets(sec); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetTelegramPrefs(map[string]any{
+		"enabled": false, "chatId": "@mychannel", "schedule": "08:00", "section": "all",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Force send failure: dead Bot API base (no UPSTREAM_MOCK rewrite to a live mock).
+	old := tgAPIBase
+	tgAPIBase = "http://127.0.0.1:1"
+	t.Setenv("UPSTREAM_MOCK", "")
+	defer func() { tgAPIBase = old }()
+
+	rr := httptest.NewRecorder()
+	s.hTelegramTest(rr, httptest.NewRequest("POST", "/api/settings/telegram-test", nil))
+	if rr.Code != 200 {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["ok"] != false {
+		t.Fatalf("expected ok=false: %v", out)
+	}
+	tg, _ := out["telegram"].(map[string]any)
+	if tg == nil {
+		t.Fatalf("missing telegram on failure: %v", out)
+	}
+	if tg["chatId"] != "@mychannel" {
+		t.Fatalf("chatId wiped: %v", tg)
+	}
+	if tg["lastError"] == nil || tg["lastError"] == "" {
+		t.Fatalf("expected lastError: %v", tg)
+	}
+}

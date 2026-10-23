@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useApp } from "./app-shell";
-import { api } from "./common";
+import { api, secZh, type SectionKey } from "./common";
 
 export type TelegramPrefs = {
   enabled: boolean;
@@ -24,6 +24,12 @@ export type TelegramPrefs = {
   lastError?: string;
   lastOk?: boolean;
 };
+
+/** Base UI SelectValue falls back to the raw `value` when popup items are not mounted — always map id → name. */
+function sectionLabel(v: string, sections: { key: string; zh: string }[]) {
+  if (!v || v === "all") return "全部";
+  return sections.find((s) => s.key === v)?.zh ?? secZh(v as SectionKey);
+}
 
 export function TelegramCard({
   initial, locked, onSaved,
@@ -40,6 +46,10 @@ export function TelegramCard({
   useEffect(() => {
     if (initial) setP(initial);
   }, [initial]);
+
+  const chatId = (p.chatId ?? "").trim();
+  const hasTok = p.hasToken || !!token.trim();
+  const canTest = !locked && !busy && hasTok && !!chatId;
 
   const patch = async (body: Record<string, unknown>, okMsg?: string) => {
     setBusy("save");
@@ -60,8 +70,8 @@ export function TelegramCard({
   const save = async () => {
     const body: Record<string, unknown> = {
       enabled: p.enabled,
-      chatId: p.chatId.trim(),
-      schedule: p.schedule.trim() || "08:00",
+      chatId,
+      schedule: (p.schedule ?? "").trim() || "08:00",
       section: p.section || "all",
     };
     if (token.trim()) body.token = token.trim();
@@ -76,10 +86,36 @@ export function TelegramCard({
   };
 
   const test = async () => {
+    if (!canTest) return;
     setBusy("test");
     try {
+      // Persist current form first so an unsaved Chat ID / section is what we actually send.
+      const body: Record<string, unknown> = {
+        enabled: p.enabled,
+        chatId,
+        schedule: (p.schedule ?? "").trim() || "08:00",
+        section: p.section || "all",
+      };
+      if (token.trim()) body.token = token.trim();
+      const saved = await api<{ telegram: TelegramPrefs }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ telegram: body }),
+      });
+      onSaved(saved.telegram);
+      setP((cur) => ({ ...saved.telegram, chatId: saved.telegram.chatId || cur.chatId }));
+      if (token.trim()) { setToken(""); setShow(false); }
+
       const r = await api<{ ok: boolean; error?: string; telegram?: TelegramPrefs }>("/api/settings/telegram-test", { method: "POST" });
-      if (r.telegram) { onSaved(r.telegram); setP(r.telegram); }
+      if (r.telegram) {
+        // Success responses omit empty lastError (omitempty) — clear it locally so the red line goes away.
+        const tg: TelegramPrefs = r.ok
+          ? { ...r.telegram, lastError: undefined, lastOk: true }
+          : r.telegram;
+        onSaved(tg);
+        setP((cur) => ({ ...tg, chatId: tg.chatId || cur.chatId }));
+      } else if (r.ok) {
+        setP((cur) => ({ ...cur, lastError: undefined, lastOk: true, lastAt: Date.now() / 1000 }));
+      }
       if (r.ok) toast.success("已发送测试简报到 Telegram");
       else toast.error(r.error ?? "发送失败");
     } catch (e) {
@@ -142,7 +178,7 @@ export function TelegramCard({
             id="tg-chat"
             disabled={locked}
             placeholder="@channel 或 -100…"
-            value={p.chatId}
+            value={p.chatId ?? ""}
             onChange={(e) => setP((c) => ({ ...c, chatId: e.target.value }))}
             data-testid="tg-chat"
           />
@@ -170,7 +206,7 @@ export function TelegramCard({
               modal={false}
             >
               <SelectTrigger className="w-full max-w-full" data-testid="tg-section">
-                <SelectValue />
+                <SelectValue>{(v: string) => sectionLabel(v, sections)}</SelectValue>
               </SelectTrigger>
               <SelectContent
                 alignItemWithTrigger={false}
@@ -201,7 +237,7 @@ export function TelegramCard({
             {busy === "save" ? <Loader2 className="animate-spin" /> : <Trash2 />}清除 Token
           </Button>
         )}
-        <Button variant="outline" disabled={locked || !!busy || (!p.hasToken && !token.trim()) || !p.chatId.trim()} onClick={() => void test()} data-testid="tg-test">
+        <Button variant="outline" disabled={!canTest} onClick={() => void test()} data-testid="tg-test">
           {busy === "test" ? <Loader2 className="animate-spin" /> : <Send />}发送测试
         </Button>
         <Button disabled={locked || !!busy} onClick={() => void save()} data-testid="tg-save">

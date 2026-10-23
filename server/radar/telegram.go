@@ -408,7 +408,8 @@ func (s *Store) hTelegramTest(w http.ResponseWriter, r *http.Request) {
 			detail(w, he.code, he.msg)
 			return
 		}
-		writeJSON(w, 200, obj("ok", false, "error", err.Error()))
+		// Always include telegram so the UI can refresh lastError / lastOk and stay retryable.
+		writeJSON(w, 200, obj("ok", false, "error", err.Error(), "telegram", s.TelegramPublic()))
 		return
 	}
 	writeJSON(w, 200, obj("ok", true, "telegram", s.TelegramPublic()))

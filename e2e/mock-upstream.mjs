@@ -109,6 +109,11 @@ http.createServer((req, res) => {
     const data = { props: { pageProps: { headerProps: { listName: "Mock list" }, timeline: { entries: [] } } } };
     return send(res, 200, `<html><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(data)}</script></html>`, "text/html");
   }
+  // Telegram Bot API (desktop scheduled brief / 发送测试)
+  if (host === "api.telegram.org") {
+    if (mode === "500") return send(res, 500, { ok: false, description: "mock telegram 500" });
+    return send(res, 200, { ok: true, result: { message_id: 1 } });
+  }
   // 简报 Skill install from URL (t19)
   if (host === "skills.mock-ai.com") {
     if (u.pathname.endsWith("/SKILL.md")) return send(res, 200, "---\nname: e2e-editors\ndescription: e2e skill\n---\n# E2E 编辑部\n\nSKILL-E2E-MARKER-42：每条只保留一句话。\n", "text/markdown");

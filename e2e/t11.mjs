@@ -57,5 +57,13 @@ await page.keyboard.press("Escape"); await page.goto(B + "/sources"); await page
   rec("import preview section select shows names only", !ti && ai && await page.getByRole("option").count() >= 5); await page.keyboard.press("Escape"); await page.keyboard.press("Escape"); }
 await page.getByRole("button", { name: "分区", exact: true }).click(); await sd.waitFor();
 rec("manage dialog keeps icons", await sd.locator("[data-testid=section-lab] svg").count() > 0);
+// sources page back-to-top (same control as feed; light scroll listener)
+await page.goto(B + "/sources"); await page.waitForTimeout(800);
+await page.evaluate(() => { const pad = document.createElement("div"); pad.style.height = "4000px"; pad.dataset.e2ePad = "1"; document.querySelector("main")?.appendChild(pad); window.scrollTo(0, 2500); });
+await page.waitForTimeout(400);
+const topBtn = page.getByTestId("back-to-top");
+rec("sources: back-to-top appears after scrolling", await topBtn.count() === 1);
+if (await topBtn.count()) { await topBtn.click(); await page.waitForTimeout(1000); rec("sources: back-to-top scrolls to top", await page.evaluate(() => window.scrollY) < 5); }
+await page.evaluate(() => document.querySelector("[data-e2e-pad]")?.remove());
 rec("no console errors (t11)", errors.filter((e) => !/status of (400|409)|ERR_INCOMPLETE/.test(e)).length === 0);
 await br.close();

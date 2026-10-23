@@ -59,6 +59,7 @@ import { useApp } from "./app-shell";
 import { type SectionKey, TYPE, type SourceRow, ago, api, bj, allSections, sourceSection, secZh } from "./common";
 import { SourceAvatar } from "./source-avatar";
 import { HealthBadge } from "./source-health-badge";
+import { BackToTop } from "./back-to-top";
 
 type StatusKey = "active" | "err" | "off" | "paused" | "all";
 // 在线 = enabled & fetchable · 报错 = 在线 with last_error · 停用 = switched off · 暂停 = enabled but not fetchable (unsupported)
@@ -365,6 +366,7 @@ export default function Sources() {
       {editUsed && <EditSourceDialog src={editSrc} onClose={() => setEditSrc(null)} onSaved={reloadSources} />}
       {secUsed && <SectionsDialog open={secOpen} onOpenChange={setSecOpen} sources={rows} onChanged={reloadSources} />}
       {impOpen && <ImportDialog open={impOpen} onOpenChange={setImpOpen} onDone={reloadSources} />}
+      <BackToTop />
     </div>
   );
 }

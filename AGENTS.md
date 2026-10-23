@@ -337,5 +337,10 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 - `html { scrollbar-gutter: stable; overflow-y: scroll; }` — settings category switch (and Select open) must not change layout width when a classic scrollbar appears.
 - Select defaults: `modal={false}`, `alignItemWithTrigger={false}` (portal overlay, no body scroll-lock).
 
+## 0.14.9 notes
+- Telegram section Select: `SelectValue` children map id → section name (no icons); same pattern as /sources filter.
+- Telegram test: PATCH current prefs first; failure JSON includes `telegram`; client clears `busy` in `finally` and drops `lastError` on success.
+- Sources: mounts shared `BackToTop` (rAF-coalesced passive scroll); Feed keeps its own listener for `data-scrolling`.
+
 ## 0.14.8 notes
 - Telegram `tgSend`: no PublicOnly on fixed `api.telegram.org` (Clash/Surge fake-ip → 198.18.0.0/15 false positive). User/content URL SSRF unchanged.
