@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+## [0.14.8] - 2026-10-23
+
+### 修复
+- **Telegram 发送失败（不允许访问本机或内网地址）：** Clash / Surge 等假 IP（fake-ip）DNS 会把 `api.telegram.org` 解析到 `198.18.0.0/15`，而 Bot API 发送误走了面向用户链接的 PublicOnly SSRF 门禁，被当成内网地址拒绝。`tgSend` 改为对固定的 `api.telegram.org` 主机不再套 PublicOnly；文章 / 图标 / Skill 等用户可控 URL 的 SSRF 门禁不变。
+
+### 致谢
+- Lang
+
 ## [0.14.7] - 2026-10-23
 
 ### 修复

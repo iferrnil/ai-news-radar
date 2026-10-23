@@ -21,9 +21,12 @@ import (
 
 const (
 	tgMaxMsg     = 4000 // under Telegram's 4096; leave room for entities
-	tgAPIBase    = "https://api.telegram.org"
 	tgSettingKey = "telegram"
 )
+
+// tgAPIBase is the Bot API origin (var so tests can point at httptest).
+// Not user-controlled — never subject to the PublicOnly SSRF gate (see tgSend).
+var tgAPIBase = "https://api.telegram.org"
 
 // TelegramPrefs is the non-secret side of the Telegram card (token never appears here).
 type TelegramPrefs struct {
@@ -291,7 +294,9 @@ func (s *Store) tgSend(chat, text string) error {
 		return fmt.Errorf("未配置 Chat ID")
 	}
 	parts := splitTG(text, tgMaxMsg)
-	ctx := PublicOnly(context.Background())
+	// Fixed Bot API host — not a user/content URL. PublicOnly would false-positive under
+	// Clash/Surge fake-ip DNS (api.telegram.org → 198.18.0.0/15, blocked by blockedIP).
+	ctx := context.Background()
 	for i, part := range parts {
 		form := url.Values{}
 		form.Set("chat_id", chat)

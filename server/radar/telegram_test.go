@@ -1,6 +1,7 @@
 package radar
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -100,5 +101,69 @@ func TestCleanTGFields(t *testing.T) {
 	}
 }
 
-// silence unused import if http only used via httptest
-var _ = http.StatusOK
+// TestTelegramSendBypassesPublicOnly: tgSend must reach the Bot API even when the dial
+// target is loopback (httptest). PublicOnly would refuse 127.0.0.1 — that was the false
+// positive users hit when Clash/Surge fake-ip resolved api.telegram.org to 198.18.0.0/15.
+func TestTelegramSendBypassesPublicOnly(t *testing.T) {
+	guardOn(t)
+	var gotPath, gotChat, gotText string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		gotPath = r.URL.Path
+		gotChat = r.Form.Get("chat_id")
+		gotText = r.Form.Get("text")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	old := tgAPIBase
+	tgAPIBase = srv.URL
+	defer func() { tgAPIBase = old }()
+
+	s := testStore(t)
+	// testStore pins UPSTREAM_MOCK to a dead port; clear it so tgSend hits our httptest.
+	t.Setenv("UPSTREAM_MOCK", "")
+	s.Cfg.Desktop = true
+	sec := s.loadSecrets()
+	sec.TelegramToken = "999000111:BBBfakeTokenForTestsOnly_xxYYzz_0123456789"
+	if err := s.saveSecrets(sec); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.tgSend("@mychannel", "<b>hi</b>"); err != nil {
+		t.Fatalf("tgSend via loopback (must not hit SSRF): %v", err)
+	}
+	if !strings.Contains(gotPath, "/bot999000111:BBBfakeTokenForTestsOnly_xxYYzz_0123456789/sendMessage") {
+		t.Fatalf("path: %s", gotPath)
+	}
+	if gotChat != "@mychannel" || gotText != "<b>hi</b>" {
+		t.Fatalf("form chat=%q text=%q", gotChat, gotText)
+	}
+
+	// Contrast: the same URL under PublicOnly is still refused (SSRF intact for general fetch).
+	if _, err := netFetch(PublicOnly(context.Background()), "GET", srv.URL, nil, nil, 0); err == nil || !strings.Contains(err.Error(), "内网") {
+		t.Fatalf("PublicOnly must still block loopback: %v", err)
+	}
+}
+
+// TestSSRFStillBlocksFakeIPAndLoopback: general PublicOnly fetches keep refusing private /
+// benchmark (Clash fake-ip) ranges — only the fixed Telegram host path is exempt.
+func TestSSRFStillBlocksFakeIPAndLoopback(t *testing.T) {
+	guardOn(t)
+	ctx := PublicOnly(context.Background())
+	for _, u := range []string{
+		"http://127.0.0.1/",
+		"http://10.0.0.1/",
+		"http://192.168.1.1/",
+		"http://198.18.0.1/", // Clash/Surge fake-ip / benchmark range
+		"http://169.254.169.254/",
+	} {
+		if err := checkTarget(ctx, u); err == nil {
+			t.Fatalf("checkTarget allowed %s", u)
+		}
+	}
+	// Public unicast still OK (no DNS — literal IP).
+	if err := checkTarget(ctx, "https://8.8.8.8/"); err != nil {
+		t.Fatalf("public IP blocked: %v", err)
+	}
+}

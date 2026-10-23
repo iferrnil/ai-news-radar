@@ -336,3 +336,6 @@ See **docs/rate-limits.md** (or `/docs/rate-limits` in the app). Don't poll fast
 ## 0.14.7 notes
 - `html { scrollbar-gutter: stable; overflow-y: scroll; }` — settings category switch (and Select open) must not change layout width when a classic scrollbar appears.
 - Select defaults: `modal={false}`, `alignItemWithTrigger={false}` (portal overlay, no body scroll-lock).
+
+## 0.14.8 notes
+- Telegram `tgSend`: no PublicOnly on fixed `api.telegram.org` (Clash/Surge fake-ip → 198.18.0.0/15 false positive). User/content URL SSRF unchanged.
