@@ -1,7 +1,7 @@
 {
   "name": "AI News Radar Native",
   "identifier": "com.iferrnil.ainewsradar.native",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "copyright": "© 2026 Lang",
   "icon": "resources/icon.png",
   "out": "build",

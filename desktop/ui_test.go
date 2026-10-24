@@ -46,7 +46,7 @@ func TestWindowOptionsNative(t *testing.T) {
 }
 
 func TestRefilter(t *testing.T) {
-	a := newRadarApp(nil, "0.1.0")
+	a := newRadarApp(nil, "0.2.0")
 	a.items = []feedItem{
 		{ID: 1, Title: "Hello Alpha", Section: "lab", Source: "A", Summary: "x"},
 		{ID: 2, Title: "Beta News", Section: "cn", Source: "B", Summary: "y"},
@@ -68,44 +68,87 @@ func TestRefilter(t *testing.T) {
 }
 
 func TestNativeViewSmoke(t *testing.T) {
-	a := newRadarApp(nil, "0.1.0-test")
+	a := newRadarApp(nil, "0.2.0-test")
 	a.healthy = true
 	a.status = "ok"
 	a.sections = []sectionInfo{{Key: "lab", Name: "实验室"}}
-	a.items = []feedItem{{ID: 1, Title: "Smoke item", Section: "lab", Source: "Test", Summary: "hello", Published: 1.7e9}}
+	a.items = []feedItem{
+		{ID: 1, Title: "Smoke item", Section: "lab", Source: "Test", Summary: "hello", Published: 1.7e9, Priority: "P0"},
+		{ID: 2, TitleZh: "中文可读标题", Title: "EN", Section: "lab", Source: "实验室", SummaryZh: "摘要内容用于排版", Published: 1.7e9},
+	}
 	a.refilter()
-	tr := ui.NewTester(a.view, 1100, 700)
+	tr := ui.NewTester(a.view, 1180, 760)
 	tr.SetDark(true)
 	tr.SetVibrancy(true)
 	tr.Frame()
 	if !tr.HasText("AI News Radar") {
 		t.Fatalf("missing title; texts=%v", tr.Texts())
 	}
-	if !tr.HasText("实验") && !tr.HasText("实验预览") && !tr.HasText("实验 · Native") {
-		// banner or badge
-		found := false
-		for _, s := range tr.Texts() {
-			if containsHanExperiment(s) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("missing experiment badge; texts=%v", tr.Texts())
-		}
+	if !tr.HasText("Native") && !containsAnyExperiment(tr.Texts()) {
+		t.Fatalf("missing experiment badge; texts=%v", tr.Texts())
 	}
 	if !tr.HasText("Smoke item") {
 		t.Fatalf("missing feed item; texts=%v", tr.Texts())
 	}
-	// navigate to about
-	if err := tr.Click("关于"); err != nil {
-		t.Log("click 关于:", err) // sidebar label may need exact match
+	if !tr.HasText("中文可读标题") {
+		t.Fatalf("missing Chinese title; texts=%v", tr.Texts())
 	}
+	if !tr.HasText("全部资讯") {
+		t.Fatalf("missing section title; texts=%v", tr.Texts())
+	}
+	// select first item → detail
+	a.selected = 0
+	a.openSelected()
 	tr.Frame()
+	if !tr.HasText("在浏览器打开") && !tr.HasText("复制链接") {
+		t.Fatalf("missing detail actions; texts=%v", tr.Texts())
+	}
+	// about page
+	a.nav = navAbout
+	tr.Frame()
+	if !tr.HasText("关于") {
+		t.Fatalf("missing about; texts=%v", tr.Texts())
+	}
+	// stub / empty polish
+	a.nav = navStubBrief
+	tr.Frame()
+	if !tr.HasText("简报") {
+		t.Fatalf("missing stub; texts=%v", tr.Texts())
+	}
+	// settings
+	a.nav = navSettings
+	tr.Frame()
+	if !tr.HasText("设置") {
+		t.Fatalf("missing settings; texts=%v", tr.Texts())
+	}
 }
 
-func containsHanExperiment(s string) bool {
-	return len(s) > 0 && (containsSub(s, "实验") || containsSub(s, "Native") || containsSub(s, "预览"))
+func TestApplyThemeRestrainedAccent(t *testing.T) {
+	tr := ui.NewTester(func(c *ui.Context) {
+		applyTheme(c)
+		th := c.Theme()
+		if th.Spacing < 5 {
+			panic("expected roomier spacing")
+		}
+		if th.Radius < 8 {
+			panic("expected softer radius")
+		}
+		ui.Text(c, "theme-ok")
+	}, 200, 80)
+	tr.SetDark(true)
+	tr.Frame()
+	if !tr.HasText("theme-ok") {
+		t.Fatal(tr.Texts())
+	}
+}
+
+func containsAnyExperiment(texts []string) bool {
+	for _, s := range texts {
+		if containsSub(s, "实验") || containsSub(s, "Native") || containsSub(s, "预览") {
+			return true
+		}
+	}
+	return false
 }
 
 func containsSub(s, sub string) bool {
