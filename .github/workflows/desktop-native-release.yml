@@ -1,0 +1,151 @@
+# Experimental pure-MyGo native UI release (desktop-native-v* tags).
+# Creates a GitHub *prerelease* so /releases/latest stays on the web desktop channel (desktop-v0.15.x).
+# Does NOT use the Sparkle updater channel of the web shell (no tagPrefix desktop-v).
+name: desktop-native-release
+on:
+  push:
+    tags: ["desktop-native-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (desktop-native-vX.Y.Z); empty = desktop-native-v<version in desktop/mygo.json>"
+        required: false
+      draft:
+        description: "Create the release as a draft"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: desktop-native-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            desktop/go.sum
+            server/go.sum
+      - name: Import the certificate (same secrets as desktop-release when present)
+        id: sign
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_SELF_SIGNED: ${{ secrets.MACOS_SELF_SIGNED }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "signed=0" >> "$GITHUB_OUTPUT"
+          if [ -z "${MACOS_CERTIFICATE:-}" ] || [ -z "${MACOS_SIGNING_IDENTITY:-}" ]; then
+            echo "no signing secrets — ad hoc"; exit 0
+          fi
+          # Reuse the import logic from desktop-release.yml when secrets exist
+          keychain="$RUNNER_TEMP/app-signing.keychain-db"
+          pass=$(openssl rand -base64 32)
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "${MACOS_CERTIFICATE_PASSWORD:-}" -A -t cert -f pkcs12 -k "$keychain"
+          security list-keychain -d user -s "$keychain" $(security list-keychain -d user | sed 's/"//g')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pass" "$keychain"
+          macos=$(jq -n --arg id "$MACOS_SIGNING_IDENTITY" '{identity: $id}')
+          if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
+            xcrun notarytool store-credentials notary --keychain "$keychain" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+            macos=$(echo "$macos" | jq --arg k "$keychain" '. + {notarize: {keychainProfile: "notary", keychain: $k}}')
+          fi
+          jq --argjson m "$macos" '.macos += $m' desktop/mygo.json > "$RUNNER_TEMP/mygo.json" && mv "$RUNNER_TEMP/mygo.json" desktop/mygo.json
+          if [ "${MACOS_SELF_SIGNED:-}" = 1 ]; then echo "signed=self" >> "$GITHUB_OUTPUT"; else echo "signed=1" >> "$GITHUB_OUTPUT"; fi
+      - name: Version from the tag
+        id: ver
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then tag="$GITHUB_REF_NAME"; elif [ -n "$INPUT_TAG" ]; then tag="$INPUT_TAG"; else tag="desktop-native-v$(jq -r .version desktop/mygo.json)"; fi
+          case "$tag" in desktop-native-v[0-9]*) ;; *) echo "bad tag: $tag (want desktop-native-v*)"; exit 1;; esac
+          ver="${tag#desktop-native-v}"
+          jq --arg v "$ver" '.version = $v' desktop/mygo.json > "$RUNNER_TEMP/m.json" && mv "$RUNNER_TEMP/m.json" desktop/mygo.json
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"; echo "ver=$ver" >> "$GITHUB_OUTPUT"
+      - name: Build native shell (no Next.js UI)
+        env:
+          NATIVE_UI: "1"
+        run: desktop/scripts/package.sh darwin/arm64,darwin/amd64
+      - name: Verify + collect
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          mkdir -p dist
+          for a in arm64:arm64 amd64:x64; do
+            d="desktop/build/darwin-${a%%:*}"; app="$d/AI News Radar Native.app"
+            [ -d "$app" ] || app=$(ls -d "$d"/*.app | head -1)
+            echo "app=$app"
+            lipo -info "$app/Contents/MacOS/"* || true
+            codesign --verify --deep --strict --verbose=2 "$app" || true
+            dmg=$(ls "$d"/*.dmg | head -1)
+            hdiutil verify "$dmg"
+            cp "$dmg" "dist/AI-News-Radar-Native-$VER-macos-${a##*:}.dmg"
+          done
+          ls -la dist
+          (cd dist && shasum -a 256 *.dmg > SHA256SUMS && cat SHA256SUMS)
+      - name: Release notes
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          VER: ${{ steps.ver.outputs.ver }}
+          SIGNED: ${{ steps.sign.outputs.signed }}
+        run: |
+          {
+            echo "## AI News Radar Native $VER（实验预览）"
+            echo
+            echo "> **实验包**：纯 MyGo 原生 UI，**不是**正式桌面版。不会成为 GitHub Latest，也不走 \`desktop-v*\` 自动更新通道。"
+            echo
+            echo "| 芯片 | 下载 |"
+            echo "|---|---|"
+            echo "| Apple Silicon（M 系列） | \`AI-News-Radar-Native-$VER-macos-arm64.dmg\` |"
+            echo "| Intel | \`AI-News-Radar-Native-$VER-macos-x64.dmg\` |"
+            echo
+            if [ "$SIGNED" = 1 ]; then echo "已使用 Developer ID 签名并经 Apple 公证。"
+            elif [ "$SIGNED" = self ]; then
+              echo "**首次打开**：自签名证书。右键 App → 打开。"
+            else
+              echo "**首次打开**：ad-hoc 签名。右键 App → 打开；或 \`xattr -dr com.apple.quarantine\`。"
+            fi
+            echo
+            echo "### 演示范围"
+            echo "- 侧栏分区、资讯列表、详情、打开原文"
+            echo "- 基础状态 / 关于"
+            echo "- **未接入**：简报、Telegram、文章生成、完整设置、自动更新"
+            echo
+            echo "Bundle id: \`com.iferrnil.ainewsradar.native\`（与正式版隔离）"
+            echo
+            echo "校验：\`shasum -a 256 -c SHA256SUMS\`"
+            echo
+            echo "Credit: Lang"
+          } > dist/NOTES.md
+          cat dist/NOTES.md
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VER: ${{ steps.ver.outputs.ver }}
+          DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
+        run: |
+          flags=(--title "AI News Radar Native $VER (experimental)" --notes-file dist/NOTES.md --target "$GITHUB_SHA" --prerelease)
+          [ "$DRAFT" = true ] && flags+=(--draft)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.dmg dist/SHA256SUMS --clobber
+            gh release edit "$TAG" --notes-file dist/NOTES.md --prerelease
+            if [ "$GITHUB_REF_TYPE" = tag ]; then gh release edit "$TAG" --draft=false --prerelease; fi
+          else
+            # never --latest: keep web channel Latest on desktop-v0.15.x
+            gh release create "$TAG" dist/*.dmg dist/SHA256SUMS "${flags[@]}"
+          fi
