@@ -204,9 +204,7 @@ func (s *Store) StoreItems(src *Row, items []FetchedItem) (newIDs []int64, merge
 		w, a := idsWhere(newIDs)
 		fresh = s.QueryItems(w, a, len(newIDs), false, false)
 	}
-	for _, r := range fresh {
-		s.Bus.Publish(Msg{Event: "item", Item: r})
-	}
+	s.publishFreshItems(fresh)
 	for _, id := range updOrder {
 		for _, r := range s.QueryItems("AND i.id=?", []any{id}, 1, false, false) {
 			s.Bus.Publish(Msg{Event: "update", Item: r})

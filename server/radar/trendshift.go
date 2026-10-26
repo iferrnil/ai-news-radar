@@ -325,3 +325,61 @@ const trendshiftDedupSQL = `(i.uid NOT BETWEEN 'trendshift:' AND 'trendshift;' O
     AND sj.section=s.section AND lower(j.title) = lower(i.title)
     AND ((substr(j.uid, 12, 6)='daily:' AND substr(i.uid, 12, 6)<>'daily:')
       OR (substr(j.uid, 12, 6)=substr(i.uid, 12, 6) AND (j.published > i.published OR (j.published = i.published AND j.id > i.id))))))`
+
+// trendshiftVisible: true when id would appear in a feed/section list under trendshiftDedupSQL.
+func (s *Store) trendshiftVisible(id int64, cut float64) bool {
+	var one int
+	err := s.DB.QueryRow(`SELECT 1 FROM items i JOIN sources s ON s.id=i.source_id
+		WHERE i.id=? AND i.merged_into IS NULL AND i.hidden=0 AND s.enabled=1 AND i.published>=?
+		AND `+trendshiftDedupSQL, id, cut, cut).Scan(&one)
+	return err == nil
+}
+
+// trendshiftHiddenTwins: other same-section Trendshift rows for the same repo that the listing SQL hides
+// while winnerID stays visible. Used so SSE "removed" drops the weekly twin when the daily one arrives live.
+func (s *Store) trendshiftHiddenTwins(winnerID int64, cut float64) []int64 {
+	rs, err := all(s.DB, `SELECT i.id FROM items i JOIN sources s ON s.id=i.source_id
+		JOIN items w ON w.id=? JOIN sources sw ON sw.id=w.source_id
+		WHERE i.id<>w.id AND i.uid BETWEEN 'trendshift:' AND 'trendshift;' AND i.merged_into IS NULL AND i.hidden=0
+			AND i.published>=? AND s.enabled=1 AND s.section=sw.section AND lower(i.title)=lower(w.title)`, winnerID, cut)
+	if err != nil || len(rs) == 0 {
+		return nil
+	}
+	var out []int64
+	for _, r := range rs {
+		id := int64(r.Num("id"))
+		if !s.trendshiftVisible(id, cut) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// publishFreshItems: SSE "item" for new rows. Trendshift losers (same-section daily/weekly twin) are not
+// broadcast — listing SQL already hides them on reload, but live pending/merge used to reintroduce dupes.
+// When a winner is published, emit "removed" for twins it displaces so the open feed drops them immediately.
+func (s *Store) publishFreshItems(fresh []*Row) {
+	if len(fresh) == 0 {
+		return
+	}
+	cut := now() - retentionHours()*3600
+	seenRemove := map[int64]bool{}
+	for _, r := range fresh {
+		id := int64(r.Num("id"))
+		var uid string
+		_ = s.DB.QueryRow("SELECT uid FROM items WHERE id=?", id).Scan(&uid)
+		if strings.HasPrefix(uid, "trendshift:") {
+			if !s.trendshiftVisible(id, cut) {
+				continue
+			}
+			for _, lid := range s.trendshiftHiddenTwins(id, cut) {
+				if seenRemove[lid] {
+					continue
+				}
+				seenRemove[lid] = true
+				s.Bus.Publish(Msg{Event: "removed", ID: lid})
+			}
+		}
+		s.Bus.Publish(Msg{Event: "item", Item: r})
+	}
+}

@@ -787,9 +787,17 @@ func (s *Store) hSourcesPost(w http.ResponseWriter, r *http.Request) {
 	if d.Username != nil {
 		uname = *d.Username
 	}
-	res, err := s.DB.Exec(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,section,f_include,f_exclude,f_scope,f_cs)
-    VALUES(?,?,?,?,?,?,?,1,1,?,?,'user',?,?,?,?,?,?)`, name, region, category, d.Type, d.URL, d.Homepage, uname,
-		priority, sourceInterval(d, priority), now(), sec, rule.Include, rule.Exclude, rule.Scope, b2i(rule.CS))
+	iv := sourceInterval(d, priority)
+	overrides := ""
+	if n, ok := numOf(b["poll_interval"]); ok {
+		if c := clampPollInterval(n); c > 0 {
+			iv = c
+			overrides = "poll_interval"
+		}
+	}
+	res, err := s.DB.Exec(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,section,overrides,f_include,f_exclude,f_scope,f_cs)
+    VALUES(?,?,?,?,?,?,?,1,1,?,?,'user',?,?,?,?,?,?,?)`, name, region, category, d.Type, d.URL, d.Homepage, uname,
+		priority, iv, now(), sec, overrides, rule.Include, rule.Exclude, rule.Scope, b2i(rule.CS))
 	if err != nil {
 		detail(w, 409, "已存在相同 URL 或名称的来源")
 		return
@@ -868,8 +876,10 @@ func (s *Store) hSourcePatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, has := b["poll_interval"]; has && v != nil {
 		n, _ := numOf(v)
-		tx.Exec("UPDATE sources SET poll_interval=? WHERE id=?", math.Max(30, n), id)
-		mark("poll_interval")
+		if c := clampPollInterval(n); c > 0 {
+			tx.Exec("UPDATE sources SET poll_interval=? WHERE id=?", c, id)
+			mark("poll_interval")
+		}
 	}
 	if p, _ := b["priority"].(string); p == "P0" || p == "P1" || p == "P2" {
 		tx.Exec("UPDATE sources SET priority=? WHERE id=?", p, id)

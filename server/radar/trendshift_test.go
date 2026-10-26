@@ -218,3 +218,123 @@ func TestTrendshiftDedupPerSection(t *testing.T) {
 	want("&section=media", "Trendshift 日榜|a/one", "Trendshift 日榜|b/Two")
 	want("&section=lab", "Trendshift 周榜|B/two", "Trendshift 周榜|c/three", otherName+"|a/one") // the non-Trendshift item lives in lab
 }
+
+func TestPublishFreshItemsSkipsTrendshiftLoser(t *testing.T) {
+	st := testStore(t)
+	ch := st.Bus.Subscribe()
+	defer st.Bus.Unsubscribe(ch)
+	asID := func(v any) int64 {
+		switch x := v.(type) {
+		case int64:
+			return x
+		case float64:
+			return int64(x)
+		case int:
+			return int64(x)
+		default:
+			return 0
+		}
+	}
+	drain := func() (items, removed []int64) {
+		for {
+			select {
+			case m := <-ch:
+				if m.Event == "item" && m.Item != nil {
+					items = append(items, int64(m.Item.Num("id")))
+				} else if m.Event == "removed" {
+					removed = append(removed, asID(m.ID))
+				}
+			default:
+				return
+			}
+		}
+	}
+	src := func(name string) *Row {
+		r, _ := one(st.DB, "SELECT * FROM sources WHERE name=?", name)
+		r.Set("last_fetched", now())
+		return r
+	}
+	daily, weekly := src("Trendshift 日榜"), src("Trendshift 周榜")
+	at := int64(now()) - 60
+	it := func(kind, period, repo string) FetchedItem {
+		return FetchedItem{UID: "trendshift:" + kind + ":" + period + ":" + strings.ToLower(repo), Title: repo, URL: "https://github.com/" + repo, Published: at}
+	}
+	// weekly first — publishes; then daily arrives and should remove the weekly twin from the live feed
+	_, _, _, err := st.StoreItems(weekly, []FetchedItem{it("weekly", "2026-W44", "Acme/Repo")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, rem := drain()
+	if len(got) != 1 || len(rem) != 0 {
+		t.Fatalf("weekly alone: items=%v removed=%v", got, rem)
+	}
+	wid := got[0]
+	_, _, _, err = st.StoreItems(daily, []FetchedItem{it("daily", "2026-10-26", "Acme/Repo")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, rem = drain()
+	if len(got) != 1 || len(rem) != 1 || rem[0] != wid {
+		t.Fatalf("daily displaces weekly: items=%v removed=%v want removed=%d", got, rem, wid)
+	}
+	// a pure weekly-only repo still publishes
+	_, _, _, err = st.StoreItems(weekly, []FetchedItem{it("weekly", "2026-W44", "Only/Weekly")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, rem = drain()
+	if len(got) != 1 || len(rem) != 0 {
+		t.Fatalf("weekly-only: items=%v removed=%v", got, rem)
+	}
+}
+
+func TestClampPollInterval(t *testing.T) {
+	for n, want := range map[float64]int{0: 0, -1: 0, 30: 60, 60: 60, 90.4: 90, 86400: 86400, 90000: 86400} {
+		if got := clampPollInterval(n); got != want {
+			t.Fatalf("clampPollInterval(%v)=%d want %d", n, got, want)
+		}
+	}
+}
+
+func TestSourcesPostPollInterval(t *testing.T) {
+	st := testStore(t)
+	srv := httptest.NewServer(st.Server(nil))
+	defer srv.Close()
+	// POST path: insert a user source the same way hSourcesPost does (Detect needs live upstream; unit-test the clamp + overrides + scheduler wiring).
+	iv := clampPollInterval(1800)
+	if iv != 1800 {
+		t.Fatalf("clamp 1800 -> %d", iv)
+	}
+	res, err := st.DB.Exec(`INSERT INTO sources(name,region,category,type,url,homepage,username,enabled,supported,priority,poll_interval,origin,created,section,overrides)
+		VALUES('Poll IV Source','global','media','rss','https://example.com/feed.xml','https://example.com/',NULL,1,1,'P1',?,'user',?,?,?)`,
+		iv, now(), "media", "poll_interval")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := res.LastInsertId()
+	// PATCH can change it further (add-dialog edit path on sources page)
+	var out map[string]any
+	if c := postJSON(t, srv.URL+fmt.Sprintf("/api/sources/%d", id), "PATCH", map[string]any{"poll_interval": 3600}, &out); c != 200 {
+		t.Fatalf("PATCH %d %v", c, out)
+	}
+	var got int
+	st.DB.QueryRow("SELECT poll_interval FROM sources WHERE id=?", id).Scan(&got)
+	if got != 3600 {
+		t.Fatalf("after PATCH poll_interval=%d want 3600", got)
+	}
+	st.DB.Exec("UPDATE sources SET last_fetched=? WHERE id=?", now()-3601, id)
+	due, _ := all(st.DB, `SELECT id FROM sources s LEFT JOIN source_health h ON h.source_id=s.id
+		WHERE s.enabled=1 AND s.supported=1 AND (s.last_fetched IS NULL OR s.last_fetched + s.poll_interval <= ?)
+		AND (h.open_until IS NULL OR h.open_until <= ?) AND s.id=?`, now(), now(), id)
+	if len(due) != 1 {
+		t.Fatalf("scheduler should pick custom interval source, got %d", len(due))
+	}
+	// too soon: not due
+	st.DB.Exec("UPDATE sources SET last_fetched=? WHERE id=?", now()-10, id)
+	due, _ = all(st.DB, `SELECT id FROM sources s LEFT JOIN source_health h ON h.source_id=s.id
+		WHERE s.enabled=1 AND s.supported=1 AND (s.last_fetched IS NULL OR s.last_fetched + s.poll_interval <= ?)
+		AND (h.open_until IS NULL OR h.open_until <= ?) AND s.id=?`, now(), now(), id)
+	if len(due) != 0 {
+		t.Fatalf("scheduler should wait for interval, got %d", len(due))
+	}
+}

@@ -57,6 +57,7 @@ CREATE INDEX IF NOT EXISTS post_links_item ON post_links(item_id);
 CREATE TABLE IF NOT EXISTS seen(uid TEXT PRIMARY KEY, ts REAL NOT NULL) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS seen_ts ON seen(ts);
 CREATE INDEX IF NOT EXISTS items_src_pub ON items(source_id, published DESC);
+CREATE INDEX IF NOT EXISTS items_title ON items(title);
 DROP INDEX IF EXISTS items_src;
 CREATE TABLE IF NOT EXISTS tcache(h TEXT PRIMARY KEY, t TEXT, s TEXT, ts REAL NOT NULL) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS deleted_seeds(name TEXT PRIMARY KEY, ts REAL NOT NULL) WITHOUT ROWID;
@@ -170,6 +171,7 @@ func (s *Store) migrate() error {
 	if sc["translate"] {
 		stmts = append(stmts, "ALTER TABLE sources DROP COLUMN translate")
 	}
+	stmts = append(stmts, "CREATE INDEX IF NOT EXISTS items_title ON items(title)")
 	for _, q := range stmts {
 		if _, err := s.DB.Exec(q); err != nil {
 			return fmt.Errorf("%s: %w", q, err)

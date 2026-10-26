@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type SectionKey, TYPE, api, bj } from "./common";
+import { POLL_DEFAULT, POLL_INTERVALS, pollLabel } from "@/lib/poll-interval";
 import { EMPTY_NEW, EMPTY_RULE, NEW_SECTION, NewSectionFields, RuleFields, SectionSelect, type NewSection, type RuleForm } from "./source-form-parts";
 import { ChevronRight, Filter } from "lucide-react";
 
@@ -19,7 +20,7 @@ import { ChevronRight, Filter } from "lucide-react";
 type Detect = { type: string; name: string; url: string; count: number; overlap: number; sample: { title: string; published: number | null }[] };
 
 export default function AddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenChange: (b: boolean) => void; onAdded: () => void }) {
-  const [form, setForm] = useState({ input: "", name: "", section: "media" as SectionKey, priority: "P1", force: false });
+  const [form, setForm] = useState({ input: "", name: "", section: "media" as SectionKey, priority: "P1", poll_interval: POLL_DEFAULT as number, force: false });
   const [secTouched, setSecTouched] = useState(false); // stop auto-suggesting once the user picks a section
   const suggest = (input: string, type?: string) => (/^@|x\.com\/|twitter\.com\//i.test(input.trim()) || type?.startsWith("x") ? "x" : /\.cn(\/|$)|[\u4e00-\u9fff]/.test(input) ? "cn" : "media") as SectionKey;
   const [res, setRes] = useState<Detect | null>(null);
@@ -39,9 +40,12 @@ export default function AddDialog({ open, onOpenChange, onAdded }: { open: boole
     try {
       const isNew = form.section === NEW_SECTION;
       if (isNew && !newSec.name.trim()) throw new Error("请填写新分区名称");
-      const d = await api("/api/sources", { method: "POST", body: JSON.stringify({ ...form, section: isNew ? undefined : form.section, newSection: isNew ? newSec : undefined, rule }) });
+      const { poll_interval, ...rest } = form;
+      const payload: Record<string, unknown> = { ...rest, section: isNew ? undefined : form.section, newSection: isNew ? newSec : undefined, rule };
+      if (poll_interval > 0) payload.poll_interval = poll_interval;
+      const d = await api("/api/sources", { method: "POST", body: JSON.stringify(payload) });
       toast.success(`已添加「${d.source.name}」`, { description: d.fetch.error ? `首次抓取失败：${d.fetch.error}` : `首次抓取 ${d.fetch.fetched} 条，新增 ${d.fetch.new} 条` });
-      onAdded(); onOpenChange(false); setRes(null); setSecTouched(false); setForm({ ...form, input: "", name: "", force: false, section: isNew ? d.source.grp.replace(/^sec:/, "") : form.section });
+      onAdded(); onOpenChange(false); setRes(null); setSecTouched(false); setForm({ ...form, input: "", name: "", force: false, poll_interval: POLL_DEFAULT, section: isNew ? d.source.grp.replace(/^sec:/, "") : form.section });
       setNewSec(EMPTY_NEW); setRule(EMPTY_RULE); setRuleOpen(false);
     } catch (e) { setErr((e as Error).message); }
     setBusy("");
@@ -68,10 +72,23 @@ export default function AddDialog({ open, onOpenChange, onAdded }: { open: boole
               <Button variant="outline" className="shrink-0" onClick={test} disabled={!form.input || !!busy}>{busy === "test" ? <Loader2 className="animate-spin" /> : <RefreshCw />}测试</Button>
             </div>
           </div>
-          <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
-            <div className="col-span-2 grid min-w-0 gap-1.5 sm:col-span-1"><Label>名称</Label><Input className="w-full" placeholder="可选" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+          <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.85fr)_minmax(0,1.2fr)]">
+            <div className="col-span-2 grid min-w-0 gap-1.5 sm:col-span-1"><Label htmlFor="src-name">名称</Label><Input id="src-name" className="w-full" placeholder="可选" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
             <div className="grid min-w-0 gap-1.5"><Label>分区</Label><SectionSelect value={form.section} onChange={(v) => { setSecTouched(true); setForm({ ...form, section: v }); }} /></div>
             <div className="grid min-w-0 gap-1.5"><Label>优先级</Label>{sel("priority", [["P0", "P0"], ["P1", "P1"], ["P2", "P2"]])}</div>
+            <div className="col-span-2 grid min-w-0 gap-1.5 sm:col-span-1">
+              <Label htmlFor="src-poll">抓取频率</Label>
+              <Select value={String(form.poll_interval)} onValueChange={(v) => setForm({ ...form, poll_interval: Number(v) })}>
+                <SelectTrigger id="src-poll" className="w-full">
+                  <SelectValue>{(v: string) => (Number(v) === POLL_DEFAULT ? "默认（按类型 / 优先级）" : `每 ${pollLabel(Number(v))}`)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={String(POLL_DEFAULT)}>默认（按类型 / 优先级）</SelectItem>
+                  {POLL_INTERVALS.map((v) => <SelectItem key={v} value={String(v)}>每 {pollLabel(v)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="type-caption text-faint">添加后也可在列表「频率」列修改；调度按此间隔拉取。</p>
+            </div>
           </div>
           {form.section === NEW_SECTION && <NewSectionFields v={newSec} set={setNewSec} />}
           <div className="grid min-w-0 gap-3">
