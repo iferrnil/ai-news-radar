@@ -111,7 +111,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[980px] px-3 pb-20 pt-6 sm:px-6" data-testid="settings-page">
+    <div className="w-full max-w-[1100px] pl-2 pr-4 pb-20 pt-6 sm:pl-3 sm:pr-6" data-testid="settings-page">
       <h1 className="type-h1 font-semibold tracking-tight">设置</h1>
 
       {/* narrow: category select */}
@@ -129,7 +129,7 @@ export default function Settings() {
         </Select>
       </div>
 
-      <div className="mt-4 flex flex-col gap-4 md:mt-6 md:flex-row md:items-start md:gap-6">
+      <div className="mt-4 flex flex-col gap-4 md:mt-6 md:flex-row md:items-start md:gap-5">
         {/* left nav ≥ md */}
         <nav
           className="sticky top-3 hidden w-44 shrink-0 flex-col gap-0.5 self-start md:flex"

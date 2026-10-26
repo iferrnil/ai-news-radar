@@ -54,6 +54,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { POLL_INTERVALS, pollLabel as ivLabel } from "@/lib/poll-interval";
 import { EmptyState } from "./empty-state";
 import { useApp } from "./app-shell";
 import { type SectionKey, TYPE, type SourceRow, ago, api, bj, allSections, sourceSection, secZh } from "./common";
@@ -69,8 +70,7 @@ const STATUS: { v: StatusKey; label: string; badge: "success" | "destructive" | 
 ];
 const statusOk = (s: SourceRow, k: StatusKey) => k === "all" ? true : k === "active" ? !!(s.enabled && s.supported) : k === "err" ? !!(s.enabled && s.supported && s.last_error) : k === "off" ? !s.enabled : !!(s.enabled && !s.supported);
 
-const IV = [60, 120, 180, 300, 600, 1800, 3600, 10800, 21600];
-const ivLabel = (v: number) => (v < 3600 ? `${v / 60} 分钟` : `${v / 3600} 小时`);
+const IV = POLL_INTERVALS as readonly number[];
 const IV_OPTS = IV; // shared; per-row extras appended only while that row's picker is open
 
 /** Frequency control: a plain button until clicked, then one Select. Avoids N Base UI Selects in the table (main scroll cost). */

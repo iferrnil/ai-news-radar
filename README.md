@@ -45,15 +45,18 @@ server/bin/radar-server -ui out   # http://localhost:3000
 
 **网页版与桌面版**
 
-- 信息流：约 24 个内置源（RSS / JSON / X via FxEmbed / Trendshift GitHub 日榜·周榜），P0 近实时，SSE 推送
-- 热点（纯规则）、关键词标签与筛选、收藏（不受 48h 清理）、P0 通知、已读 / 只看未读、⌘K、深浅色
-- 数据源管理：自动发现、自定义分区与图标、过滤规则、健康度、JSON / OPML 导入导出
-- 可选 DeepSeek 翻译外文标题与摘要
+- **信息流：** 约 24 个内置源（RSS / JSON / X via FxEmbed / Trendshift GitHub 日榜·周榜），按分区浏览；P0 近实时轮询，SSE 实时推送；仅保留约 48 小时
+- **分区与筛选：** 实验室 / 国内媒体 / 国外媒体 / X 快讯 / 娱乐等可自定义分区与图标；关键词标签、收藏（不受 48h 清理）、已读 / 只看未读、⌘K、深浅色
+- **热点：** 纯规则聚合（无外部 LLM）；Trendshift 日榜与周榜在同一分区内按仓库去重，避免重复卡片
+- **P0 通知：** 新到 P0 条目批量桌面 / 浏览器通知；悬停预览可标为已读（设置 › 常规）
+- **数据源管理：** URL / @handle / 列表自动发现；添加时可指定**抓取频率**（或按类型 / 优先级默认）；列表「频率」列可改；过滤规则、健康度、JSON / OPML 导入导出
+- **设置分类：** 左侧菜单（常规 · 通知与推送 · 模型与抓取 · 写作与 Skill · 数据 · 关于）+ 右侧对应面板
+- **可选 DeepSeek：** 翻译外文标题与摘要（按视图范围开关）
 
-**仅桌面版**
+**仅桌面版（MyGo softNav 网页壳）**
 
-- AI 简报 / 生成文章（推特串推 · 公众号 · 小红书 Skill）、写作风格、抓取 API（Jina / Firecrawl / crawl4ai）；桌面版可定时把简报推到 Telegram
-- 原生窗口、菜单栏、签名校验的自动更新（含增量包）
+- AI 简报 / 生成文章（推特串推 · 公众号 · 小红书 Skill）、写作风格、抓取 API（Jina / Firecrawl / crawl4ai）
+- 定时自动简报并可推送到 Telegram；原生窗口、菜单栏、签名校验的自动更新（含增量包）
 
 ## 文档
 
@@ -70,7 +73,7 @@ server/bin/radar-server -ui out   # http://localhost:3000
 
 ## English
 
-Self-hosted, near-real-time AI news radar: one pure-Go server (SQLite) + static Next.js UI. Priority polling, live SSE, rule-based hot topics, keywords, favorites. The macOS app adds AI briefs and article drafts (X / WeChat / Xiaohongshu). Quick start: `docker compose up -d` → http://localhost:3080.
+Self-hosted, near-real-time AI/tech news aggregator: one pure-Go server (SQLite) + static Next.js UI. Curated sections, priority polling (per-source interval), live SSE, rule-based hot topics, keywords, favorites, hover preview, optional DeepSeek translation. Trendshift daily/weekly same-section dedupe. Categorized settings. The macOS MyGo desktop app adds AI briefs, article drafts (X / WeChat / Xiaohongshu), Telegram scheduled briefs, and signed auto-update. Quick start: `docker compose up -d` → http://localhost:3080. Credit Lang.
 
 ## License
 
