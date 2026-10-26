@@ -218,3 +218,72 @@ func TestTrendshiftDedupPerSection(t *testing.T) {
 	want("&section=media", "Trendshift 日榜|a/one", "Trendshift 日榜|b/Two")
 	want("&section=lab", "Trendshift 周榜|B/two", "Trendshift 周榜|c/three", otherName+"|a/one") // the non-Trendshift item lives in lab
 }
+
+func TestPublishFreshItemsSkipsTrendshiftLoser(t *testing.T) {
+	st := testStore(t)
+	ch := st.Bus.Subscribe()
+	defer st.Bus.Unsubscribe(ch)
+	asID := func(v any) int64 {
+		switch x := v.(type) {
+		case int64:
+			return x
+		case float64:
+			return int64(x)
+		case int:
+			return int64(x)
+		default:
+			return 0
+		}
+	}
+	drain := func() (items, removed []int64) {
+		for {
+			select {
+			case m := <-ch:
+				if m.Event == "item" && m.Item != nil {
+					items = append(items, int64(m.Item.Num("id")))
+				} else if m.Event == "removed" {
+					removed = append(removed, asID(m.ID))
+				}
+			default:
+				return
+			}
+		}
+	}
+	src := func(name string) *Row {
+		r, _ := one(st.DB, "SELECT * FROM sources WHERE name=?", name)
+		r.Set("last_fetched", now())
+		return r
+	}
+	daily, weekly := src("Trendshift 日榜"), src("Trendshift 周榜")
+	at := int64(now()) - 60
+	it := func(kind, period, repo string) FetchedItem {
+		return FetchedItem{UID: "trendshift:" + kind + ":" + period + ":" + strings.ToLower(repo), Title: repo, URL: "https://github.com/" + repo, Published: at}
+	}
+	// weekly first — publishes; then daily arrives and should remove the weekly twin from the live feed
+	_, _, _, err := st.StoreItems(weekly, []FetchedItem{it("weekly", "2026-W44", "Acme/Repo")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, rem := drain()
+	if len(got) != 1 || len(rem) != 0 {
+		t.Fatalf("weekly alone: items=%v removed=%v", got, rem)
+	}
+	wid := got[0]
+	_, _, _, err = st.StoreItems(daily, []FetchedItem{it("daily", "2026-10-26", "Acme/Repo")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, rem = drain()
+	if len(got) != 1 || len(rem) != 1 || rem[0] != wid {
+		t.Fatalf("daily displaces weekly: items=%v removed=%v want removed=%d", got, rem, wid)
+	}
+	// a pure weekly-only repo still publishes
+	_, _, _, err = st.StoreItems(weekly, []FetchedItem{it("weekly", "2026-W44", "Only/Weekly")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, rem = drain()
+	if len(got) != 1 || len(rem) != 0 {
+		t.Fatalf("weekly-only: items=%v removed=%v", got, rem)
+	}
+}

@@ -10,7 +10,8 @@
     "screenshots": "node scripts/screenshots.mjs",
     "docs:rate-limits": "node --no-warnings scripts/gen-rate-limits-md.mts",
     "typecheck": "tsc --noEmit",
-    "test:view-ok": "node --experimental-strip-types --test src/lib/view-ok.test.ts"
+    "test:view-ok": "npm run test:unit",
+    "test:unit": "npx tsx --test src/lib/view-ok.test.ts src/lib/trendshift-dedupe.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

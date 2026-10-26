@@ -13,6 +13,7 @@ function useCanHover() {
 }
 import { ArrowUp, ArrowUpRight, Check, CheckCheck, CircleDot, FileText, Inbox, ListChecks, PenLine, RefreshCw, Star, Tag, WifiOff, X } from "lucide-react";
 import { softNav, useClientSearchParams } from "@/lib/client-url";
+import { dedupeTrendshift } from "@/lib/trendshift-dedupe";
 import { toast } from "sonner";
 import { markOnHover } from "./read-store";
 import { XLogo as Twitter } from "./x-logo";
@@ -209,7 +210,8 @@ function FeedList() {
   const enabledIds = useMemo(() => (sources.length ? new Set(sources.filter((s) => s.enabled).map((s) => s.id)) : null), [sources]);
   const items = useMemo(() => {
     const vis = enabledIds && !favMode ? raw.filter((it) => enabledIds.has(it.source_id)) : raw;
-    return vis.map(loc); // translation shown where its view scope (全部 / section / source) is switched on
+    // Trendshift same-section daily/weekly: one card per repo (listing SQL + SSE publish already do this; belt for pending merge)
+    return dedupeTrendshift(vis).map(loc);
   }, [raw, loc, enabledIds, favMode]);
   const [pending, setPending] = useState<ItemOut[]>([]);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
@@ -299,7 +301,13 @@ function FeedList() {
   // load new WenKai slices mid-paint and flash the grid), then still warm the current view for anything added later.
   useEffect(() => { warmFonts(items.flatMap((it) => [it.title, it.summary ?? "", it.source, ...(it.kw ?? [])]), items.map((it) => it.title)); }, [items]);
   useEffect(() => { warmFonts(view.flatMap((it) => [it.title, it.summary ?? "", it.source, ...(it.kw ?? [])]), view.map((it) => it.title)); }, [view]);
-  const pend = useMemo(() => pending.filter((it) => passes(it, f, hide)), [pending, f, hide]);
+  const pend = useMemo(() => {
+    // drop Trendshift twins that would lose to something already on screen (or to a stronger pending sibling)
+    const onScreen = enabledIds && !favMode ? raw.filter((it) => enabledIds.has(it.source_id)) : raw;
+    const merged = dedupeTrendshift([...pending, ...onScreen.filter((it) => !pending.some((p) => p.id === it.id))]);
+    const keep = new Set(merged.map((it) => it.id));
+    return pending.filter((it) => keep.has(it.id) && passes(loc(it), f, hide));
+  }, [pending, f, hide, raw, enabledIds, favMode, loc]);
   // the same view without 只看未读: what 全部标为已读 applies to
   const scope = useMemo(() => (f.unread ? items.filter((it) => passes(it, { ...f, unread: false })) : view), [items, f, view]);
   const unreadN = useMemo(() => scope.reduce((n, it) => n + (isRead(it.id) ? 0 : 1), 0), [scope, isRead]);
@@ -345,7 +353,7 @@ function FeedList() {
   const showPending = () => {
     const add = pending.filter((x) => !seen.current.has(x.id));
     add.forEach((x) => seen.current.add(x.id));
-    setItems((cur) => [...add, ...cur].sort((a, b) => b.published - a.published));
+    setItems((cur) => dedupeTrendshift([...add, ...cur].sort((a, b) => b.published - a.published)));
     setFresh(new Set(add.map((x) => x.id))); setTimeout(() => setFresh(new Set()), 3500);
     setPending([]); window.scrollTo({ top: 0, behavior: "smooth" });
   };
